@@ -14,8 +14,9 @@ use cmath;
 use cmp;
 use libc::{c_double, c_int};
 use libc;
-use num;
 use num::NumCast;
+use num;
+use ops;
 use option::Option;
 use to_str;
 use from_str;
@@ -295,21 +296,6 @@ impl f64 : cmp::Ord {
     pure fn gt(&self, other: &f64) -> bool { (*self) > (*other) }
 }
 
-impl f64: num::Num {
-    #[inline(always)]
-    pure fn add(&self, other: &f64)    -> f64 { return *self + *other; }
-    #[inline(always)]
-    pure fn sub(&self, other: &f64)    -> f64 { return *self - *other; }
-    #[inline(always)]
-    pure fn mul(&self, other: &f64)    -> f64 { return *self * *other; }
-    #[inline(always)]
-    pure fn div(&self, other: &f64)    -> f64 { return *self / *other; }
-    #[inline(always)]
-    pure fn modulo(&self, other: &f64) -> f64 { return *self % *other; }
-    #[inline(always)]
-    pure fn neg(&self)                -> f64 { return -*self;        }
-}
-
 pub impl f64: NumCast {
     /**
      * Cast `n` to an `f64`
@@ -342,6 +328,25 @@ impl f64: num::Zero {
 impl f64: num::One {
     #[inline(always)]
     static pure fn one() -> f64 { 1.0 }
+}
+
+impl ops::Add<f64,f64> for f64 {
+    pure fn add(&self, other: &f64) -> f64 { *self + *other }
+}
+impl ops::Sub<f64,f64> for f64 {
+    pure fn sub(&self, other: &f64) -> f64 { *self - *other }
+}
+impl ops::Mul<f64,f64> for f64 {
+    pure fn mul(&self, other: &f64) -> f64 { *self * *other }
+}
+impl ops::Div<f64,f64> for f64 {
+    pure fn div(&self, other: &f64) -> f64 { *self / *other }
+}
+impl ops::Modulo<f64,f64> for f64 {
+    pure fn modulo(&self, other: &f64) -> f64 { *self % *other }
+}
+impl ops::Neg<f64> for f64 {
+    pure fn neg(&self) -> f64 { -*self }
 }
 
 #[abi="rust-intrinsic"]
