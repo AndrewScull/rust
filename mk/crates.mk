@@ -112,7 +112,6 @@ TOOL_SOURCE_rustc := $(S)src/driver/driver.rs
 ONLY_RLIB_core := 1
 ONLY_RLIB_libc := 1
 ONLY_RLIB_rlibc := 1
-ONLY_RLIB_libd := 1
 ONLY_RLIB_alloc := 1
 ONLY_RLIB_rand := 1
 ONLY_RLIB_collections := 1

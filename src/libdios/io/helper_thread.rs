@@ -86,7 +86,7 @@ impl<M: Send> Helper<M> {
                 *self.signal.get() = send as uint;
 
                 let t = f();
-                spawn(proc() {
+                task::spawn(proc() {
                     bookkeeping::decrement();
                     helper(receive, rx, t);
                     self.lock.lock().signal()
