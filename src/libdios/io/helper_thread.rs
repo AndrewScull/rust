@@ -23,7 +23,6 @@
 #![macro_escape]
 
 
-use std::prelude::*;
 
 use std::mem;
 use std::rt::bookkeeping;

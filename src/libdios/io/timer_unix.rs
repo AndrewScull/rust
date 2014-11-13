@@ -47,7 +47,6 @@
 //! Note that all time units in this file are in *milliseconds*.
 
 
-use std::prelude::*;
 
 use libc;
 use std::mem;

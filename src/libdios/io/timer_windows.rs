@@ -21,7 +21,6 @@
 //! the other two implementations of timers with nothing *that* new showing up.
 
 
-use std::prelude::*;
 
 use libc;
 use std::ptr;

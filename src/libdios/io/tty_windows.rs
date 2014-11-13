@@ -26,7 +26,6 @@
 //! to working in raw UTF-16, with such a wrapper around it.
 
 
-use std::prelude::*;
 
 use super::c::{ReadConsoleW, WriteConsoleW, GetConsoleMode, SetConsoleMode};
 use super::c::{ERROR_ILLEGAL_CHARACTER};

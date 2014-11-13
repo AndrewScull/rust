@@ -42,6 +42,7 @@ pub unsafe fn destroy(key: Key) {
 type pthread_key_t = ::libc::c_ulong;
 
 #[cfg(any(target_os="linux",
+          target_os="dios",
           target_os="freebsd",
           target_os="dragonfly",
           target_os="android",

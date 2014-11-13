@@ -11,7 +11,6 @@
 //! Blocking posix-based file I/O
 
 
-use std::prelude::*;
 
 use alloc::arc::Arc;
 use libc::{mod, c_int, c_void};
@@ -447,14 +446,14 @@ fn mkstat(stat: &libc::stat) -> rtio::FileStat {
     // FileStat times are in milliseconds
     fn mktime(secs: u64, nsecs: u64) -> u64 { secs * 1000 + nsecs / 1000000 }
 
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(any(target_os = "linux", target_os = "dios", target_os = "android")))]
     fn flags(stat: &libc::stat) -> u64 { stat.st_flags as u64 }
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "dios", target_os = "android"))]
     fn flags(_stat: &libc::stat) -> u64 { 0 }
 
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(any(target_os = "linux", target_os = "dios", target_os = "android")))]
     fn gen(stat: &libc::stat) -> u64 { stat.st_gen as u64 }
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "dios", target_os = "android"))]
     fn gen(_stat: &libc::stat) -> u64 { 0 }
 
     rtio::FileStat {

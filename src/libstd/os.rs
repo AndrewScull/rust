@@ -633,7 +633,7 @@ pub unsafe fn pipe() -> IoResult<Pipe> {
 
 /// Returns the proper dll filename for the given basename of a file
 /// as a String.
-#[cfg(not(target_os="ios"))]
+#[cfg(not(any(target_os="ios", target_os="dios")))]
 pub fn dll_filename(base: &str) -> String {
     format!("{}{}{}", consts::DLL_PREFIX, base, consts::DLL_SUFFIX)
 }
@@ -679,7 +679,7 @@ pub fn self_exe_name() -> Option<Path> {
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "dios", target_os = "android"))]
     fn load_self() -> Option<Vec<u8>> {
         use std::io;
 
@@ -928,7 +928,7 @@ pub fn errno() -> int {
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "dios", target_os = "android"))]
     fn errno_location() -> *const c_int {
         extern {
             fn __errno_location() -> *const c_int;
@@ -973,6 +973,7 @@ pub fn error_string(errnum: uint) -> String {
     fn strerror(errnum: uint) -> String {
         #[cfg(any(target_os = "macos",
                   target_os = "ios",
+                  target_os = "dios",
                   target_os = "android",
                   target_os = "freebsd",
                   target_os = "dragonfly"))]
@@ -1177,6 +1178,7 @@ fn real_args_as_bytes() -> Vec<Vec<u8>> {
 }
 
 #[cfg(any(target_os = "linux",
+          target_os = "dios",
           target_os = "android",
           target_os = "freebsd",
           target_os = "dragonfly"))]
@@ -1689,6 +1691,25 @@ pub mod consts {
     /// Specifies the file extension used for shared libraries on this
     /// platform that goes after the dot: in this case, `so`.
     pub static DLL_EXTENSION: &'static str = "so";
+
+    /// Specifies the filename suffix used for executable binaries on this
+    /// platform: in this case, the empty string.
+    pub static EXE_SUFFIX: &'static str = "";
+
+    /// Specifies the file extension, if any, used for executable binaries
+    /// on this platform: in this case, the empty string.
+    pub static EXE_EXTENSION: &'static str = "";
+}
+
+#[cfg(target_os = "dios")]
+pub mod consts {
+    pub use os::arch_consts::ARCH;
+
+    pub static FAMILY: &'static str = "unix";
+
+    /// A string describing the specific operating system in use: in this
+    /// case, `linux`.
+    pub static SYSNAME: &'static str = "dios";
 
     /// Specifies the filename suffix used for executable binaries on this
     /// platform: in this case, the empty string.

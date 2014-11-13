@@ -24,7 +24,7 @@ use libc;
           target_os = "freebsd",
           target_os = "dragonfly"))]
 pub static FIONBIO: libc::c_ulong = 0x8004667e;
-#[cfg(any(all(target_os = "linux",
+#[cfg(any(all(any(target_os = "linux", target_os = "dios"),
               any(target_arch = "x86",
                   target_arch = "x86_64",
                   target_arch = "arm")),
@@ -39,7 +39,7 @@ pub static FIONBIO: libc::c_ulong = 0x667e;
           target_os = "freebsd",
           target_os = "dragonfly"))]
 pub static FIOCLEX: libc::c_ulong = 0x20006601;
-#[cfg(any(all(target_os = "linux",
+#[cfg(any(all(any(target_os = "linux", target_os = "dios"),
               any(target_arch = "x86",
                   target_arch = "x86_64",
                   target_arch = "arm")),
@@ -54,7 +54,7 @@ pub static FIOCLEX: libc::c_ulong = 0x6601;
           target_os = "freebsd",
           target_os = "dragonfly"))]
 pub static MSG_DONTWAIT: libc::c_int = 0x80;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "dios", target_os = "android"))]
 pub static MSG_DONTWAIT: libc::c_int = 0x40;
 
 pub static WNOHANG: libc::c_int = 1;
@@ -102,6 +102,7 @@ mod select {
 }
 
 #[cfg(any(target_os = "android",
+          target_os = "dios",
           target_os = "freebsd",
           target_os = "dragonfly",
           target_os = "linux"))]
@@ -123,7 +124,7 @@ mod select {
     }
 }
 
-#[cfg(any(all(target_os = "linux",
+#[cfg(any(all(any(target_os = "linux", target_os = "dios"),
               any(target_arch = "x86",
                   target_arch = "x86_64",
                   target_arch = "arm")),

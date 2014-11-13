@@ -400,7 +400,7 @@ mod imp {
         };
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "dios"))]
     mod os {
         use libc;
 

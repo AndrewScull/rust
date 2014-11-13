@@ -11,7 +11,6 @@
 //! Blocking Windows-based file I/O
 
 
-use std::prelude::*;
 
 use alloc::arc::Arc;
 use libc::{mod, c_int};

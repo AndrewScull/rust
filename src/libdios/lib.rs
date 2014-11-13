@@ -46,7 +46,6 @@
 //! }
 //! ```
 
-#![no_std]
 #![crate_name = "dios"]
 #![experimental]
 #![license = "MIT/ASL2"]
@@ -66,16 +65,9 @@
 //    answer is that you don't need them)
 #![feature(macro_rules, unsafe_destructor, default_type_params)]
 
-// Features for setting up dstd as std
-#![feature(phase, globs)]
-
 extern crate alloc;
 extern crate libc;
 #[cfg(test)] extern crate debug;
-
-// Use the modified version of crate std: dstd
-#[phase(link, plugin)] extern crate "dstd" as std;
-use std::prelude::*;
 
 use std::os;
 use std::rt;

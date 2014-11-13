@@ -24,7 +24,6 @@
 #![allow(non_snake_case)]
 
 
-use std::prelude::*;
 
 use libc::{mod, c_int};
 use std::c_str::CString;
@@ -56,6 +55,7 @@ pub mod file;
           target_os = "freebsd",
           target_os = "dragonfly",
           target_os = "android",
+          target_os = "dios",
           target_os = "linux"))]
 #[path = "timer_unix.rs"]
 pub mod timer;

@@ -286,7 +286,7 @@ mod imp {
     // Assumes that we've been dynamically linked to libpthread but that is
     // currently always the case.  Note that you need to check that the symbol
     // is non-null before calling it!
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "dios"))]
     fn min_stack_size(attr: *const libc::pthread_attr_t) -> libc::size_t {
         type F = unsafe extern "C" fn(*const libc::pthread_attr_t) -> libc::size_t;
         extern {
@@ -302,7 +302,7 @@ mod imp {
 
     // __pthread_get_minstack() is marked as weak but extern_weak linkage is
     // not supported on OS X, hence this kludge...
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "dios")))]
     fn min_stack_size(_: *const libc::pthread_attr_t) -> libc::size_t {
         PTHREAD_STACK_MIN
     }

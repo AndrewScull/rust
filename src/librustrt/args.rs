@@ -40,6 +40,7 @@ pub fn put(args: Vec<Vec<u8>>) { imp::put(args) }
 pub fn clone() -> Option<Vec<Vec<u8>>> { imp::clone() }
 
 #[cfg(any(target_os = "linux",
+          target_os = "dios",
           target_os = "android",
           target_os = "freebsd",
           target_os = "dragonfly"))]

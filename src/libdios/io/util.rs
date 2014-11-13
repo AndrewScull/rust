@@ -9,7 +9,6 @@
 // except according to those terms.
 
 
-use std::prelude::*;
 
 use libc;
 use std::cmp;

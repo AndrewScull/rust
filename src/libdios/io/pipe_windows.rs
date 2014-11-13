@@ -85,7 +85,6 @@
 //! me!
 
 
-use std::prelude::*;
 
 use alloc::arc::Arc;
 use libc;

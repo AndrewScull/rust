@@ -196,7 +196,8 @@ pub unsafe fn record_sp_limit(limit: uint) {
         asm!("movq $$0x60+90*8, %rsi
               movq $0, %gs:(%rsi)" :: "r"(limit) : "rsi" : "volatile")
     }
-    #[cfg(all(target_arch = "x86_64", target_os = "linux"))] #[inline(always)]
+    #[cfg(all(target_arch = "x86_64",
+              any(target_os = "linux", target_os = "dios")))] #[inline(always)]
     unsafe fn target_record_sp_limit(limit: uint) {
         asm!("movq $0, %fs:112" :: "r"(limit) :: "volatile")
     }
@@ -221,7 +222,7 @@ pub unsafe fn record_sp_limit(limit: uint) {
               movl $0, %gs:(%eax)" :: "r"(limit) : "eax" : "volatile")
     }
     #[cfg(all(target_arch = "x86",
-              any(target_os = "linux", target_os = "freebsd")))]
+              any(target_os = "linux", target_os = "dios", target_os = "freebsd")))]
     #[inline(always)]
     unsafe fn target_record_sp_limit(limit: uint) {
         asm!("movl $0, %gs:48" :: "r"(limit) :: "volatile")
@@ -272,7 +273,8 @@ pub unsafe fn get_sp_limit() -> uint {
               movq %gs:(%rsi), $0" : "=r"(limit) :: "rsi" : "volatile");
         return limit;
     }
-    #[cfg(all(target_arch = "x86_64", target_os = "linux"))] #[inline(always)]
+    #[cfg(all(target_arch = "x86_64",
+              any(target_os = "linux", target_os = "dios")))] #[inline(always)]
     unsafe fn target_get_sp_limit() -> uint {
         let limit;
         asm!("movq %fs:112, $0" : "=r"(limit) ::: "volatile");
@@ -307,7 +309,7 @@ pub unsafe fn get_sp_limit() -> uint {
         return limit;
     }
     #[cfg(all(target_arch = "x86",
-              any(target_os = "linux", target_os = "freebsd")))]
+              any(target_os = "linux", target_os = "dios", target_os = "freebsd")))]
     #[inline(always)]
     unsafe fn target_get_sp_limit() -> uint {
         let limit;
