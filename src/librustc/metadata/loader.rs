@@ -250,6 +250,9 @@ pub static WIN32_DLL_SUFFIX: &'static str = ".dll";
 pub static LINUX_DLL_PREFIX: &'static str = "lib";
 pub static LINUX_DLL_SUFFIX: &'static str = ".so";
 
+pub static DIOS_DLL_PREFIX: &'static str = "lib";
+pub static DIOS_DLL_SUFFIX: &'static str = ".so";
+
 pub static FREEBSD_DLL_PREFIX: &'static str = "lib";
 pub static FREEBSD_DLL_SUFFIX: &'static str = ".so";
 
@@ -623,6 +626,7 @@ impl<'a> Context<'a> {
             abi::OsWindows => Some((WIN32_DLL_PREFIX, WIN32_DLL_SUFFIX)),
             abi::OsMacos => Some((MACOS_DLL_PREFIX, MACOS_DLL_SUFFIX)),
             abi::OsLinux => Some((LINUX_DLL_PREFIX, LINUX_DLL_SUFFIX)),
+            abi::OsDIOS => Some((DIOS_DLL_PREFIX, DIOS_DLL_SUFFIX)),
             abi::OsAndroid => Some((ANDROID_DLL_PREFIX, ANDROID_DLL_SUFFIX)),
             abi::OsFreebsd => Some((FREEBSD_DLL_PREFIX, FREEBSD_DLL_SUFFIX)),
             abi::OsDragonfly => Some((DRAGONFLY_DLL_PREFIX, DRAGONFLY_DLL_SUFFIX)),
@@ -831,6 +835,7 @@ pub fn meta_section_name(os: abi::Os) -> Option<&'static str> {
         abi::OsiOS => Some("__DATA,__note.rustc"),
         abi::OsWindows => Some(".note.rustc"),
         abi::OsLinux => Some(".note.rustc"),
+        abi::OsDIOS => Some(".note.rustc"),
         abi::OsAndroid => Some(".note.rustc"),
         abi::OsFreebsd => Some(".note.rustc"),
         abi::OsDragonfly => Some(".note.rustc"),
@@ -843,6 +848,7 @@ pub fn read_meta_section_name(os: abi::Os) -> &'static str {
         abi::OsiOS => unreachable!(),
         abi::OsWindows => ".note.rustc",
         abi::OsLinux => ".note.rustc",
+        abi::OsDIOS => ".note.rustc",
         abi::OsAndroid => ".note.rustc",
         abi::OsFreebsd => ".note.rustc",
         abi::OsDragonfly => ".note.rustc"

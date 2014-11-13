@@ -249,23 +249,7 @@ BACKTRACE_BUILD_DIR_$(1) := $$(RT_OUTPUT_DIR_$(1))/libbacktrace
 
 # We don't use this on platforms that aren't linux-based, so just make the file
 # available, the compilation of libstd won't actually build it.
-ifeq ($$(findstring darwin,$$(OSTYPE_$(1))),darwin)
-# See comment above
-$$(BACKTRACE_LIB_$(1)):
-	touch $$@
-
-else
-ifeq ($$(findstring ios,$$(OSTYPE_$(1))),ios)
-# See comment above
-$$(BACKTRACE_LIB_$(1)):
-	touch $$@
-else
-
-ifeq ($$(CFG_WINDOWSY_$(1)),1)
-# See comment above
-$$(BACKTRACE_LIB_$(1)):
-	touch $$@
-else
+ifeq ($$(CFG_LINUXY_$(1)),1)
 
 ifdef CFG_ENABLE_FAST_MAKE
 BACKTRACE_DEPS := $(S)/.gitmodules
@@ -306,9 +290,12 @@ $$(BACKTRACE_LIB_$(1)): $$(BACKTRACE_BUILD_DIR_$(1))/Makefile $$(MKFILE_DEPS)
 		INCDIR=$(S)src/libbacktrace
 	$$(Q)cp $$(BACKTRACE_BUILD_DIR_$(1))/.libs/libbacktrace.a $$@
 
-endif # endif for windowsy
-endif # endif for ios
-endif # endif for darwin
+else
+# See comment above
+$$(BACKTRACE_LIB_$(1)):
+	touch $$@
+
+endif
 
 endef
 

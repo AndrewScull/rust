@@ -111,7 +111,7 @@ fn get_rpath_relative_to_output(config: &mut RPathConfig,
 
     // Mac doesn't appear to support $ORIGIN
     let prefix = match config.os {
-        abi::OsAndroid | abi::OsLinux | abi::OsFreebsd | abi::OsDragonfly
+        abi::OsAndroid | abi::OsLinux | abi::OsDIOS | abi::OsFreebsd | abi::OsDragonfly
                           => "$ORIGIN",
         abi::OsMacos => "@loader_path",
         abi::OsWindows | abi::OsiOS => unreachable!()

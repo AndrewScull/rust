@@ -11,7 +11,7 @@
 use std::fmt;
 
 #[deriving(PartialEq)]
-pub enum Os { OsWindows, OsMacos, OsLinux, OsAndroid, OsFreebsd, OsiOS,
+pub enum Os { OsWindows, OsMacos, OsLinux, OsDIOS, OsAndroid, OsFreebsd, OsiOS,
               OsDragonfly }
 
 #[deriving(PartialEq, Eq, Hash, Encodable, Decodable, Clone)]
@@ -150,6 +150,7 @@ impl fmt::Show for Os {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             OsLinux => "linux".fmt(f),
+            OsDIOS => "dios".fmt(f),
             OsWindows => "windows".fmt(f),
             OsMacos => "macos".fmt(f),
             OsiOS => "ios".fmt(f),

@@ -484,6 +484,7 @@ pub fn filename_for_input(sess: &Session,
                 abi::OsWindows => (loader::WIN32_DLL_PREFIX, loader::WIN32_DLL_SUFFIX),
                 abi::OsMacos => (loader::MACOS_DLL_PREFIX, loader::MACOS_DLL_SUFFIX),
                 abi::OsLinux => (loader::LINUX_DLL_PREFIX, loader::LINUX_DLL_SUFFIX),
+                abi::OsDIOS => (loader::DIOS_DLL_PREFIX, loader::DIOS_DLL_SUFFIX),
                 abi::OsAndroid => (loader::ANDROID_DLL_PREFIX, loader::ANDROID_DLL_SUFFIX),
                 abi::OsFreebsd => (loader::FREEBSD_DLL_PREFIX, loader::FREEBSD_DLL_SUFFIX),
                 abi::OsDragonfly => (loader::DRAGONFLY_DLL_PREFIX, loader::DRAGONFLY_DLL_SUFFIX),
@@ -502,6 +503,7 @@ pub fn filename_for_input(sess: &Session,
                 abi::OsWindows => out_filename.with_extension("exe"),
                 abi::OsMacos |
                 abi::OsLinux |
+				abi::OsDIOS |
                 abi::OsAndroid |
                 abi::OsFreebsd |
                 abi::OsDragonfly |
@@ -957,7 +959,7 @@ fn link_args(cmd: &mut Command,
         }
     }
 
-    if sess.targ_cfg.os == abi::OsLinux || sess.targ_cfg.os == abi::OsDragonfly {
+    if sess.targ_cfg.os == abi::OsLinux || sess.targ_cfg.os == abi::OsDIOS || sess.targ_cfg.os == abi::OsDragonfly {
         // GNU-style linkers will use this to omit linking to libraries which
         // don't actually fulfill any relocations, but only for libraries which
         // follow this flag. Thus, use it before specifying libraries to link to.

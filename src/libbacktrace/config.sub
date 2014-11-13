@@ -115,7 +115,7 @@ esac
 # Here we must recognize all the valid KERNEL-OS combinations.
 maybe_os=`echo $1 | sed 's/^\(.*\)-\([^-]*-[^-]*\)$/\2/'`
 case $maybe_os in
-  nto-qnx* | linux-gnu* | linux-android* | linux-dietlibc | linux-newlib* | \
+  nto-qnx* | linux-gnu* | linux-dios | linux-android* | linux-dietlibc | linux-newlib* | \
   linux-musl* | linux-uclibc* | uclinux-uclibc* | uclinux-gnu* | kfreebsd*-gnu* | \
   knetbsd*-gnu* | netbsd*-gnu* | \
   kopensolaris*-gnu* | \
@@ -1378,6 +1378,8 @@ case $os in
 	      | -powermax* | -dnix* | -nx6 | -nx7 | -sei* | -dragonfly* \
 	      | -skyos* | -haiku* | -rdos* | -toppers* | -drops* | -es*)
 	# Remember, each alternative MUST END IN *, to match a version number.
+		;;
+	-linux-dios)
 		;;
 	-qnx*)
 		case $basic_machine in
