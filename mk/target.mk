@@ -163,9 +163,10 @@ $(foreach source,$(CFG_HOST), \
   $(eval $(call TARGET_HOST_RULES,3,$(target),$(source)))))
 
 # In principle, each host can build each target for both libs and tools
-$(foreach crate,$(CRATES), \
- $(foreach source,$(CFG_HOST), \
+# For each target check which crates should be built
+$(foreach source,$(CFG_HOST), \
   $(foreach target,$(CFG_TARGET), \
+    $(foreach crate,$(filter-out $(LESS_CRATES_$(target)), $(CRATES) $(MORE_CRATES_$(target))), \
    $(eval $(call RUST_TARGET_STAGE_N,0,$(target),$(source),$(crate))) \
    $(eval $(call RUST_TARGET_STAGE_N,1,$(target),$(source),$(crate))) \
    $(eval $(call RUST_TARGET_STAGE_N,2,$(target),$(source),$(crate))) \

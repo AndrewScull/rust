@@ -49,7 +49,7 @@
 # automatically generated for all stage/host/target combinations.
 ################################################################################
 
-TARGET_CRATES := libc std green native dios flate arena glob term \
+TARGET_CRATES := libc std green native flate arena glob term \
                  semver uuid serialize sync getopts collections num test time \
 				 rand  url log regex graphviz core rbml rlibc alloc debug \
 				 rustrt unicode
@@ -57,6 +57,11 @@ HOST_CRATES := syntax rustc rustdoc fourcc hexfloat regex_macros fmt_macros \
 	       rustc_llvm rustc_back
 CRATES := $(TARGET_CRATES) $(HOST_CRATES)
 TOOLS := compiletest rustdoc rustc
+
+MORE_CRATES_x86_64-linux-dios := dios
+LESS_CRATES_x86_64-linux-dios := native
+MORE_CRATES_x86_64-unknown-linux-gnu :=
+LESS_CRATES_x86_64-unknown-linux-gnu :=
 
 DEPS_core :=
 DEPS_libc := core
