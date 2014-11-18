@@ -30,6 +30,8 @@ use std::rt::mutex::StaticNativeMutex;
 use std::rt;
 use std::cell::UnsafeCell;
 
+use task;
+
 /// A structure for management of a helper thread.
 ///
 /// This is generally a static structure which tracks the lifetime of a helper
