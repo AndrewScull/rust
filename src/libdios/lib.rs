@@ -35,7 +35,7 @@
 //! extern crate dios;
 //!
 //! use std::task::TaskBuilder;
-//! use dios::NativeTaskBuilder;
+//! use dios::DIOSTaskBuilder;
 //!
 //! fn main() {
 //!     // We're not sure whether this main function is run in 1:1 or M:N mode.
@@ -73,7 +73,7 @@ use std::os;
 use std::rt;
 use std::str;
 
-pub use task::NativeTaskBuilder;
+pub use task::DIOSTaskBuilder;
 
 pub mod io;
 pub mod task;
@@ -100,7 +100,6 @@ pub fn lang_start(main: *const u8, argc: int, argv: *const *const u8) -> int {
 /// This function will only return once *all* native threads in the system have
 /// exited.
 pub fn start(argc: int, argv: *const *const u8, main: proc()) -> int {
-	println!("Starting the dios runtime");
     let something_around_the_top_of_the_stack = 1;
     let addr = &something_around_the_top_of_the_stack as *const int;
     let my_stack_top = addr as uint;

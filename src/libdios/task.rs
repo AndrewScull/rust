@@ -49,14 +49,14 @@ fn ops() -> Box<Ops> {
 }
 
 /// Spawns a function with the default configuration
-#[deprecated = "use the native method of NativeTaskBuilder instead"]
+#[deprecated = "use the dios method of DIOSTaskBuilder instead"]
 pub fn spawn(f: proc():Send) {
     spawn_opts(TaskOpts { name: None, stack_size: None, on_exit: None }, f)
 }
 
 /// Spawns a new task given the configuration options and a procedure to run
 /// inside the task.
-#[deprecated = "use the native method of NativeTaskBuilder instead"]
+#[deprecated = "use the dios method of DIOSTaskBuilder instead"]
 pub fn spawn_opts(opts: TaskOpts, f: proc():Send) {
     let TaskOpts { name, stack_size, on_exit } = opts;
 
@@ -97,23 +97,23 @@ pub fn spawn_opts(opts: TaskOpts, f: proc():Send) {
     })
 }
 
-/// A spawner for native tasks
-pub struct NativeSpawner;
+/// A spawner for DIOS tasks
+pub struct DIOSSpawner;
 
-impl Spawner for NativeSpawner {
+impl Spawner for DIOSSpawner {
     fn spawn(self, opts: TaskOpts, f: proc():Send) {
         spawn_opts(opts, f)
     }
 }
 
-/// An extension trait adding a `native` configuration method to `TaskBuilder`.
-pub trait NativeTaskBuilder {
-    fn native(self) -> TaskBuilder<NativeSpawner>;
+/// An extension trait adding a `DIOS` configuration method to `TaskBuilder`.
+pub trait DIOSTaskBuilder {
+    fn dios(self) -> TaskBuilder<DIOSSpawner>;
 }
 
-impl<S: Spawner> NativeTaskBuilder for TaskBuilder<S> {
-    fn native(self) -> TaskBuilder<NativeSpawner> {
-        self.spawner(NativeSpawner)
+impl<S: Spawner> DIOSTaskBuilder for TaskBuilder<S> {
+    fn dios(self) -> TaskBuilder<DIOSSpawner> {
+        self.spawner(DIOSSpawner)
     }
 }
 
@@ -284,7 +284,7 @@ mod tests {
     use std::rt::task::{Task, TaskOpts};
     use std::task;
     use std::task::TaskBuilder;
-    use super::{spawn, spawn_opts, Ops, NativeTaskBuilder};
+    use super::{spawn, spawn_opts, Ops, DIOSTaskBuilder};
 
     #[test]
     fn smoke() {
@@ -374,8 +374,8 @@ mod tests {
     }
 
     #[test]
-    fn test_native_builder() {
-        let res = TaskBuilder::new().native().try(proc() {
+    fn test_dios_builder() {
+        let res = TaskBuilder::new().dios().try(proc() {
             "Success!".to_string()
         });
         assert_eq!(res.ok().unwrap(), "Success!".to_string());
