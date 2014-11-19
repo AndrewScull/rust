@@ -351,7 +351,7 @@ TSREQ$(1)_T_$(2)_H_$(3) = \
 # target
 SREQ$(1)_T_$(2)_H_$(3) = \
 	$$(TSREQ$(1)_T_$(2)_H_$(3)) \
-	$$(foreach dep,$$(TARGET_CRATES), \
+	$$(foreach dep,$$(call target_crates,$(2)), \
 	    $$(TLIB$(1)_T_$(2)_H_$(3))/stamp.$$(dep))
 
 # Prerequisites for a working stageN compiler and complete set of target
@@ -359,7 +359,7 @@ SREQ$(1)_T_$(2)_H_$(3) = \
 CSREQ$(1)_T_$(2)_H_$(3) = \
 	$$(TSREQ$(1)_T_$(2)_H_$(3)) \
 	$$(HBIN$(1)_H_$(3))/rustdoc$$(X_$(3)) \
-	$$(foreach dep,$$(CRATES),$$(TLIB$(1)_T_$(2)_H_$(3))/stamp.$$(dep))
+	$$(foreach dep,$$(call crates,$(2)),$$(TLIB$(1)_T_$(2)_H_$(3))/stamp.$$(dep))
 
 ifeq ($(1),0)
 # Don't run the stage0 compiler under valgrind - that ship has sailed

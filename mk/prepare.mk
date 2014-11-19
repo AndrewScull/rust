@@ -120,10 +120,10 @@ define DEF_PREPARE_TARGET_N
 prepare-target-$(2)-host-$(3)-$(1)-$(4): PREPARE_WORKING_SOURCE_LIB_DIR=$$(PREPARE_SOURCE_LIB_DIR)/rustlib/$(2)/lib
 prepare-target-$(2)-host-$(3)-$(1)-$(4): PREPARE_WORKING_DEST_LIB_DIR=$$(PREPARE_DEST_LIB_DIR)/rustlib/$(2)/lib
 prepare-target-$(2)-host-$(3)-$(1)-$(4): prepare-maybe-clean-$(4) \
-        $$(foreach crate,$$(TARGET_CRATES), \
+        $$(foreach crate,$$(call target_crates,$(2)), \
           $$(TLIB$(1)_T_$(2)_H_$(3))/stamp.$$(crate)) \
         $$(if $$(findstring $(2),$$(CFG_HOST)), \
-          $$(foreach crate,$$(HOST_CRATES), \
+          $$(foreach crate,$$(call host_crates,$(2)), \
             $$(TLIB$(1)_T_$(2)_H_$(3))/stamp.$$(crate)),)
 # Only install if this host and target combo is being prepared. Also be sure to
 # *not* install the rlibs for host crates because there's no need to statically
@@ -133,12 +133,12 @@ prepare-target-$(2)-host-$(3)-$(1)-$(4): prepare-maybe-clean-$(4) \
       $$(if $$(findstring $(2), $$(PREPARE_TARGETS)), \
         $$(if $$(findstring $(3), $$(PREPARE_HOST)), \
           $$(call PREPARE_DIR,$$(PREPARE_WORKING_DEST_LIB_DIR)) \
-          $$(foreach crate,$$(TARGET_CRATES), \
+          $$(foreach crate,$$(call target_crates,$(2)), \
 	    $$(if $$(findstring 1, $$(ONLY_RLIB_$$(crate))),, \
               $$(call PREPARE_LIB,$$(call CFG_LIB_GLOB_$(2),$$(crate)))) \
             $$(call PREPARE_LIB,$$(call CFG_RLIB_GLOB,$$(crate)))) \
           $$(if $$(findstring $(2),$$(CFG_HOST)), \
-            $$(foreach crate,$$(HOST_CRATES), \
+            $$(foreach crate,$$(call host_crates,$(2)), \
               $$(call PREPARE_LIB,$$(call CFG_LIB_GLOB_$(2),$$(crate)))),) \
           $$(call PREPARE_LIB,libmorestack.a) \
           $$(call PREPARE_LIB,libcompiler-rt.a),),),)
@@ -173,8 +173,8 @@ $$(foreach tool,$$(PREPARE_TOOLS), \
   $$(foreach host,$$(CFG_HOST), \
       $$(eval $$(call DEF_PREPARE_HOST_TOOL,$$(tool),$$(PREPARE_STAGE),$$(host),$(1)))))
 
-$$(foreach lib,$$(CRATES), \
-  $$(foreach host,$$(CFG_HOST), \
+$$(foreach host,$$(CFG_HOST), \
+  $$(foreach lib,$$(call crates,$$(host)), \
     $$(eval $$(call DEF_PREPARE_HOST_LIB,$$(lib),$$(PREPARE_STAGE),$$(host),$(1)))))
 
 prepare-targets-$(1): \

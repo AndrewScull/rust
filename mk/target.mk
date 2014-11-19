@@ -41,7 +41,7 @@ endef
 $(foreach host,$(CFG_HOST), \
  $(foreach target,$(CFG_TARGET), \
   $(foreach stage,$(STAGES), \
-   $(foreach crate,$(CRATES), \
+   $(foreach crate,$(call crates,$(target)), \
     $(eval $(call RUST_CRATE_FULLDEPS,$(stage),$(target),$(host),$(crate)))))))
 
 # RUST_TARGET_STAGE_N template: This defines how target artifacts are built
@@ -166,7 +166,7 @@ $(foreach source,$(CFG_HOST), \
 # For each target check which crates should be built
 $(foreach source,$(CFG_HOST), \
   $(foreach target,$(CFG_TARGET), \
-    $(foreach crate,$(filter-out $(LESS_CRATES_$(target)), $(CRATES) $(MORE_CRATES_$(target))), \
+    $(foreach crate,$(call crates,$(target)), \
    $(eval $(call RUST_TARGET_STAGE_N,0,$(target),$(source),$(crate))) \
    $(eval $(call RUST_TARGET_STAGE_N,1,$(target),$(source),$(crate))) \
    $(eval $(call RUST_TARGET_STAGE_N,2,$(target),$(source),$(crate))) \

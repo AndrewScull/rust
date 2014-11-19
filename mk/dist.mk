@@ -38,29 +38,29 @@ PKG_TAR = dist/$(PKG_NAME).tar.gz
 PKG_GITMODULES := $(S)src/llvm $(S)src/compiler-rt \
 		  $(S)src/rt/hoedown $(S)src/jemalloc
 PKG_FILES := \
-    $(S)COPYRIGHT                              \
-    $(S)LICENSE-APACHE                         \
-    $(S)LICENSE-MIT                            \
-    $(S)AUTHORS.txt                            \
-    $(S)CONTRIBUTING.md                        \
-    $(S)README.md                              \
-    $(S)RELEASES.md                            \
-    $(S)configure $(S)Makefile.in              \
-    $(S)man                                    \
-    $(addprefix $(S)src/,                      \
-      README.md                                \
-      compiletest                              \
-      doc                                      \
-      driver                                   \
-      etc                                      \
-      $(foreach crate,$(CRATES),lib$(crate))   \
-      libcoretest                              \
-      libbacktrace                             \
-      rt                                       \
-      rustllvm                                 \
-      snapshots.txt                            \
-      test)                                    \
-    $(PKG_GITMODULES)                          \
+    $(S)COPYRIGHT                                \
+    $(S)LICENSE-APACHE                           \
+    $(S)LICENSE-MIT                              \
+    $(S)AUTHORS.txt                              \
+    $(S)CONTRIBUTING.md                          \
+    $(S)README.md                                \
+    $(S)RELEASES.md                              \
+    $(S)configure $(S)Makefile.in                \
+    $(S)man                                      \
+    $(addprefix $(S)src/,                        \
+      README.md                                  \
+      compiletest                                \
+      doc                                        \
+      driver                                     \
+      etc                                        \
+      $(foreach crate,$(RAW_CRATES),lib$(crate)) \
+      libcoretest                                \
+      libbacktrace                               \
+      rt                                         \
+      rustllvm                                   \
+      snapshots.txt                              \
+      test)                                      \
+    $(PKG_GITMODULES)                            \
     $(filter-out config.stamp, \
                  $(MKFILES_FOR_TARBALL))
 

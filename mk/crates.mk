@@ -18,15 +18,15 @@
 #
 # Here's an explanation of the variables below
 #
-#   TARGET_CRATES
+#   RAW_TARGET_CRATES
 #	This list of crates will be built for all targets, including
 #	cross-compiled targets
 #
-#   HOST_CRATES
+#   RAW_HOST_CRATES
 #	This list of crates will be compiled for only host targets. Note that
-#	this set is explicitly *not* a subset of TARGET_CRATES, but rather it is
-#	a disjoint set. Nothing in the TARGET_CRATES set can depend on crates in
-#	the HOST_CRATES set, but the HOST_CRATES set can depend on target
+#	this set is explicitly *not* a subset of RAW_TARGET_CRATES, but rather it is
+#	a disjoint set. Nothing in the RAW_TARGET_CRATES set can depend on crates in
+#	the RAW_HOST_CRATES set, but the RAW_HOST_CRATES set can depend on target
 #	crates.
 #
 #   TOOLS
@@ -49,19 +49,24 @@
 # automatically generated for all stage/host/target combinations.
 ################################################################################
 
-TARGET_CRATES := libc std green native flate arena glob term \
+# XXX $(TARGET_CRATES) $(HOST_CRATES) $(CRATES) haven't been updates in tests.mk
+
+RAW_TARGET_CRATES := libc std green native dios flate arena glob term \
                  semver uuid serialize sync getopts collections num test time \
 				 rand  url log regex graphviz core rbml rlibc alloc debug \
 				 rustrt unicode
-HOST_CRATES := syntax rustc rustdoc fourcc hexfloat regex_macros fmt_macros \
+RAW_HOST_CRATES := syntax rustc rustdoc fourcc hexfloat regex_macros fmt_macros \
 	       rustc_llvm rustc_back
-CRATES := $(TARGET_CRATES) $(HOST_CRATES)
+RAW_CRATES := $(RAW_TARGET_CRATES) $(RAW_HOST_CRATES)
 TOOLS := compiletest rustdoc rustc
 
-MORE_CRATES_x86_64-linux-dios := dios
-LESS_CRATES_x86_64-linux-dios := native
-MORE_CRATES_x86_64-unknown-linux-gnu :=
-LESS_CRATES_x86_64-unknown-linux-gnu :=
+# $(1) target
+target_crates = $(filter-out $(DROP_CRATES_$(1)),$(RAW_TARGET_CRATES))
+host_crates = $(filter-out $(DROP_CRATES_$(1)),$(RAW_HOST_CRATES))
+crates = $(filter-out $(DROP_CRATES_$(1)),$(RAW_CRATES))
+
+DROP_CRATES_x86_64-linux-dios := native green
+DROP_CRATES_x86_64-unknown-linux-gnu := dios
 
 DEPS_core :=
 DEPS_libc := core
@@ -126,7 +131,7 @@ ONLY_RLIB_unicode := 1
 # You should not need to edit below this line
 ################################################################################
 
-DOC_CRATES := $(filter-out rustc, $(filter-out syntax, $(CRATES)))
+DOC_CRATES := $(filter-out rustc, $(filter-out syntax, $(RAW_CRATES)))
 COMPILER_DOC_CRATES := rustc syntax
 
 # This macro creates some simple definitions for each crate being built, just
@@ -140,7 +145,7 @@ RUST_DEPS_$(1) := $$(filter-out native:%,$$(DEPS_$(1)))
 NATIVE_DEPS_$(1) := $$(patsubst native:%,%,$$(filter native:%,$$(DEPS_$(1))))
 endef
 
-$(foreach crate,$(CRATES),$(eval $(call RUST_CRATE,$(crate))))
+$(foreach crate,$(RAW_CRATES),$(eval $(call RUST_CRATE,$(crate))))
 
 # Similar to the macro above for crates, this macro is for tools
 #

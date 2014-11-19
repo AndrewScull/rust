@@ -71,7 +71,7 @@ $(foreach t,$(CFG_HOST), \
 	$(eval $(call CP_HOST_STAGE_N,1,2,$(t),$(t))) \
 	$(eval $(call CP_HOST_STAGE_N,2,3,$(t),$(t))))
 
-$(foreach crate,$(CRATES), \
+$(foreach crate,$(call crates,$(CFG_HOST)), \
  $(foreach t,$(CFG_HOST), \
   $(eval $(call CP_HOST_STAGE_N_CRATE,0,1,$(t),$(t),$(crate))) \
   $(eval $(call CP_HOST_STAGE_N_CRATE,1,2,$(t),$(t),$(crate))) \

@@ -77,7 +77,7 @@ $(foreach targ, $(CFG_TARGET), $(eval $(call CLEAN_GENERIC,$(targ),T)))
 define CLEAN_HOST_STAGE_N
 
 clean$(1)_H_$(2): \
-	    $$(foreach crate,$$(CRATES),clean$(1)_H_$(2)-lib-$$(crate)) \
+	    $$(foreach crate,$$(call crates,$(2)),clean$(1)_H_$(2)-lib-$$(crate)) \
 	    $$(foreach tool,$$(TOOLS),clean$(1)_H_$(2)-tool-$$(tool))
 	$$(Q)rm -fr $(2)/rt/libbacktrace
 
@@ -97,7 +97,7 @@ $(foreach host, $(CFG_HOST), \
 define CLEAN_TARGET_STAGE_N
 
 clean$(1)_T_$(2)_H_$(3): \
-	    $$(foreach crate,$$(CRATES),clean$(1)_T_$(2)_H_$(3)-lib-$$(crate)) \
+	    $$(foreach crate,$$(call crates,$(2)),clean$(1)_T_$(2)_H_$(3)-lib-$$(crate)) \
 	    $$(foreach tool,$$(TOOLS),clean$(1)_T_$(2)_H_$(3)-tool-$$(tool))
 	$$(Q)rm -f $$(TLIB$(1)_T_$(2)_H_$(3))/libmorestack.a
 	$$(Q)rm -f $$(TLIB$(1)_T_$(2)_H_$(3))/libcompiler-rt.a
