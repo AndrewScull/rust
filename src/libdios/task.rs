@@ -14,7 +14,6 @@
 //! by rust tasks. This implements the necessary API traits laid out by std::rt
 //! in order to spawn new tasks and deschedule the current task.
 
-
 use std::any::Any;
 use std::mem;
 use std::rt::bookkeeping;
@@ -47,6 +46,12 @@ fn ops() -> Box<Ops> {
         // these *should* get overwritten
         stack_bounds: (0, 0),
     }
+}
+
+/// Spawns a function with the default configuration
+#[deprecated = "use the native method of NativeTaskBuilder instead"]
+pub fn spawn(f: proc():Send) {
+    spawn_opts(TaskOpts { name: None, stack_size: None, on_exit: None }, f)
 }
 
 /// Spawns a new task given the configuration options and a procedure to run

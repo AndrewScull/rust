@@ -22,8 +22,8 @@ use super::{retry, keep_going};
 use super::c;
 use super::util;
 
-#[cfg(unix)] use super::process;
-#[cfg(unix)] use super::file::FileDesc;
+use super::process;
+use super::file::FileDesc;
 
 pub use self::os::{init, sock_t, last_error};
 
@@ -196,8 +196,7 @@ pub fn sockaddr_to_addr(storage: &libc::sockaddr_storage,
             })
         }
         _ => {
-            #[cfg(unix)] use libc::EINVAL as ERROR;
-            #[cfg(windows)] use libc::WSAEINVAL as ERROR;
+            use libc::EINVAL as ERROR;
             Err(IoError {
                 code: ERROR as uint,
                 extra: 0,
@@ -284,40 +283,14 @@ impl TcpStream {
         }
     }
 
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    fn set_tcp_keepalive(&mut self, seconds: uint) -> IoResult<()> {
-        setsockopt(self.fd(), libc::IPPROTO_TCP, libc::TCP_KEEPALIVE,
-                   seconds as libc::c_int)
-    }
-    #[cfg(any(target_os = "freebsd", target_os = "dragonfly"))]
-    fn set_tcp_keepalive(&mut self, seconds: uint) -> IoResult<()> {
-        setsockopt(self.fd(), libc::IPPROTO_TCP, libc::TCP_KEEPIDLE,
-                   seconds as libc::c_int)
-    }
-    #[cfg(not(any(target_os = "macos",
-                  target_os = "ios",
-                  target_os = "freebsd",
-                  target_os = "dragonfly")))]
     fn set_tcp_keepalive(&mut self, _seconds: uint) -> IoResult<()> {
         Ok(())
     }
 
-    #[cfg(target_os = "linux")]
     fn lock_nonblocking(&self) {}
-
-    #[cfg(not(target_os = "linux"))]
-    fn lock_nonblocking<'a>(&'a self) -> Guard<'a> {
-        let ret = Guard {
-            fd: self.fd(),
-            guard: unsafe { self.inner.lock.lock() },
-        };
-        assert!(util::set_nonblocking(self.fd(), true).is_ok());
-        ret
-    }
 }
 
-#[cfg(windows)] type wrlen = libc::c_int;
-#[cfg(not(windows))] type wrlen = libc::size_t;
+type wrlen = libc::size_t;
 
 impl rtio::RtioTcpStream for TcpStream {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
@@ -446,7 +419,6 @@ impl TcpListener {
         match unsafe { libc::listen(self.fd(), backlog as libc::c_int) } {
             -1 => Err(os::last_error()),
 
-            #[cfg(unix)]
             _ => {
                 let (reader, writer) = try!(process::pipe());
                 try!(util::set_nonblocking(reader.fd(), true));
@@ -457,26 +429,6 @@ impl TcpListener {
                         listener: self,
                         reader: reader,
                         writer: writer,
-                        closed: atomic::AtomicBool::new(false),
-                    }),
-                    deadline: 0,
-                })
-            }
-
-            #[cfg(windows)]
-            _ => {
-                let accept = try!(os::Event::new());
-                let ret = unsafe {
-                    c::WSAEventSelect(self.fd(), accept.handle(), c::FD_ACCEPT)
-                };
-                if ret != 0 {
-                    return Err(os::last_error())
-                }
-                Ok(TcpAcceptor {
-                    inner: Arc::new(AcceptorInner {
-                        listener: self,
-                        abort: try!(os::Event::new()),
-                        accept: accept,
                         closed: atomic::AtomicBool::new(false),
                     }),
                     deadline: 0,
@@ -506,7 +458,6 @@ pub struct TcpAcceptor {
     deadline: u64,
 }
 
-#[cfg(unix)]
 struct AcceptorInner {
     listener: TcpListener,
     reader: FileDesc,
@@ -514,18 +465,9 @@ struct AcceptorInner {
     closed: atomic::AtomicBool,
 }
 
-#[cfg(windows)]
-struct AcceptorInner {
-    listener: TcpListener,
-    abort: os::Event,
-    accept: os::Event,
-    closed: atomic::AtomicBool,
-}
-
 impl TcpAcceptor {
     pub fn fd(&self) -> sock_t { self.inner.listener.fd() }
 
-    #[cfg(unix)]
     pub fn native_accept(&mut self) -> IoResult<TcpStream> {
         // In implementing accept, the two main concerns are dealing with
         // close_accept() and timeouts. The unix implementation is based on a
@@ -557,81 +499,6 @@ impl TcpAcceptor {
 
         Err(util::eof())
     }
-
-    #[cfg(windows)]
-    pub fn native_accept(&mut self) -> IoResult<TcpStream> {
-        // Unlink unix, windows cannot invoke `select` on arbitrary file
-        // descriptors like pipes, only sockets. Consequently, windows cannot
-        // use the same implementation as unix for accept() when close_accept()
-        // is considered.
-        //
-        // In order to implement close_accept() and timeouts, windows uses
-        // event handles. An acceptor-specific abort event is created which
-        // will only get set in close_accept(), and it will never be un-set.
-        // Additionally, another acceptor-specific event is associated with the
-        // FD_ACCEPT network event.
-        //
-        // These two events are then passed to WaitForMultipleEvents to see
-        // which one triggers first, and the timeout passed to this function is
-        // the local timeout for the acceptor.
-        //
-        // If the wait times out, then the accept timed out. If the wait
-        // succeeds with the abort event, then we were closed, and if the wait
-        // succeeds otherwise, then we do a nonblocking poll via `accept` to
-        // see if we can accept a connection. The connection is candidate to be
-        // stolen, so we do all of this in a loop as well.
-        let events = [self.inner.abort.handle(), self.inner.accept.handle()];
-
-        while !self.inner.closed.load(atomic::SeqCst) {
-            let ms = if self.deadline == 0 {
-                c::WSA_INFINITE as u64
-            } else {
-                let now = ::io::timer::now();
-                if self.deadline < now {0} else {self.deadline - now}
-            };
-            let ret = unsafe {
-                c::WSAWaitForMultipleEvents(2, events.as_ptr(), libc::FALSE,
-                                            ms as libc::DWORD, libc::FALSE)
-            };
-            match ret {
-                c::WSA_WAIT_TIMEOUT => {
-                    return Err(util::timeout("accept timed out"))
-                }
-                c::WSA_WAIT_FAILED => return Err(os::last_error()),
-                c::WSA_WAIT_EVENT_0 => break,
-                n => assert_eq!(n, c::WSA_WAIT_EVENT_0 + 1),
-            }
-
-            let mut wsaevents: c::WSANETWORKEVENTS = unsafe { mem::zeroed() };
-            let ret = unsafe {
-                c::WSAEnumNetworkEvents(self.fd(), events[1], &mut wsaevents)
-            };
-            if ret != 0 { return Err(os::last_error()) }
-
-            if wsaevents.lNetworkEvents & c::FD_ACCEPT == 0 { continue }
-            match unsafe {
-                libc::accept(self.fd(), ptr::null_mut(), ptr::null_mut())
-            } {
-                -1 if util::wouldblock() => {}
-                -1 => return Err(os::last_error()),
-
-                // Accepted sockets inherit the same properties as the caller,
-                // so we need to deregister our event and switch the socket back
-                // to blocking mode
-                fd => {
-                    let stream = TcpStream::new(Inner::new(fd));
-                    let ret = unsafe {
-                        c::WSAEventSelect(fd, events[1], 0)
-                    };
-                    if ret != 0 { return Err(os::last_error()) }
-                    try!(util::set_nonblocking(fd, false));
-                    return Ok(stream)
-                }
-            }
-        }
-
-        Err(util::eof())
-    }
 }
 
 impl rtio::RtioSocket for TcpAcceptor {
@@ -658,7 +525,6 @@ impl rtio::RtioTcpAcceptor for TcpAcceptor {
         } as Box<rtio::RtioTcpAcceptor + Send>
     }
 
-    #[cfg(unix)]
     fn close_accept(&mut self) -> IoResult<()> {
         self.inner.closed.store(true, atomic::SeqCst);
         let mut fd = FileDesc::new(self.inner.writer.fd(), false);
@@ -666,17 +532,6 @@ impl rtio::RtioTcpAcceptor for TcpAcceptor {
             Ok(..) => Ok(()),
             Err(..) if util::wouldblock() => Ok(()),
             Err(e) => Err(e),
-        }
-    }
-
-    #[cfg(windows)]
-    fn close_accept(&mut self) -> IoResult<()> {
-        self.inner.closed.store(true, atomic::SeqCst);
-        let ret = unsafe { c::WSASetEvent(self.inner.abort.handle()) };
-        if ret == libc::TRUE {
-            Ok(())
-        } else {
-            Err(os::last_error())
         }
     }
 }
@@ -743,18 +598,7 @@ impl UdpSocket {
         }
     }
 
-    #[cfg(target_os = "linux")]
     fn lock_nonblocking(&self) {}
-
-    #[cfg(not(target_os = "linux"))]
-    fn lock_nonblocking<'a>(&'a self) -> Guard<'a> {
-        let ret = Guard {
-            fd: self.fd(),
-            guard: unsafe { self.inner.lock.lock() },
-        };
-        assert!(util::set_nonblocking(self.fd(), true).is_ok());
-        ret
-    }
 }
 
 impl rtio::RtioSocket for UdpSocket {
@@ -763,8 +607,7 @@ impl rtio::RtioSocket for UdpSocket {
     }
 }
 
-#[cfg(windows)] type msglen_t = libc::c_int;
-#[cfg(unix)]    type msglen_t = libc::size_t;
+type msglen_t = libc::size_t;
 
 impl rtio::RtioUdpSocket for UdpSocket {
     fn recv_from(&mut self, buf: &mut [u8]) -> IoResult<(uint, rtio::SocketAddr)> {
@@ -1031,67 +874,6 @@ pub fn write<T>(fd: sock_t,
     }
 }
 
-#[cfg(windows)]
-mod os {
-    use libc;
-    use std::mem;
-    use std::rt::rtio::{IoError, IoResult};
-
-    use io::c;
-
-    pub type sock_t = libc::SOCKET;
-    pub struct Event(c::WSAEVENT);
-
-    impl Event {
-        pub fn new() -> IoResult<Event> {
-            let event = unsafe { c::WSACreateEvent() };
-            if event == c::WSA_INVALID_EVENT {
-                Err(last_error())
-            } else {
-                Ok(Event(event))
-            }
-        }
-
-        pub fn handle(&self) -> c::WSAEVENT { let Event(handle) = *self; handle }
-    }
-
-    impl Drop for Event {
-        fn drop(&mut self) {
-            unsafe { let _ = c::WSACloseEvent(self.handle()); }
-        }
-    }
-
-    pub fn init() {
-        unsafe {
-            use std::rt::mutex::{StaticNativeMutex, NATIVE_MUTEX_INIT};
-            static mut INITIALIZED: bool = false;
-            static mut LOCK: StaticNativeMutex = NATIVE_MUTEX_INIT;
-
-            let _guard = LOCK.lock();
-            if !INITIALIZED {
-                let mut data: c::WSADATA = mem::zeroed();
-                let ret = c::WSAStartup(0x202,      // version 2.2
-                                        &mut data);
-                assert_eq!(ret, 0);
-                INITIALIZED = true;
-            }
-        }
-    }
-
-    pub fn last_error() -> IoError {
-        use std::os;
-        let code = unsafe { c::WSAGetLastError() as uint };
-        IoError {
-            code: code,
-            extra: 0,
-            detail: Some(os::error_string(code)),
-        }
-    }
-
-    pub unsafe fn close(sock: sock_t) { let _ = libc::closesocket(sock); }
-}
-
-#[cfg(unix)]
 mod os {
     use libc;
     use std::rt::rtio::IoError;

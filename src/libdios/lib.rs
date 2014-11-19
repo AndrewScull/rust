@@ -78,10 +78,17 @@ pub use task::NativeTaskBuilder;
 pub mod io;
 pub mod task;
 
-#[cfg(any(windows, android))]
-static OS_DEFAULT_STACK_ESTIMATE: uint = 1 << 20;
-#[cfg(all(unix, not(android)))]
 static OS_DEFAULT_STACK_ESTIMATE: uint = 2 * (1 << 20);
+
+#[lang = "start"]
+#[cfg(not(test))]
+pub fn lang_start(main: *const u8, argc: int, argv: *const *const u8) -> int {
+    use std::mem;
+    start(argc, argv, proc() {
+        let main: extern "Rust" fn() = unsafe { mem::transmute(main) };
+        main();
+    })
+}
 
 /// Executes the given procedure after initializing the runtime with the given
 /// argc/argv.
@@ -111,8 +118,7 @@ pub fn start(argc: int, argv: *const *const u8, main: proc()) -> int {
     //
     // Hence, we set SIGPIPE to ignore when the program starts up in order to
     // prevent this problem.
-    #[cfg(windows)] fn ignore_sigpipe() {}
-    #[cfg(unix)] fn ignore_sigpipe() {
+    fn ignore_sigpipe() {
         use libc;
         use libc::funcs::posix01::signal::signal;
         unsafe {

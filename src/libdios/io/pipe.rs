@@ -43,8 +43,7 @@ fn addr_to_sockaddr_un(addr: &CString,
 
     let len = addr.len();
     if len > s.sun_path.len() - 1 {
-        #[cfg(unix)] use libc::EINVAL as ERROR;
-        #[cfg(windows)] use libc::WSAEINVAL as ERROR;
+        use libc::EINVAL as ERROR;
         return Err(IoError {
             code: ERROR as uint,
             extra: 0,
@@ -141,18 +140,7 @@ impl UnixStream {
 
     fn fd(&self) -> fd_t { self.inner.fd }
 
-    #[cfg(target_os = "linux")]
     fn lock_nonblocking(&self) {}
-
-    #[cfg(not(target_os = "linux"))]
-    fn lock_nonblocking<'a>(&'a self) -> net::Guard<'a> {
-        let ret = net::Guard {
-            fd: self.fd(),
-            guard: unsafe { self.inner.lock.lock() },
-        };
-        assert!(util::set_nonblocking(self.fd(), true).is_ok());
-        ret
-    }
 }
 
 impl rtio::RtioPipe for UnixStream {
@@ -230,7 +218,6 @@ impl UnixListener {
         match unsafe { libc::listen(self.fd(), backlog as libc::c_int) } {
             -1 => Err(super::last_error()),
 
-            #[cfg(unix)]
             _ => {
                 let (reader, writer) = try!(process::pipe());
                 try!(util::set_nonblocking(reader.fd(), true));
@@ -264,7 +251,6 @@ pub struct UnixAcceptor {
     deadline: u64,
 }
 
-#[cfg(unix)]
 struct AcceptorInner {
     listener: UnixListener,
     reader: FileDesc,
@@ -317,7 +303,6 @@ impl rtio::RtioUnixAcceptor for UnixAcceptor {
         } as Box<rtio::RtioUnixAcceptor + Send>
     }
 
-    #[cfg(unix)]
     fn close_accept(&mut self) -> IoResult<()> {
         self.inner.closed.store(true, atomic::SeqCst);
         let mut fd = FileDesc::new(self.inner.writer.fd(), false);

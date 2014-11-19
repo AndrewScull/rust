@@ -28,8 +28,7 @@ pub enum SocketStatus {
 }
 
 pub fn timeout(desc: &'static str) -> IoError {
-    #[cfg(unix)] use libc::ETIMEDOUT as ERROR;
-    #[cfg(windows)] use libc::ERROR_OPERATION_ABORTED as ERROR;
+    use libc::ETIMEDOUT as ERROR;
     IoError {
         code: ERROR as uint,
         extra: 0,
@@ -38,8 +37,7 @@ pub fn timeout(desc: &'static str) -> IoError {
 }
 
 pub fn short_write(n: uint, desc: &'static str) -> IoError {
-    #[cfg(unix)] use libc::EAGAIN as ERROR;
-    #[cfg(windows)] use libc::ERROR_OPERATION_ABORTED as ERROR;
+    use libc::EAGAIN as ERROR;
     IoError {
         code: ERROR as uint,
         extra: n,
@@ -55,14 +53,6 @@ pub fn eof() -> IoError {
     }
 }
 
-#[cfg(windows)]
-pub fn ms_to_timeval(ms: u64) -> libc::timeval {
-    libc::timeval {
-        tv_sec: (ms / 1000) as libc::c_long,
-        tv_usec: ((ms % 1000) * 1000) as libc::c_long,
-    }
-}
-#[cfg(not(windows))]
 pub fn ms_to_timeval(ms: u64) -> libc::timeval {
     libc::timeval {
         tv_sec: (ms / 1000) as libc::time_t,
@@ -70,32 +60,14 @@ pub fn ms_to_timeval(ms: u64) -> libc::timeval {
     }
 }
 
-#[cfg(unix)]
 pub fn wouldblock() -> bool {
     let err = os::errno();
     err == libc::EWOULDBLOCK as int || err == libc::EAGAIN as int
 }
 
-#[cfg(windows)]
-pub fn wouldblock() -> bool {
-    let err = os::errno();
-    err == libc::WSAEWOULDBLOCK as uint
-}
-
-#[cfg(unix)]
 pub fn set_nonblocking(fd: net::sock_t, nb: bool) -> IoResult<()> {
     let set = nb as libc::c_int;
     super::mkerr_libc(retry(|| unsafe { c::ioctl(fd, c::FIONBIO, &set) }))
-}
-
-#[cfg(windows)]
-pub fn set_nonblocking(fd: net::sock_t, nb: bool) -> IoResult<()> {
-    let mut set = nb as libc::c_ulong;
-    if unsafe { c::ioctlsocket(fd, c::FIONBIO, &mut set) != 0 } {
-        Err(last_error())
-    } else {
-        Ok(())
-    }
 }
 
 // See http://developerweb.net/viewtopic.php?id=3196 for where this is
@@ -105,10 +77,8 @@ pub fn connect_timeout(fd: net::sock_t,
                        len: libc::socklen_t,
                        timeout_ms: u64) -> IoResult<()> {
     use std::os;
-    #[cfg(unix)]    use libc::EINPROGRESS as INPROGRESS;
-    #[cfg(windows)] use libc::WSAEINPROGRESS as INPROGRESS;
-    #[cfg(unix)]    use libc::EWOULDBLOCK as WOULDBLOCK;
-    #[cfg(windows)] use libc::WSAEWOULDBLOCK as WOULDBLOCK;
+    use libc::EINPROGRESS as INPROGRESS;
+    use libc::EWOULDBLOCK as WOULDBLOCK;
 
     // Make sure the call to connect() doesn't block
     try!(set_nonblocking(fd, true));
@@ -148,7 +118,6 @@ pub fn connect_timeout(fd: net::sock_t,
     try!(set_nonblocking(fd, false));
     return ret;
 
-    #[cfg(unix)]
     fn await(fd: net::sock_t, set: &mut c::fd_set,
              timeout: u64) -> libc::c_int {
         let start = ::io::timer::now();
@@ -160,12 +129,6 @@ pub fn connect_timeout(fd: net::sock_t,
             c::select(fd + 1, ptr::null_mut(), set as *mut _,
                       ptr::null_mut(), &mut tv)
         })
-    }
-    #[cfg(windows)]
-    fn await(_fd: net::sock_t, set: &mut c::fd_set,
-             timeout: u64) -> libc::c_int {
-        let mut tv = ms_to_timeval(timeout);
-        unsafe { c::select(1, ptr::null_mut(), set, ptr::null_mut(), &mut tv) }
     }
 }
 

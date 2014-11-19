@@ -43,45 +43,19 @@ pub mod net;
 pub mod process;
 mod util;
 
-#[cfg(unix)]
-#[path = "file_unix.rs"]
-pub mod file;
-#[cfg(windows)]
-#[path = "file_windows.rs"]
+#[path = "file.rs"]
 pub mod file;
 
-#[cfg(any(target_os = "macos",
-          target_os = "ios",
-          target_os = "freebsd",
-          target_os = "dragonfly",
-          target_os = "android",
-          target_os = "dios",
-          target_os = "linux"))]
-#[path = "timer_unix.rs"]
+#[path = "timer.rs"]
 pub mod timer;
 
-#[cfg(target_os = "windows")]
-#[path = "timer_windows.rs"]
-pub mod timer;
-
-#[cfg(unix)]
-#[path = "pipe_unix.rs"]
+#[path = "pipe.rs"]
 pub mod pipe;
 
-#[cfg(windows)]
-#[path = "pipe_windows.rs"]
-pub mod pipe;
-
-#[cfg(windows)]
-#[path = "tty_windows.rs"]
-mod tty;
-
-#[cfg(unix)]    #[path = "c_unix.rs"]  mod c;
-#[cfg(windows)] #[path = "c_windows.rs"] mod c;
+#[path = "c.rs"] mod c;
 
 fn unimpl() -> IoError {
-    #[cfg(unix)] use libc::ENOSYS as ERROR;
-    #[cfg(windows)] use libc::ERROR_CALL_NOT_IMPLEMENTED as ERROR;
+    use libc::ENOSYS as ERROR;
     IoError {
         code: ERROR as uint,
         extra: 0,
@@ -107,22 +81,6 @@ fn mkerr_libc <Int: num::Zero>(ret: Int) -> IoResult<()> {
     }
 }
 
-// windows has zero values as errors
-#[cfg(windows)]
-fn mkerr_winbool(ret: libc::c_int) -> IoResult<()> {
-    if ret == 0 {
-        Err(last_error())
-    } else {
-        Ok(())
-    }
-}
-
-#[cfg(windows)]
-#[inline]
-fn retry<I> (f: || -> I) -> I { f() } // PR rust-lang/rust/#17020
-
-#[cfg(unix)]
-#[inline]
 fn retry<I: PartialEq + num::One + Neg<I>> (f: || -> I) -> I {
     let minus_one = -num::one::<I>();
     loop {
@@ -281,7 +239,6 @@ impl rtio::IoFactory for IoFactory {
     fn pipe_open(&mut self, fd: c_int) -> IoResult<Box<rtio::RtioPipe + Send>> {
         Ok(box file::FileDesc::new(fd, true) as Box<rtio::RtioPipe + Send>)
     }
-    #[cfg(unix)]
     fn tty_open(&mut self, fd: c_int, _readable: bool)
                 -> IoResult<Box<rtio::RtioTTY + Send>> {
         if unsafe { libc::isatty(fd) } != 0 {
@@ -289,19 +246,6 @@ impl rtio::IoFactory for IoFactory {
         } else {
             Err(IoError {
                 code: libc::ENOTTY as uint,
-                extra: 0,
-                detail: None,
-            })
-        }
-    }
-    #[cfg(windows)]
-    fn tty_open(&mut self, fd: c_int, _readable: bool)
-                -> IoResult<Box<rtio::RtioTTY + Send>> {
-        if tty::is_tty(fd) {
-            Ok(box tty::WindowsTTY::new(fd) as Box<rtio::RtioTTY + Send>)
-        } else {
-            Err(IoError {
-                code: libc::ERROR_INVALID_HANDLE as uint,
                 extra: 0,
                 detail: None,
             })

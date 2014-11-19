@@ -130,20 +130,8 @@ impl rtio::RtioFileStream for FileDesc {
         super::mkerr_libc(retry(|| unsafe { libc::fsync(self.fd()) }))
     }
     fn datasync(&mut self) -> IoResult<()> {
-        return super::mkerr_libc(os_datasync(self.fd()));
-
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        fn os_datasync(fd: c_int) -> c_int {
-            unsafe { libc::fcntl(fd, libc::F_FULLFSYNC) }
-        }
-        #[cfg(target_os = "linux")]
-        fn os_datasync(fd: c_int) -> c_int {
-            retry(|| unsafe { libc::fdatasync(fd) })
-        }
-        #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux")))]
-        fn os_datasync(fd: c_int) -> c_int {
-            retry(|| unsafe { libc::fsync(fd) })
-        }
+		// TODO: put this back to fdatasync by exposing fn in liblibc
+        super::mkerr_libc(retry(|| unsafe { libc::fsync(self.fd()) }))
     }
     fn truncate(&mut self, offset: i64) -> IoResult<()> {
         super::mkerr_libc(retry(|| unsafe {
@@ -446,14 +434,8 @@ fn mkstat(stat: &libc::stat) -> rtio::FileStat {
     // FileStat times are in milliseconds
     fn mktime(secs: u64, nsecs: u64) -> u64 { secs * 1000 + nsecs / 1000000 }
 
-    #[cfg(not(any(target_os = "linux", target_os = "dios", target_os = "android")))]
-    fn flags(stat: &libc::stat) -> u64 { stat.st_flags as u64 }
-    #[cfg(any(target_os = "linux", target_os = "dios", target_os = "android"))]
     fn flags(_stat: &libc::stat) -> u64 { 0 }
 
-    #[cfg(not(any(target_os = "linux", target_os = "dios", target_os = "android")))]
-    fn gen(stat: &libc::stat) -> u64 { stat.st_gen as u64 }
-    #[cfg(any(target_os = "linux", target_os = "dios", target_os = "android"))]
     fn gen(_stat: &libc::stat) -> u64 { 0 }
 
     rtio::FileStat {
@@ -507,7 +489,6 @@ mod tests {
     use std::os;
     use std::rt::rtio::{RtioFileStream, SeekSet};
 
-    #[cfg_attr(target_os = "freebsd", ignore)] // hmm, maybe pipes have a tiny buffer
     #[test]
     fn test_file_desc() {
         // Run this test with some pipes so we don't have to mess around with

@@ -22,8 +22,6 @@
 
 #![macro_escape]
 
-
-
 use std::mem;
 use std::rt::bookkeeping;
 use std::rt::mutex::StaticNativeMutex;
@@ -141,7 +139,6 @@ impl<M: Send> Helper<M> {
     }
 }
 
-#[cfg(unix)]
 mod imp {
     use libc;
     use std::os;
@@ -161,38 +158,5 @@ mod imp {
 
     pub fn close(fd: libc::c_int) {
         let _fd = FileDesc::new(fd, true);
-    }
-}
-
-#[cfg(windows)]
-mod imp {
-    use libc::{BOOL, LPCSTR, HANDLE, LPSECURITY_ATTRIBUTES, CloseHandle};
-    use std::ptr;
-    use libc;
-
-    pub type signal = HANDLE;
-
-    pub fn new() -> (HANDLE, HANDLE) {
-        unsafe {
-            let handle = CreateEventA(ptr::null_mut(), libc::FALSE, libc::FALSE,
-                                      ptr::null());
-            (handle, handle)
-        }
-    }
-
-    pub fn signal(handle: HANDLE) {
-        assert!(unsafe { SetEvent(handle) != 0 });
-    }
-
-    pub fn close(handle: HANDLE) {
-        assert!(unsafe { CloseHandle(handle) != 0 });
-    }
-
-    extern "system" {
-        fn CreateEventA(lpSecurityAttributes: LPSECURITY_ATTRIBUTES,
-                        bManualReset: BOOL,
-                        bInitialState: BOOL,
-                        lpName: LPCSTR) -> HANDLE;
-        fn SetEvent(hEvent: HANDLE) -> BOOL;
     }
 }

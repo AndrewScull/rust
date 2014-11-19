@@ -96,16 +96,9 @@ impl GetAddrInfoRequest {
 //                   hints: *const libc::addrinfo,
 //                   res: *mut *mut libc::addrinfo) -> c_int;
 //    fn freeaddrinfo(res: *mut libc::addrinfo);
-//    #[cfg(not(windows))]
 //    fn gai_strerror(errcode: c_int) -> *const c_char;
 //}
 //
-//#[cfg(windows)]
-//fn get_error(_: c_int) -> IoError {
-//    net::last_error()
-//}
-//
-//#[cfg(not(windows))]
 //fn get_error(s: c_int) -> IoError {
 //    use std::c_str::CString;
 //
