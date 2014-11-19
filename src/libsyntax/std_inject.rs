@@ -23,10 +23,13 @@ use util::small_vector::SmallVector;
 
 use std::mem;
 
-pub fn maybe_inject_crates_ref(krate: ast::Crate, alt_std_name: Option<String>, any_exe: bool)
+pub fn maybe_inject_crates_ref(krate: ast::Crate,
+                               alt_std_name: Option<String>,
+                               alt_rt_name: Option<String>,
+                               any_exe: bool)
                                -> ast::Crate {
     if use_std(&krate) {
-        inject_crates_ref(krate, alt_std_name, any_exe)
+        inject_crates_ref(krate, alt_std_name, alt_rt_name, any_exe)
     } else {
         krate
     }
@@ -54,6 +57,7 @@ fn no_prelude(attrs: &[ast::Attribute]) -> bool {
 
 struct StandardLibraryInjector<'a> {
     alt_std_name: Option<String>,
+    alt_rt_name: Option<String>,
     any_exe: bool,
 }
 
@@ -82,11 +86,12 @@ impl<'a> fold::Folder for StandardLibraryInjector<'a> {
         });
 
         if use_start(&krate) && self.any_exe {
-            let visible_rt_name = "rt";
-            let actual_rt_name = "native";
             // Gensym the ident so it can't be named
-            let visible_rt_name = token::gensym_ident(visible_rt_name);
-            let actual_rt_name = token::intern_and_get_ident(actual_rt_name);
+            let visible_rt_name = token::gensym_ident("rt");
+        	let actual_rt_name = match self.alt_rt_name {
+        	    Some(ref s) => token::intern_and_get_ident(s.as_slice()),
+        	    None => token::intern_and_get_ident("native"),
+        	};
 
             vis.push(ast::ViewItem {
                 node: ast::ViewItemExternCrate(visible_rt_name,
@@ -121,9 +126,11 @@ impl<'a> fold::Folder for StandardLibraryInjector<'a> {
 
 fn inject_crates_ref(krate: ast::Crate,
                      alt_std_name: Option<String>,
+                     alt_rt_name: Option<String>,
                      any_exe: bool) -> ast::Crate {
     let mut fold = StandardLibraryInjector {
         alt_std_name: alt_std_name,
+        alt_rt_name: alt_rt_name,
         any_exe: any_exe,
     };
     fold.fold_crate(krate)

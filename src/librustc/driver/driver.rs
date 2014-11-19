@@ -33,6 +33,7 @@ use std::io;
 use std::io::fs;
 use std::os;
 use arena::TypedArena;
+use syntax::abi;
 use syntax::ast;
 use syntax::ast_map;
 use syntax::attr;
@@ -215,6 +216,10 @@ pub fn phase_2_configure_and_expand(sess: &Session,
     krate = time(time_passes, "crate injection", krate, |krate|
                  syntax::std_inject::maybe_inject_crates_ref(krate,
                                                              sess.opts.alt_std_name.clone(),
+    														 match sess.targ_cfg.os {
+                                                             	abi::OsDIOS => Some("dios".to_string()),
+                                                             	_           => None,
+                                                             },
                                                              any_exe));
 
     // strip before expansion to allow macros to depend on
