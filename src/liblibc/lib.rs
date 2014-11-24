@@ -278,6 +278,15 @@ pub use funcs::bsd43::{shutdown};
 #[cfg(windows)] pub use funcs::extra::msvcrt::{get_osfhandle, open_osfhandle};
 #[cfg(windows)] pub use funcs::extra::winsock::{ioctlsocket};
 
+#[cfg(target_os = "dios")] pub use types::os::extra::{dios_flags_t};
+#[cfg(target_os = "dios")] pub use types::os::extra::{dios_ref_t, dios_name_t};
+#[cfg(target_os = "dios")] pub use types::os::extra::{dios_task_spec_t, dios_iovec_t};
+#[cfg(target_os = "dios")] pub use funcs::extra::syscall::{dios_create, dios_delete};
+#[cfg(target_os = "dios")] pub use funcs::extra::syscall::{dios_lookup, dios_run, dios_copy};
+#[cfg(target_os = "dios")] pub use funcs::extra::syscall::{dios_begin_read, dios_end_read};
+#[cfg(target_os = "dios")] pub use funcs::extra::syscall::{dios_begin_write, dios_end_write};
+#[cfg(target_os = "dios")] pub use funcs::extra::syscall::{dios_select, dios_test};
+
 #[cfg(any(target_os = "linux",
           target_os = "dios",
           target_os = "android",
@@ -310,6 +319,10 @@ pub use types::os::arch::extra::{mach_timebase_info};
 #[cfg(not(windows))]
 #[link(name = "c")]
 #[link(name = "m")]
+extern {}
+
+#[cfg(target_os = "dios")]
+#[link(name = "d")]
 extern {}
 
 /// A wrapper for a nullable pointer. Don't use this except for interacting
@@ -805,6 +818,76 @@ pub mod types {
                     pub sll_addr: [c_uchar, ..8]
                 }
 
+            }
+        }
+    
+        #[cfg(target_os = "dios")]
+        pub mod extra {
+            use types::common::c95::{c_void};
+            use types::common::c99::{uint8_t, uint64_t};
+
+            pub type dios_flags_t = uint64_t;
+
+            #[repr(C)]
+            pub enum dios_ref_type_t {
+                D_REF_PRIVMEM,
+                D_REF_SHMEM,
+                D_REF_BLOB,
+                D_REF_HDFS,
+                D_REF_SPECIAL,
+                D_REF_TASK,
+            }
+
+            #[repr(C)]
+            pub enum dios_ref_proximity_t {
+                D_REF_LOCAL_TO_CPU,
+                D_REF_LOCAL_MEMORY,
+                D_REF_LOCAL_DISK,
+                D_REF_LOCAL_DEVICE,
+                D_REF_REMOTE_MEMORY_1HOP,
+                D_REF_REMOTE_MEMORY_MULTIHOP,
+                D_REF_REMOTE_MEMORY_DISTANT,
+                D_REF_REMOTE_DISK_1HOP,
+                D_REF_REMOTE_DISK_MULTIHOP,
+                D_REF_REMOTE_DISK_DISTANT,
+            }
+
+            #[repr(C)]
+            pub enum dios_ref_consistency_t {
+                D_REF_CONSISTENCY_NONE,
+                D_REF_CONSISTENCY_EVENTUAL,
+                D_REF_CONSISTENCY_MUTEX,
+            }
+
+            #[repr(C)]
+            pub struct dios_ref_t {
+                pub id: uint64_t,
+                pub dtype: dios_ref_type_t,
+                pub proximity: dios_ref_proximity_t,
+                pub read_consistency: dios_ref_consistency_t,
+                pub write_consistency: dios_ref_consistency_t,
+                pub io_ready: bool,
+                pub read_buffer_size: uint64_t,
+                pub write_buffer_size: uint64_t,
+            }
+
+            #[repr(C)]
+            pub struct dios_name_t {
+                pub raw:  [uint8_t, ..256],
+            }
+
+            #[repr(C)]
+            pub struct dios_task_spec_t {
+                pub input_names: *mut *mut dios_name_t,
+                pub input_count: uint64_t,
+                pub output_names: *mut *mut dios_name_t,
+                pub output_count: uint64_t,
+            }
+
+            #[repr(C)]
+            pub struct dios_iovec_t {
+                pub buf: *mut c_void,
+                pub len: uint64_t,
             }
         }
     }
@@ -4747,8 +4830,69 @@ pub mod funcs {
     pub mod extra {
     }
 
-    #[cfg(any(target_os = "linux", target_os = "dios", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub mod extra {
+    }
+
+    #[cfg(target_os = "dios")]
+    pub mod extra {
+        pub mod syscall {
+            use types::common::c99::{uint64_t};
+            use types::os::arch::c95::{c_long};
+            use types::os::extra::{dios_flags_t,
+                                   dios_ref_t,
+                                   dios_name_t,
+                                   dios_task_spec_t,
+                                   dios_iovec_t};
+
+            extern {
+                pub fn dios_create(flags: dios_flags_t,
+                                   name: *mut *mut dios_name_t,
+                                   dref: *mut *mut dios_ref_t)
+                                   -> c_long;
+                pub fn dios_lookup(flags: dios_flags_t,
+                                   name: *mut *mut dios_name_t,
+                                   drefs: *mut *mut dios_ref_t,
+                                   refs_count: *mut uint64_t)
+                                   -> c_long;
+                pub fn dios_run(flags: dios_flags_t,
+                                dref: *mut *mut dios_ref_t,
+                                task_spec: *mut dios_task_spec_t,
+                                new_ref: *mut *mut dios_ref_t)
+                                -> c_long;
+                pub fn dios_copy(flags: dios_flags_t,
+                                 drefs: *mut *mut dios_ref_t,
+                                 ref_count: uint64_t,
+                                 target: *mut dios_ref_t)
+                                 -> c_long;
+                pub fn dios_delete(flags: dios_flags_t,
+                                   dref: *mut dios_ref_t)
+                                   -> c_long;
+                pub fn dios_begin_read(flags: dios_flags_t,
+                                       dref: *mut dios_ref_t,
+                                       iov: *mut *mut dios_iovec_t)
+                                       -> c_long;
+                pub fn dios_end_read(flags: dios_flags_t,
+                                     dref: *mut dios_ref_t,
+                                     iov: *mut dios_iovec_t)
+                                     -> c_long;
+                pub fn dios_begin_write(flags: dios_flags_t,
+                                        dref: *mut dios_ref_t,
+                                        len: uint64_t,
+                                        iov: *mut *mut dios_iovec_t)
+                                        -> c_long;
+                pub fn dios_end_write(flags: dios_flags_t,
+                                      dref: *mut dios_ref_t,
+                                      iov: *mut dios_iovec_t)
+                                      -> c_long;
+                pub fn dios_select(flags: dios_flags_t,
+                                   drefs: *mut *mut dios_ref_t,
+                                   num_refs: uint64_t,
+                                   selected: *mut *mut dios_ref_t)
+                                   -> c_long;
+                pub fn dios_test() -> c_long;
+            }
+        }
     }
 
 
