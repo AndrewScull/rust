@@ -15,8 +15,10 @@
 # The version number
 CFG_RELEASE_NUM=1.0.0
 
-# An optional number to put after the label, e.g. '2' -> '-beta2'
-CFG_BETA_CYCLE=
+# An optional number to put after the label, e.g. '.2' -> '-beta.2'
+# NB Make sure it starts with a dot to conform to semver pre-release
+# versions (section 9)
+CFG_PRERELEASE_VERSION=.1
 
 CFG_FILENAME_EXTRA=4e7c5e5c
 
@@ -28,9 +30,8 @@ CFG_PACKAGE_VERS=$(CFG_RELEASE_NUM)
 CFG_DISABLE_UNSTABLE_FEATURES=1
 endif
 ifeq ($(CFG_RELEASE_CHANNEL),beta)
-# The beta channel is temporarily called 'alpha'
-CFG_RELEASE=$(CFG_RELEASE_NUM)-alpha$(CFG_BETA_CYCLE)
-CFG_PACKAGE_VERS=$(CFG_RELEASE_NUM)-alpha$(CFG_BETA_CYCLE)
+CFG_RELEASE=$(CFG_RELEASE_NUM)-beta(CFG_PRERELEASE_VERSION)
+CFG_PACKAGE_VERS=$(CFG_RELEASE_NUM)-beta(CFG_PRERELEASE_VERSION)
 CFG_DISABLE_UNSTABLE_FEATURES=1
 endif
 ifeq ($(CFG_RELEASE_CHANNEL),nightly)
@@ -261,7 +262,7 @@ endif
 ######################################################################
 
 # FIXME: x86-ism
-LLVM_COMPONENTS=x86 arm aarch64 mips ipo bitreader bitwriter linker asmparser mcjit \
+LLVM_COMPONENTS=x86 arm aarch64 mips powerpc ipo bitreader bitwriter linker asmparser mcjit \
                 interpreter instrumentation
 
 # Only build these LLVM tools

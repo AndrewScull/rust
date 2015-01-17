@@ -219,7 +219,7 @@
 //! concerned with error handling; instead its caller is responsible for
 //! responding to errors that may occur while attempting to read the numbers.
 
-#![experimental]
+#![unstable]
 #![deny(unused_must_use)]
 
 pub use self::SeekStyle::*;
@@ -1066,7 +1066,7 @@ pub trait Writer {
     fn write_char(&mut self, c: char) -> IoResult<()> {
         let mut buf = [0u8; 4];
         let n = c.encode_utf8(buf.as_mut_slice()).unwrap_or(0);
-        self.write(&buf[0..n])
+        self.write(&buf[..n])
     }
 
     /// Write the result of passing n through `int::to_str_bytes`.
@@ -1451,7 +1451,7 @@ pub trait Buffer: Reader {
                 };
                 match available.iter().position(|&b| b == byte) {
                     Some(i) => {
-                        res.push_all(&available[0..(i + 1)]);
+                        res.push_all(&available[..(i + 1)]);
                         used = i + 1;
                         break
                     }
@@ -1490,7 +1490,7 @@ pub trait Buffer: Reader {
                 }
             }
         }
-        match str::from_utf8(&buf[0..width]).ok() {
+        match str::from_utf8(&buf[..width]).ok() {
             Some(s) => Ok(s.char_at(0)),
             None => Err(standard_error(InvalidInput))
         }

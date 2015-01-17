@@ -34,6 +34,10 @@ fn check<'r, I: Iterator<Item=usize>, T: Itble<'r, usize, I>>(cont: &T) -> bool
 }
 
 fn main() {
-    check((3u, 5u));
-//~^ ERROR mismatched types: expected `&_`, found `(usize, usize)` (expected &-ptr, found tuple)
+    check((3us, 5us));
+//~^ ERROR mismatched types
+//~| expected `&_`
+//~| found `(usize, usize)`
+//~| expected &-ptr
+//~| found tuple
 }

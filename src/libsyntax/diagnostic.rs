@@ -13,7 +13,7 @@ pub use self::RenderSpan::*;
 pub use self::ColorConfig::*;
 use self::Destination::*;
 
-use codemap::{Pos, Span};
+use codemap::{COMMAND_LINE_SP, COMMAND_LINE_EXPN, Pos, Span};
 use codemap;
 use diagnostics;
 
@@ -117,6 +117,9 @@ impl SpanHandler {
     }
     pub fn fileline_note(&self, sp: Span, msg: &str) {
         self.handler.custom_emit(&self.cm, FileLine(sp), msg, Note);
+    }
+    pub fn fileline_help(&self, sp: Span, msg: &str) {
+        self.handler.custom_emit(&self.cm, FileLine(sp), msg, Help);
     }
     pub fn span_bug(&self, sp: Span, msg: &str) -> ! {
         self.handler.emit(Some((&self.cm, sp)), msg, Bug);
@@ -277,7 +280,7 @@ fn print_maybe_styled(w: &mut EmitterWriter,
             // to be miscolored. We assume this is rare enough that we don't
             // have to worry about it.
             if msg.ends_with("\n") {
-                try!(t.write_str(&msg[0..(msg.len()-1)]));
+                try!(t.write_str(&msg[..(msg.len()-1)]));
                 try!(t.reset());
                 try!(t.write_str("\n"));
             } else {
@@ -368,6 +371,9 @@ impl Emitter for EmitterWriter {
             cmsp: Option<(&codemap::CodeMap, Span)>,
             msg: &str, code: Option<&str>, lvl: Level) {
         let error = match cmsp {
+            Some((cm, COMMAND_LINE_SP)) => emit(self, cm,
+                                                FileLine(COMMAND_LINE_SP),
+                                                msg, code, lvl, false),
             Some((cm, sp)) => emit(self, cm, FullSpan(sp), msg, code, lvl, false),
             None => print_diagnostic(self, "", lvl, msg, code),
         };
@@ -390,8 +396,14 @@ impl Emitter for EmitterWriter {
 fn emit(dst: &mut EmitterWriter, cm: &codemap::CodeMap, rsp: RenderSpan,
         msg: &str, code: Option<&str>, lvl: Level, custom: bool) -> io::IoResult<()> {
     let sp = rsp.span();
-    let ss = cm.span_to_string(sp);
-    let lines = cm.span_to_lines(sp);
+
+    // We cannot check equality directly with COMMAND_LINE_SP
+    // since PartialEq is manually implemented to ignore the ExpnId
+    let ss = if sp.expn_id == COMMAND_LINE_EXPN {
+        "<command line option>".to_string()
+    } else {
+        cm.span_to_string(sp)
+    };
     if custom {
         // we want to tell compiletest/runtest to look at the last line of the
         // span (since `custom_highlight_lines` displays an arrow to the end of
@@ -400,15 +412,17 @@ fn emit(dst: &mut EmitterWriter, cm: &codemap::CodeMap, rsp: RenderSpan,
         let ses = cm.span_to_string(span_end);
         try!(print_diagnostic(dst, &ses[], lvl, msg, code));
         if rsp.is_full_span() {
-            try!(custom_highlight_lines(dst, cm, sp, lvl, lines));
+            try!(custom_highlight_lines(dst, cm, sp, lvl, cm.span_to_lines(sp)));
         }
     } else {
         try!(print_diagnostic(dst, &ss[], lvl, msg, code));
         if rsp.is_full_span() {
-            try!(highlight_lines(dst, cm, sp, lvl, lines));
+            try!(highlight_lines(dst, cm, sp, lvl, cm.span_to_lines(sp)));
         }
     }
-    try!(print_macro_backtrace(dst, cm, sp));
+    if sp != COMMAND_LINE_SP {
+        try!(print_macro_backtrace(dst, cm, sp));
+    }
     match code {
         Some(code) =>
             match dst.registry.as_ref().and_then(|registry| registry.find_description(code)) {

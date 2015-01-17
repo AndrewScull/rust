@@ -25,8 +25,13 @@ impl<'a,T:Clone> GetRef<'a,T> for Box<'a,T> {
     }
 }
 
-fn get<'a,'b,G:GetRef<'a, int>>(g1: G, b: &'b int) -> &'b int {
-    g1.get() //~ ERROR cannot infer an appropriate lifetime for automatic coercion due to
+fn get<'a,'b,G:GetRef<'a, isize>>(g1: G, b: &'b isize) -> &'b isize {
+    g1.get()
+    //~^ ERROR cannot infer an appropriate lifetime for automatic coercion due to
+    //~| ERROR mismatched types
+    //~| expected `&'b isize`
+    //~| found `&'a isize`
+    //~| lifetime mismatch
 }
 
 fn main() {

@@ -15,7 +15,7 @@
 //! generated instead.
 
 #![crate_name = "fmt_macros"]
-#![experimental]
+#![unstable]
 #![staged_api]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
@@ -25,6 +25,7 @@
        html_playground_url = "http://play.rust-lang.org/")]
 
 #![feature(slicing_syntax)]
+#![allow(unknown_features)] #![feature(int_uint)]
 
 pub use self::Piece::*;
 pub use self::Position::*;
@@ -285,7 +286,7 @@ impl<'a> Parser<'a> {
             flags: 0,
             precision: CountImplied,
             width: CountImplied,
-            ty: &self.input[0..0],
+            ty: &self.input[..0],
         };
         if !self.consume(':') { return spec }
 
@@ -394,7 +395,7 @@ impl<'a> Parser<'a> {
                 self.cur.next();
                 pos
             }
-            Some(..) | None => { return &self.input[0..0]; }
+            Some(..) | None => { return &self.input[..0]; }
         };
         let mut end;
         loop {

@@ -26,7 +26,7 @@ use syntax::ast;
 use syntax::abi;
 use syntax::attr;
 use syntax::attr::AttrMetaMethods;
-use syntax::codemap::{Span, mk_sp};
+use syntax::codemap::{COMMAND_LINE_SP, Span, mk_sp};
 use syntax::parse;
 use syntax::parse::token::InternedString;
 use syntax::parse::token;
@@ -58,8 +58,8 @@ fn dump_crates(cstore: &CStore) {
         debug!("  hash: {}", data.hash());
         opt_source.map(|cs| {
             let CrateSource { dylib, rlib, cnum: _ } = cs;
-            dylib.map(|dl| debug!("  dylib: {}", dl.display()));
-            rlib.map(|rl|  debug!("   rlib: {}", rl.display()));
+            dylib.map(|dl| debug!("  dylib: {}", dl.0.display()));
+            rlib.map(|rl|  debug!("   rlib: {}", rl.0.display()));
         });
     })
 }
@@ -305,8 +305,8 @@ impl<'a> CrateReader<'a> {
         }
     }
 
-    fn existing_match(&self, name: &str,
-                      hash: Option<&Svh>) -> Option<ast::CrateNum> {
+    fn existing_match(&self, name: &str, hash: Option<&Svh>, kind: PathKind)
+                      -> Option<ast::CrateNum> {
         let mut ret = None;
         self.sess.cstore.iter_crate_data(|cnum, data| {
             if data.name != name { return }
@@ -317,27 +317,37 @@ impl<'a> CrateReader<'a> {
                 None => {}
             }
 
-            // When the hash is None we're dealing with a top-level dependency in
-            // which case we may have a specification on the command line for this
-            // library. Even though an upstream library may have loaded something of
-            // the same name, we have to make sure it was loaded from the exact same
-            // location as well.
+            // When the hash is None we're dealing with a top-level dependency
+            // in which case we may have a specification on the command line for
+            // this library. Even though an upstream library may have loaded
+            // something of the same name, we have to make sure it was loaded
+            // from the exact same location as well.
             //
             // We're also sure to compare *paths*, not actual byte slices. The
             // `source` stores paths which are normalized which may be different
             // from the strings on the command line.
             let source = self.sess.cstore.get_used_crate_source(cnum).unwrap();
-            match self.sess.opts.externs.get(name) {
-                Some(locs) => {
-                    let found = locs.iter().any(|l| {
-                        let l = fs::realpath(&Path::new(&l[])).ok();
-                        l == source.dylib || l == source.rlib
-                    });
-                    if found {
-                        ret = Some(cnum);
-                    }
+            if let Some(locs) = self.sess.opts.externs.get(name) {
+                let found = locs.iter().any(|l| {
+                    let l = fs::realpath(&Path::new(&l[])).ok();
+                    source.dylib.as_ref().map(|p| &p.0) == l.as_ref() ||
+                    source.rlib.as_ref().map(|p| &p.0) == l.as_ref()
+                });
+                if found {
+                    ret = Some(cnum);
                 }
-                None => ret = Some(cnum),
+            }
+
+            // Alright, so we've gotten this far which means that `data` has the
+            // right name, we don't have a hash, and we don't have a --extern
+            // pointing for ourselves. We're still not quite yet done because we
+            // have to make sure that this crate was found in the crate lookup
+            // path (this is a top-level dependency) as we don't want to
+            // implicitly load anything inside the dependency lookup path.
+            let prev_kind = source.dylib.as_ref().or(source.rlib.as_ref())
+                                  .unwrap().1;
+            if ret.is_none() && (prev_kind == kind || prev_kind == PathKind::All) {
+                ret = Some(cnum);
             }
         });
         return ret;
@@ -359,8 +369,8 @@ impl<'a> CrateReader<'a> {
         let crate_paths = if root.is_none() {
             Some(CratePaths {
                 ident: ident.to_string(),
-                dylib: lib.dylib.clone(),
-                rlib:  lib.rlib.clone(),
+                dylib: lib.dylib.clone().map(|p| p.0),
+                rlib:  lib.rlib.clone().map(|p| p.0),
             })
         } else {
             None
@@ -400,7 +410,7 @@ impl<'a> CrateReader<'a> {
                      kind: PathKind)
                          -> (ast::CrateNum, Rc<cstore::crate_metadata>,
                              cstore::CrateSource) {
-        match self.existing_match(name, hash) {
+        match self.existing_match(name, hash, kind) {
             None => {
                 let mut load_ctxt = loader::Context {
                     sess: self.sess,
@@ -409,6 +419,7 @@ impl<'a> CrateReader<'a> {
                     crate_name: name,
                     hash: hash.map(|a| &*a),
                     filesearch: self.sess.target_filesearch(kind),
+                    target: &self.sess.target.target,
                     triple: &self.sess.opts.target_triple[],
                     root: root,
                     rejected_via_hash: vec!(),
@@ -445,8 +456,20 @@ impl<'a> CrateReader<'a> {
     }
 
     pub fn read_plugin_metadata<'b>(&'b mut self,
-                                    vi: &'b ast::ViewItem) -> PluginMetadata<'b> {
-        let info = self.extract_crate_info(vi).unwrap();
+                                    krate: CrateOrString<'b>) -> PluginMetadata<'b> {
+        let (info, span) = match krate {
+            CrateOrString::Krate(c) => {
+                (self.extract_crate_info(c).unwrap(), c.span)
+            }
+            CrateOrString::Str(s) => {
+                (CrateInfo {
+                     name: s.to_string(),
+                     ident: s.to_string(),
+                     id: ast::DUMMY_NODE_ID,
+                     should_link: true,
+                 }, COMMAND_LINE_SP)
+            }
+        };
         let target_triple = &self.sess.opts.target_triple[];
         let is_cross = target_triple != config::host_triple();
         let mut should_link = info.should_link && !is_cross;
@@ -455,11 +478,12 @@ impl<'a> CrateReader<'a> {
         let name = info.name.clone();
         let mut load_ctxt = loader::Context {
             sess: self.sess,
-            span: vi.span,
+            span: span,
             ident: &ident[],
             crate_name: &name[],
             hash: None,
             filesearch: self.sess.host_filesearch(PathKind::Crate),
+            target: &self.sess.host,
             triple: config::host_triple(),
             root: &None,
             rejected_via_hash: vec!(),
@@ -469,11 +493,12 @@ impl<'a> CrateReader<'a> {
         let library = match load_ctxt.maybe_load_library_crate() {
             Some(l) => l,
             None if is_cross => {
-                // Try loading from target crates. This will abort later if we try to
-                // load a plugin registrar function,
+                // Try loading from target crates. This will abort later if we
+                // try to load a plugin registrar function,
                 target_only = true;
                 should_link = info.should_link;
 
+                load_ctxt.target = &self.sess.target.target;
                 load_ctxt.triple = target_triple;
                 load_ctxt.filesearch = self.sess.target_filesearch(PathKind::Crate);
                 load_ctxt.load_library_crate()
@@ -482,11 +507,13 @@ impl<'a> CrateReader<'a> {
         };
 
         let dylib = library.dylib.clone();
-        let register = should_link && self.existing_match(info.name.as_slice(), None).is_none();
+        let register = should_link && self.existing_match(info.name.as_slice(),
+                                                          None,
+                                                          PathKind::Crate).is_none();
         let metadata = if register {
             // Register crate now to avoid double-reading metadata
             let (_, cmd, _) = self.register_crate(&None, &info.ident[],
-                                &info.name[], vi.span, library);
+                                &info.name[], span, library);
             PMDSource::Registered(cmd)
         } else {
             // Not registering the crate; just hold on to the metadata
@@ -496,12 +523,18 @@ impl<'a> CrateReader<'a> {
         PluginMetadata {
             sess: self.sess,
             metadata: metadata,
-            dylib: dylib,
+            dylib: dylib.map(|p| p.0),
             info: info,
-            vi_span: vi.span,
+            vi_span: span,
             target_only: target_only,
         }
     }
+}
+
+#[derive(Copy)]
+pub enum CrateOrString<'a> {
+    Krate(&'a ast::ViewItem),
+    Str(&'a str)
 }
 
 impl<'a> PluginMetadata<'a> {

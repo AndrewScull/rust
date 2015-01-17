@@ -11,15 +11,23 @@
 // Test that the types of distinct fn items are not compatible by
 // default. See also `run-pass/fn-item-type-*.rs`.
 
-fn foo(x: int) -> int { x * 2 }
-fn bar(x: int) -> int { x * 4 }
+fn foo(x: isize) -> isize { x * 2 }
+fn bar(x: isize) -> isize { x * 4 }
 
 fn eq<T>(x: T, y: T) { }
 
 fn main() {
     let f = if true { foo } else { bar };
-    //~^ ERROR expected fn item, found a different fn item
+    //~^ ERROR if and else have incompatible types
+    //~| expected `fn(isize) -> isize {foo}`
+    //~| found `fn(isize) -> isize {bar}`
+    //~| expected fn item,
+    //~| found a different fn item
 
     eq(foo, bar);
-    //~^ ERROR expected fn item, found a different fn item
+    //~^ ERROR mismatched types
+    //~|  expected `fn(isize) -> isize {foo}`
+    //~|  found `fn(isize) -> isize {bar}`
+    //~|  expected fn item
+    //~|  found a different fn item
 }

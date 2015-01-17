@@ -15,7 +15,7 @@
 //! This API is completely unstable and subject to change.
 
 #![crate_name = "rustc_driver"]
-#![experimental]
+#![unstable]
 #![staged_api]
 #![crate_type = "dylib"]
 #![crate_type = "rlib"]
@@ -28,6 +28,7 @@
 #![feature(slicing_syntax, unsafe_destructor)]
 #![feature(box_syntax)]
 #![feature(rustc_diagnostic_macros)]
+#![allow(unknown_features)] #![feature(int_uint)]
 
 extern crate arena;
 extern crate flate;
@@ -37,6 +38,7 @@ extern crate libc;
 extern crate rustc;
 extern crate rustc_back;
 extern crate rustc_borrowck;
+extern crate rustc_privacy;
 extern crate rustc_resolve;
 extern crate rustc_trans;
 extern crate rustc_typeck;
@@ -47,13 +49,19 @@ extern crate "rustc_llvm" as llvm;
 
 pub use syntax::diagnostic;
 
+use driver::CompileController;
+
+use rustc_resolve as resolve;
 use rustc_trans::back::link;
+use rustc_trans::save;
 use rustc::session::{config, Session, build_session};
 use rustc::session::config::{Input, PrintRequest, UnstableFeatures};
 use rustc::lint::Lint;
 use rustc::lint;
 use rustc::metadata;
+use rustc::metadata::creader::CrateOrString::Str;
 use rustc::DIAGNOSTICS;
+use rustc::util::common::time;
 
 use std::cmp::Ordering::Equal;
 use std::io;
@@ -179,13 +187,50 @@ fn run_compiler(args: &[String]) {
                 list_metadata(&sess, &(*ifile), &mut stdout).unwrap();
             }
             Input::Str(_) => {
-                early_error("can not list metadata for stdin");
+                early_error("cannot list metadata for stdin");
             }
         }
         return;
     }
 
-    driver::compile_input(sess, cfg, &input, &odir, &ofile, None);
+    let plugins = sess.opts.debugging_opts.extra_plugins.clone();
+    let control = build_controller(&sess);
+    driver::compile_input(sess, cfg, &input, &odir, &ofile, Some(plugins), control);
+}
+
+fn build_controller<'a>(sess: &Session) -> CompileController<'a> {
+    let mut control = CompileController::basic();
+
+    if sess.opts.parse_only ||
+       sess.opts.show_span.is_some() ||
+       sess.opts.debugging_opts.ast_json_noexpand {
+        control.after_parse.stop = true;
+    }
+
+    if sess.opts.no_analysis || sess.opts.debugging_opts.ast_json {
+        control.after_write_deps.stop = true;
+    }
+
+    if sess.opts.no_trans {
+        control.after_analysis.stop = true;
+    }
+
+    if !sess.opts.output_types.iter().any(|&i| i == config::OutputTypeExe) {
+        control.after_llvm.stop = true;
+    }
+
+    if sess.opts.debugging_opts.save_analysis {
+        control.after_analysis.callback = box |state| {
+            time(state.session.time_passes(), "save analysis", state.krate.unwrap(), |krate|
+                 save::process_crate(state.session,
+                                     krate,
+                                     state.analysis.unwrap(),
+                                     state.out_dir));
+        };
+        control.make_glob_map = resolve::MakeGlobMap::Yes;
+    }
+
+    control
 }
 
 pub fn get_unstable_features_setting() -> UnstableFeatures {
@@ -378,13 +423,13 @@ Available lint options:
 
 fn describe_debug_flags() {
     println!("\nAvailable debug options:\n");
-    let r = config::debugging_opts_map();
-    for tuple in r.iter() {
-        match *tuple {
-            (ref name, ref desc, _) => {
-                println!("    -Z {:>20} -- {}", *name, *desc);
-            }
-        }
+    for &(name, _, opt_type_desc, desc) in config::DB_OPTIONS.iter() {
+        let (width, extra) = match opt_type_desc {
+            Some(..) => (21, "=val"),
+            None => (25, "")
+        };
+        println!("    -Z {:>width$}{} -- {}", name.replace("_", "-"),
+                 extra, desc, width=width);
     }
 }
 

@@ -16,11 +16,12 @@ trait A {
 }
 
 struct E {
- f: int
+ f: isize
 }
 
 impl A for E {
-  fn b<F: Sync, G>(_x: F) -> F { panic!() } //~ ERROR type parameter 0 requires `Sync`
+    fn b<F: Sync, G>(_x: F) -> F { panic!() }
+    //~^ ERROR `F : core::marker::Sync` appears on the impl method
 }
 
 fn main() {}

@@ -14,15 +14,24 @@
 //! These definitions are similar to their `ct` equivalents, but differ in that
 //! these can be statically allocated and are slightly optimized for the runtime
 
-#![experimental = "implementation detail of the `format_args!` macro"]
+#![unstable = "implementation detail of the `format_args!` macro"]
 
 pub use self::Alignment::*;
 pub use self::Count::*;
 pub use self::Position::*;
 pub use self::Flag::*;
 
+// SNAP 9e4e524
 #[doc(hidden)]
 #[derive(Copy)]
+#[cfg(not(stage0))]
+pub struct Argument {
+    pub position: Position,
+    pub format: FormatSpec,
+}
+#[doc(hidden)]
+#[derive(Copy)]
+#[cfg(stage0)]
 pub struct Argument<'a> {
     pub position: Position,
     pub format: FormatSpec,

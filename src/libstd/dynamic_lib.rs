@@ -14,7 +14,7 @@
 
 #![cfg(not(dios))]
 
-#![experimental]
+#![unstable]
 #![allow(missing_docs)]
 
 use prelude::v1::*;

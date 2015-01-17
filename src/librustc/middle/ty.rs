@@ -68,7 +68,7 @@ use util::nodemap::{NodeMap, NodeSet, DefIdMap, DefIdSet};
 use util::nodemap::{FnvHashMap};
 
 use arena::TypedArena;
-use std::borrow::BorrowFrom;
+use std::borrow::{BorrowFrom, Cow};
 use std::cell::{Cell, RefCell};
 use std::cmp::{self, Ordering};
 use std::fmt::{self, Show};
@@ -76,6 +76,7 @@ use std::hash::{Hash, Writer, SipHasher, Hasher};
 use std::mem;
 use std::ops;
 use std::rc::Rc;
+use std::vec::CowVec;
 use collections::enum_set::{EnumSet, CLike};
 use std::collections::{HashMap, HashSet};
 use syntax::abi;
@@ -2341,12 +2342,12 @@ impl<'tcx> CommonTypes<'tcx> {
             bool: intern_ty(arena, interner, ty_bool),
             char: intern_ty(arena, interner, ty_char),
             err: intern_ty(arena, interner, ty_err),
-            int: intern_ty(arena, interner, ty_int(ast::TyIs)),
+            int: intern_ty(arena, interner, ty_int(ast::TyIs(false))),
             i8: intern_ty(arena, interner, ty_int(ast::TyI8)),
             i16: intern_ty(arena, interner, ty_int(ast::TyI16)),
             i32: intern_ty(arena, interner, ty_int(ast::TyI32)),
             i64: intern_ty(arena, interner, ty_int(ast::TyI64)),
-            uint: intern_ty(arena, interner, ty_uint(ast::TyUs)),
+            uint: intern_ty(arena, interner, ty_uint(ast::TyUs(false))),
             u8: intern_ty(arena, interner, ty_uint(ast::TyU8)),
             u16: intern_ty(arena, interner, ty_uint(ast::TyU16)),
             u32: intern_ty(arena, interner, ty_uint(ast::TyU32)),
@@ -2604,12 +2605,17 @@ impl FlagComputation {
 
             &ty_projection(ref data) => {
                 self.add_flags(HAS_PROJECTION);
-                self.add_substs(data.trait_ref.substs);
+                self.add_projection_ty(data);
             }
 
             &ty_trait(box TyTrait { ref principal, ref bounds }) => {
                 let mut computation = FlagComputation::new();
                 computation.add_substs(principal.0.substs);
+                for projection_bound in bounds.projection_bounds.iter() {
+                    let mut proj_computation = FlagComputation::new();
+                    proj_computation.add_projection_predicate(&projection_bound.0);
+                    computation.add_bound_computation(&proj_computation);
+                }
                 self.add_bound_computation(&computation);
 
                 self.add_bounds(bounds);
@@ -2673,6 +2679,15 @@ impl FlagComputation {
         }
     }
 
+    fn add_projection_predicate(&mut self, projection_predicate: &ProjectionPredicate) {
+        self.add_projection_ty(&projection_predicate.projection_ty);
+        self.add_ty(projection_predicate.ty);
+    }
+
+    fn add_projection_ty(&mut self, projection_ty: &ProjectionTy) {
+        self.add_substs(projection_ty.trait_ref.substs);
+    }
+
     fn add_substs(&mut self, substs: &Substs) {
         self.add_tys(substs.types.as_slice());
         match substs.regions {
@@ -2692,7 +2707,7 @@ impl FlagComputation {
 
 pub fn mk_mach_int<'tcx>(tcx: &ctxt<'tcx>, tm: ast::IntTy) -> Ty<'tcx> {
     match tm {
-        ast::TyIs   => tcx.types.int,
+        ast::TyIs(_)   => tcx.types.int,
         ast::TyI8   => tcx.types.i8,
         ast::TyI16  => tcx.types.i16,
         ast::TyI32  => tcx.types.i32,
@@ -2702,7 +2717,7 @@ pub fn mk_mach_int<'tcx>(tcx: &ctxt<'tcx>, tm: ast::IntTy) -> Ty<'tcx> {
 
 pub fn mk_mach_uint<'tcx>(tcx: &ctxt<'tcx>, tm: ast::UintTy) -> Ty<'tcx> {
     match tm {
-        ast::TyUs   => tcx.types.uint,
+        ast::TyUs(_)   => tcx.types.uint,
         ast::TyU8   => tcx.types.u8,
         ast::TyU16  => tcx.types.u16,
         ast::TyU32  => tcx.types.u32,
@@ -3363,7 +3378,7 @@ pub fn type_contents<'tcx>(cx: &ctxt<'tcx>, ty: Ty<'tcx>) -> TypeContents {
 
         let result = match ty.sty {
             // uint and int are ffi-unsafe
-            ty_uint(ast::TyUs) | ty_int(ast::TyIs) => {
+            ty_uint(ast::TyUs(_)) | ty_int(ast::TyIs(_)) => {
                 TC::ReachesFfiUnsafe
             }
 
@@ -3937,7 +3952,7 @@ pub fn type_is_fresh(ty: Ty) -> bool {
 
 pub fn type_is_uint(ty: Ty) -> bool {
     match ty.sty {
-      ty_infer(IntVar(_)) | ty_uint(ast::TyUs) => true,
+      ty_infer(IntVar(_)) | ty_uint(ast::TyUs(_)) => true,
       _ => false
     }
 }
@@ -3983,7 +3998,7 @@ pub fn type_is_signed(ty: Ty) -> bool {
 
 pub fn type_is_machine(ty: Ty) -> bool {
     match ty.sty {
-        ty_int(ast::TyIs) | ty_uint(ast::TyUs) => false,
+        ty_int(ast::TyIs(_)) | ty_uint(ast::TyUs(_)) => false,
         ty_int(..) | ty_uint(..) | ty_float(..) => true,
         _ => false
     }
@@ -4132,12 +4147,8 @@ pub fn node_id_to_trait_ref<'tcx>(cx: &ctxt<'tcx>, id: ast::NodeId)
     }
 }
 
-pub fn try_node_id_to_type<'tcx>(cx: &ctxt<'tcx>, id: ast::NodeId) -> Option<Ty<'tcx>> {
-    cx.node_types.borrow().get(&id).cloned()
-}
-
 pub fn node_id_to_type<'tcx>(cx: &ctxt<'tcx>, id: ast::NodeId) -> Ty<'tcx> {
-    match try_node_id_to_type(cx, id) {
+    match node_id_to_type_opt(cx, id) {
        Some(ty) => ty,
        None => cx.sess.bug(
            &format!("node_id_to_type: no type for node `{}`",
@@ -4514,7 +4525,7 @@ pub fn expr_kind(tcx: &ctxt, expr: &ast::Expr) -> ExprKind {
     }
 
     match expr.node {
-        ast::ExprPath(..) => {
+        ast::ExprPath(_) | ast::ExprQPath(_) => {
             match resolve_expr(tcx, expr) {
                 def::DefVariant(tid, vid, _) => {
                     let variant_info = enum_variant_with_id(tcx, tid, vid);
@@ -4702,7 +4713,7 @@ pub fn ty_sort_string<'tcx>(cx: &ctxt<'tcx>, ty: Ty<'tcx>) -> String {
         }
         ty_tup(ref tys) if tys.is_empty() => ::util::ppaux::ty_to_string(cx, ty),
 
-        ty_enum(id, _) => format!("enum {}", item_path_str(cx, id)),
+        ty_enum(id, _) => format!("enum `{}`", item_path_str(cx, id)),
         ty_uniq(_) => "box".to_string(),
         ty_vec(_, Some(n)) => format!("array of {} elements", n),
         ty_vec(_, None) => "slice".to_string(),
@@ -4714,7 +4725,7 @@ pub fn ty_sort_string<'tcx>(cx: &ctxt<'tcx>, ty: Ty<'tcx>) -> String {
             format!("trait {}", item_path_str(cx, inner.principal_def_id()))
         }
         ty_struct(id, _) => {
-            format!("struct {}", item_path_str(cx, id))
+            format!("struct `{}`", item_path_str(cx, id))
         }
         ty_unboxed_closure(..) => "closure".to_string(),
         ty_tup(_) => "tuple".to_string(),
@@ -5022,6 +5033,23 @@ pub fn trait_items<'tcx>(cx: &ctxt<'tcx>, trait_did: ast::DefId)
             items
         }
     }
+}
+
+pub fn trait_impl_polarity<'tcx>(cx: &ctxt<'tcx>, id: ast::DefId)
+                            -> Option<ast::ImplPolarity> {
+     if id.krate == ast::LOCAL_CRATE {
+         match cx.map.find(id.node) {
+             Some(ast_map::NodeItem(item)) => {
+                 match item.node {
+                     ast::ItemImpl(_, polarity, _, _, _, _) => Some(polarity),
+                     _ => None
+                 }
+             }
+             _ => None
+         }
+     } else {
+         csearch::get_impl_polarity(cx, id)
+     }
 }
 
 pub fn impl_or_trait_item<'tcx>(cx: &ctxt<'tcx>, id: ast::DefId)
@@ -5555,40 +5583,20 @@ pub fn predicates<'tcx>(
     vec
 }
 
-/// Iterate over attributes of a definition.
-// (This should really be an iterator, but that would require csearch and
-// decoder to use iterators instead of higher-order functions.)
-pub fn each_attr<F>(tcx: &ctxt, did: DefId, mut f: F) -> bool where
-    F: FnMut(&ast::Attribute) -> bool,
-{
+/// Get the attributes of a definition.
+pub fn get_attrs<'tcx>(tcx: &'tcx ctxt, did: DefId)
+                       -> CowVec<'tcx, ast::Attribute> {
     if is_local(did) {
         let item = tcx.map.expect_item(did.node);
-        item.attrs.iter().all(|attr| f(attr))
+        Cow::Borrowed(&item.attrs[])
     } else {
-        info!("getting foreign attrs");
-        let mut cont = true;
-        csearch::get_item_attrs(&tcx.sess.cstore, did, |attrs| {
-            if cont {
-                cont = attrs.iter().all(|attr| f(attr));
-            }
-        });
-        info!("done");
-        cont
+        Cow::Owned(csearch::get_item_attrs(&tcx.sess.cstore, did))
     }
 }
 
 /// Determine whether an item is annotated with an attribute
 pub fn has_attr(tcx: &ctxt, did: DefId, attr: &str) -> bool {
-    let mut found = false;
-    each_attr(tcx, did, |item| {
-        if item.check_name(attr) {
-            found = true;
-            false
-        } else {
-            true
-        }
-    });
-    found
+    get_attrs(tcx, did).iter().any(|item| item.check_name(attr))
 }
 
 /// Determine whether an item is annotated with `#[repr(packed)]`
@@ -5605,13 +5613,9 @@ pub fn lookup_simd(tcx: &ctxt, did: DefId) -> bool {
 pub fn lookup_repr_hints(tcx: &ctxt, did: DefId) -> Rc<Vec<attr::ReprAttr>> {
     memoized(&tcx.repr_hint_cache, did, |did: DefId| {
         Rc::new(if did.krate == LOCAL_CRATE {
-            let mut acc = Vec::new();
-            ty::each_attr(tcx, did, |meta| {
-                acc.extend(attr::find_repr_attrs(tcx.sess.diagnostic(),
-                                                 meta).into_iter());
-                true
-            });
-            acc
+            get_attrs(tcx, did).iter().flat_map(|meta| {
+                attr::find_repr_attrs(tcx.sess.diagnostic(), meta).into_iter()
+            }).collect()
         } else {
             csearch::get_repr_attrs(&tcx.sess.cstore, did)
         })
@@ -5997,6 +6001,7 @@ pub fn item_variances(tcx: &ctxt, item_id: ast::DefId) -> Rc<ItemVariances> {
 pub fn record_trait_implementation(tcx: &ctxt,
                                    trait_def_id: DefId,
                                    impl_def_id: DefId) {
+
     match tcx.trait_impls.borrow().get(&trait_def_id) {
         Some(impls_for_trait) => {
             impls_for_trait.borrow_mut().push(impl_def_id);
@@ -6004,6 +6009,7 @@ pub fn record_trait_implementation(tcx: &ctxt,
         }
         None => {}
     }
+
     tcx.trait_impls.borrow_mut().insert(trait_def_id, Rc::new(RefCell::new(vec!(impl_def_id))));
 }
 
@@ -7364,3 +7370,15 @@ impl<'tcx> Repr<'tcx> for field<'tcx> {
                 self.mt.repr(tcx))
     }
 }
+
+impl<'a, 'tcx> Repr<'tcx> for ParameterEnvironment<'a, 'tcx> {
+    fn repr(&self, tcx: &ctxt<'tcx>) -> String {
+        format!("ParameterEnvironment(\
+            free_substs={}, \
+            implicit_region_bound={}, \
+            caller_bounds={})",
+            self.free_substs.repr(tcx),
+            self.implicit_region_bound.repr(tcx),
+            self.caller_bounds.repr(tcx))
+        }
+    }

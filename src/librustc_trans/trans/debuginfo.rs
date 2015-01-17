@@ -854,7 +854,9 @@ pub fn create_global_var_metadata(cx: &CrateContext,
 /// local in `bcx.fcx.lllocals`.
 /// Adds the created metadata nodes directly to the crate's IR.
 pub fn create_local_var_metadata(bcx: Block, local: &ast::Local) {
-    if bcx.unreachable.get() || fn_should_be_ignored(bcx.fcx) {
+    if bcx.unreachable.get() ||
+       fn_should_be_ignored(bcx.fcx) ||
+       bcx.sess().opts.debuginfo != FullDebugInfo  {
         return;
     }
 
@@ -898,7 +900,9 @@ pub fn create_captured_var_metadata<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                                                 env_index: uint,
                                                 captured_by_ref: bool,
                                                 span: Span) {
-    if bcx.unreachable.get() || fn_should_be_ignored(bcx.fcx) {
+    if bcx.unreachable.get() ||
+       fn_should_be_ignored(bcx.fcx) ||
+       bcx.sess().opts.debuginfo != FullDebugInfo {
         return;
     }
 
@@ -962,7 +966,7 @@ pub fn create_captured_var_metadata<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
 
     let variable_access = IndirectVariable {
         alloca: env_pointer,
-        address_operations: &address_operations[0..address_op_count]
+        address_operations: &address_operations[..address_op_count]
     };
 
     declare_local(bcx,
@@ -981,7 +985,9 @@ pub fn create_captured_var_metadata<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
 pub fn create_match_binding_metadata<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                                                  variable_ident: ast::Ident,
                                                  binding: BindingInfo<'tcx>) {
-    if bcx.unreachable.get() || fn_should_be_ignored(bcx.fcx) {
+    if bcx.unreachable.get() ||
+       fn_should_be_ignored(bcx.fcx) ||
+       bcx.sess().opts.debuginfo != FullDebugInfo {
         return;
     }
 
@@ -1021,7 +1027,9 @@ pub fn create_match_binding_metadata<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
 /// argument in `bcx.fcx.lllocals`.
 /// Adds the created metadata nodes directly to the crate's IR.
 pub fn create_argument_metadata(bcx: Block, arg: &ast::Arg) {
-    if bcx.unreachable.get() || fn_should_be_ignored(bcx.fcx) {
+    if bcx.unreachable.get() ||
+       fn_should_be_ignored(bcx.fcx) ||
+       bcx.sess().opts.debuginfo != FullDebugInfo {
         return;
     }
 
@@ -1075,7 +1083,9 @@ pub fn create_argument_metadata(bcx: Block, arg: &ast::Arg) {
 /// loop variable in `bcx.fcx.lllocals`.
 /// Adds the created metadata nodes directly to the crate's IR.
 pub fn create_for_loop_var_metadata(bcx: Block, pat: &ast::Pat) {
-    if bcx.unreachable.get() || fn_should_be_ignored(bcx.fcx) {
+    if bcx.unreachable.get() ||
+       fn_should_be_ignored(bcx.fcx) ||
+       bcx.sess().opts.debuginfo != FullDebugInfo {
         return;
     }
 
@@ -1804,14 +1814,14 @@ fn basic_type_metadata<'a, 'tcx>(cx: &CrateContext<'a, 'tcx>,
         ty::ty_bool => ("bool".to_string(), DW_ATE_boolean),
         ty::ty_char => ("char".to_string(), DW_ATE_unsigned_char),
         ty::ty_int(int_ty) => match int_ty {
-            ast::TyIs => ("isize".to_string(), DW_ATE_signed),
+            ast::TyIs(_) => ("isize".to_string(), DW_ATE_signed),
             ast::TyI8 => ("i8".to_string(), DW_ATE_signed),
             ast::TyI16 => ("i16".to_string(), DW_ATE_signed),
             ast::TyI32 => ("i32".to_string(), DW_ATE_signed),
             ast::TyI64 => ("i64".to_string(), DW_ATE_signed)
         },
         ty::ty_uint(uint_ty) => match uint_ty {
-            ast::TyUs => ("usize".to_string(), DW_ATE_unsigned),
+            ast::TyUs(_) => ("usize".to_string(), DW_ATE_unsigned),
             ast::TyU8 => ("u8".to_string(), DW_ATE_unsigned),
             ast::TyU16 => ("u16".to_string(), DW_ATE_unsigned),
             ast::TyU32 => ("u32".to_string(), DW_ATE_unsigned),
@@ -3502,7 +3512,8 @@ fn create_scope_map(cx: &CrateContext,
             ast::ExprLit(_)   |
             ast::ExprBreak(_) |
             ast::ExprAgain(_) |
-            ast::ExprPath(_)  => {}
+            ast::ExprPath(_)  |
+            ast::ExprQPath(_) => {}
 
             ast::ExprCast(ref sub_exp, _)     |
             ast::ExprAddrOf(_, ref sub_exp)  |
@@ -3739,12 +3750,12 @@ fn push_debuginfo_type_name<'a, 'tcx>(cx: &CrateContext<'a, 'tcx>,
         ty::ty_bool              => output.push_str("bool"),
         ty::ty_char              => output.push_str("char"),
         ty::ty_str               => output.push_str("str"),
-        ty::ty_int(ast::TyIs)     => output.push_str("isize"),
+        ty::ty_int(ast::TyIs(_))     => output.push_str("isize"),
         ty::ty_int(ast::TyI8)    => output.push_str("i8"),
         ty::ty_int(ast::TyI16)   => output.push_str("i16"),
         ty::ty_int(ast::TyI32)   => output.push_str("i32"),
         ty::ty_int(ast::TyI64)   => output.push_str("i64"),
-        ty::ty_uint(ast::TyUs)    => output.push_str("usize"),
+        ty::ty_uint(ast::TyUs(_))    => output.push_str("usize"),
         ty::ty_uint(ast::TyU8)   => output.push_str("u8"),
         ty::ty_uint(ast::TyU16)  => output.push_str("u16"),
         ty::ty_uint(ast::TyU32)  => output.push_str("u32"),

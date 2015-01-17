@@ -6,14 +6,14 @@ documentation.
 ## Quick Start
 
 1. Download a [binary installer][installer] for your platform.
-2. Read the [guide].
+2. Read [The Rust Programming Language][trpl].
 3. Enjoy!
 
 > ***Note:*** Windows users can read the detailed
 > [using Rust on Windows][win-wiki] notes on the wiki.
 
 [installer]: http://www.rust-lang.org/install.html
-[guide]: http://doc.rust-lang.org/guide.html
+[trpl]: http://doc.rust-lang.org/book/index.html
 [win-wiki]: https://github.com/rust-lang/rust/wiki/Using-Rust-on-Windows
 
 ## Building from Source
@@ -53,21 +53,28 @@ documentation.
     When complete, `make install` will place several programs into
     `/usr/local/bin`: `rustc`, the Rust compiler, and `rustdoc`, the
     API-documentation tool.
-3. Read the [guide].
+3. Read [The Rust Programming Language][trpl].
 4. Enjoy!
 
 ### Building on Windows
 
-To easily build on windows we can use [MSYS2](http://sourceforge.net/projects/msys2/):
+To easily build on windows we can use [MSYS2](http://msys2.github.io/):
 
 1. Grab the latest MSYS2 installer and go through the installer.
 2. Now from the MSYS2 terminal we want to install the mingw64 toolchain and the other
    tools we need.
 
-        $ pacman -S mingw-w64-i686-toolchain
-        $ pacman -S base-devel
+```bash
+# choose one based on platform
+$ pacman -S mingw-w64-i686-toolchain
+$ pacman -S mingw-w64-x86_64-toolchain
 
-3. With that now start `mingw32_shell.bat` from where you installed MSYS2 (i.e. `C:\msys`).
+$ pacman -S base-devel
+```
+
+3. With that now start `mingw32_shell.bat` or `mingw64_shell.bat`
+   from where you installed MSYS2 (i.e. `C:\msys`). Which one you
+   choose depends on if you want 32 or 64 bit Rust.
 4. From there just navigate to where you have Rust's source code, configure and build it:
 
         $ ./configure
@@ -75,7 +82,7 @@ To easily build on windows we can use [MSYS2](http://sourceforge.net/projects/ms
 
 [repo]: https://github.com/rust-lang/rust
 [tarball]: https://static.rust-lang.org/dist/rust-nightly.tar.gz
-[guide]: http://doc.rust-lang.org/guide.html
+[trpl]: http://doc.rust-lang.org/book/index.html
 
 ## Notes
 

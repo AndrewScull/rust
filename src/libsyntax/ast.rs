@@ -747,6 +747,8 @@ pub enum Expr_ {
     /// Variable reference, possibly containing `::` and/or
     /// type parameters, e.g. foo::bar::<baz>
     ExprPath(Path),
+    /// A "qualified path", e.g. `<Vec<T> as SomeTrait>::SomeType`
+    ExprQPath(P<QPath>),
 
     ExprAddrOf(Mutability, P<Expr>),
     ExprBreak(Option<Ident>),
@@ -771,12 +773,12 @@ pub enum Expr_ {
 ///
 ///     <Vec<T> as SomeTrait>::SomeAssociatedItem
 ///      ^~~~~     ^~~~~~~~~   ^~~~~~~~~~~~~~~~~~
-///      self_type  trait_name  item_name
+///      self_type  trait_name  item_path
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]
 pub struct QPath {
     pub self_type: P<Ty>,
     pub trait_ref: P<TraitRef>,
-    pub item_name: Ident, // FIXME(#20301) -- should use Name
+    pub item_path: PathSegment,
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show, Copy)]
@@ -955,7 +957,7 @@ pub type Mac = Spanned<Mac_>;
 pub enum Mac_ {
     // NB: the additional ident for a macro_rules-style macro is actually
     // stored in the enclosing item. Oog.
-    MacInvocTT(Path, Vec<TokenTree> , SyntaxContext),   // new macro-invocation
+    MacInvocTT(Path, Vec<TokenTree>, SyntaxContext),   // new macro-invocation
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show, Copy)]
@@ -1075,13 +1077,27 @@ pub struct Typedef {
     pub typ: P<Ty>,
 }
 
-#[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Copy)]
+#[derive(Clone, Eq, RustcEncodable, RustcDecodable, Hash, Copy)]
 pub enum IntTy {
-    TyIs,
+    TyIs(bool /* is this deprecated `int`? */),
     TyI8,
     TyI16,
     TyI32,
     TyI64,
+}
+
+impl PartialEq for IntTy {
+    fn eq(&self, other: &IntTy) -> bool {
+        match (*self, *other) {
+            // true/false need to compare the same, so this can't be derived
+            (TyIs(_), TyIs(_)) |
+            (TyI8, TyI8) |
+            (TyI16, TyI16) |
+            (TyI32, TyI32) |
+            (TyI64, TyI64) => true,
+            _ => false
+        }
+    }
 }
 
 impl fmt::Show for IntTy {
@@ -1099,27 +1115,41 @@ impl fmt::String for IntTy {
 impl IntTy {
     pub fn suffix_len(&self) -> uint {
         match *self {
-            TyIs => 1,
-            TyI8 => 2,
+            TyIs(true) /* i */ => 1,
+            TyIs(false) /* is */ | TyI8 => 2,
             TyI16 | TyI32 | TyI64  => 3,
         }
     }
 }
 
-#[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Copy)]
+#[derive(Clone, Eq, RustcEncodable, RustcDecodable, Hash, Copy)]
 pub enum UintTy {
-    TyUs,
+    TyUs(bool /* is this deprecated uint? */),
     TyU8,
     TyU16,
     TyU32,
     TyU64,
 }
 
+impl PartialEq for UintTy {
+    fn eq(&self, other: &UintTy) -> bool {
+        match (*self, *other) {
+            // true/false need to compare the same, so this can't be derived
+            (TyUs(_), TyUs(_)) |
+            (TyU8, TyU8) |
+            (TyU16, TyU16) |
+            (TyU32, TyU32) |
+            (TyU64, TyU64) => true,
+            _ => false
+        }
+    }
+}
+
 impl UintTy {
     pub fn suffix_len(&self) -> uint {
         match *self {
-            TyUs => 1,
-            TyU8 => 2,
+            TyUs(true) /* u */ => 1,
+            TyUs(false) /* us */ | TyU8 => 2,
             TyU16 | TyU32 | TyU64  => 3,
         }
     }
@@ -1498,6 +1528,19 @@ pub struct ViewItem {
     pub attrs: Vec<Attribute>,
     pub vis: Visibility,
     pub span: Span,
+}
+
+impl ViewItem {
+    pub fn id(&self) -> NodeId {
+        match self.node {
+            ViewItemExternCrate(_, _, id) => id,
+            ViewItemUse(ref vp) => match vp.node {
+                ViewPathSimple(_, _, id) => id,
+                ViewPathGlob(_, id) => id,
+                ViewPathList(_, _, id) => id,
+            }
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]

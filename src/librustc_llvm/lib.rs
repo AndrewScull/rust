@@ -14,7 +14,7 @@
 #![allow(dead_code)]
 
 #![crate_name = "rustc_llvm"]
-#![experimental]
+#![unstable]
 #![staged_api]
 #![crate_type = "dylib"]
 #![crate_type = "rlib"]
@@ -25,6 +25,7 @@
 #![allow(unknown_features)]
 #![feature(link_args)]
 #![feature(box_syntax)]
+#![allow(unknown_features)] #![feature(int_uint)]
 
 extern crate libc;
 
@@ -303,7 +304,7 @@ pub enum RealPredicate {
 
 // The LLVM TypeKind type - must stay in sync with the def of
 // LLVMTypeKind in llvm/include/llvm-c/Core.h
-#[derive(Copy, PartialEq)]
+#[derive(Copy, PartialEq, Show)]
 #[repr(C)]
 pub enum TypeKind {
     Void      = 0,
@@ -1973,6 +1974,11 @@ extern {
     pub fn LLVMInitializeMipsTargetMC();
     pub fn LLVMInitializeMipsAsmPrinter();
     pub fn LLVMInitializeMipsAsmParser();
+    pub fn LLVMInitializePowerPCTargetInfo();
+    pub fn LLVMInitializePowerPCTarget();
+    pub fn LLVMInitializePowerPCTargetMC();
+    pub fn LLVMInitializePowerPCAsmPrinter();
+    pub fn LLVMInitializePowerPCAsmParser();
 
     pub fn LLVMRustAddPass(PM: PassManagerRef, Pass: *const c_char) -> bool;
     pub fn LLVMRustCreateTargetMachine(Triple: *const c_char,
@@ -2247,6 +2253,12 @@ pub unsafe fn static_link_hack_this_sucks() {
     LLVMInitializeMipsTargetMC();
     LLVMInitializeMipsAsmPrinter();
     LLVMInitializeMipsAsmParser();
+
+    LLVMInitializePowerPCTargetInfo();
+    LLVMInitializePowerPCTarget();
+    LLVMInitializePowerPCTargetMC();
+    LLVMInitializePowerPCAsmPrinter();
+    LLVMInitializePowerPCAsmParser();
 
     LLVMRustSetLLVMOptions(0 as c_int,
                                        0 as *const _);

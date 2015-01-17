@@ -514,7 +514,7 @@ impl<'tcx, N: TypeFoldable<'tcx>> TypeFoldable<'tcx> for traits::Vtable<'tcx, N>
             traits::VtableFnPointer(ref d) => {
                 traits::VtableFnPointer(d.fold_with(folder))
             }
-            traits::VtableParam => traits::VtableParam,
+            traits::VtableParam(ref n) => traits::VtableParam(n.fold_with(folder)),
             traits::VtableBuiltin(ref d) => traits::VtableBuiltin(d.fold_with(folder)),
             traits::VtableObject(ref d) => traits::VtableObject(d.fold_with(folder)),
         }
@@ -560,6 +560,18 @@ impl<'tcx> TypeFoldable<'tcx> for ty::UnboxedClosureUpvar<'tcx> {
             def: self.def,
             span: self.span,
             ty: self.ty.fold_with(folder),
+        }
+    }
+}
+
+impl<'a, 'tcx> TypeFoldable<'tcx> for ty::ParameterEnvironment<'a, 'tcx> where 'tcx: 'a {
+    fn fold_with<F:TypeFolder<'tcx>>(&self, folder: &mut F) -> ty::ParameterEnvironment<'a, 'tcx> {
+        ty::ParameterEnvironment {
+            tcx: self.tcx,
+            free_substs: self.free_substs.fold_with(folder),
+            implicit_region_bound: self.implicit_region_bound.fold_with(folder),
+            caller_bounds: self.caller_bounds.fold_with(folder),
+            selection_cache: traits::SelectionCache::new(),
         }
     }
 }

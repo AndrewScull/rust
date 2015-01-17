@@ -8,12 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::marker;
+#![feature(optin_builtin_traits)]
 
-struct Foo { marker: marker::NoSync }
+use std::marker::Sync;
 
-static FOO: uint = 3;
-static BAR: Foo = Foo { marker: marker::NoSync };
+struct Foo;
+impl !Sync for Foo {}
+
+static FOO: usize = 3;
+static BAR: Foo = Foo;
 //~^ ERROR: the trait `core::marker::Sync` is not implemented
 
 fn main() {}

@@ -12,22 +12,28 @@
 // the value for a type parameter in a bound.
 
 trait GetRef<'a> {
-    fn get(&self) -> &'a int;
+    fn get(&self) -> &'a isize;
 }
 
 struct Box<'a> {
-    t: &'a int
+    t: &'a isize
 }
 
 impl<'a> GetRef<'a> for Box<'a> {
-    fn get(&self) -> &'a int {
+    fn get(&self) -> &'a isize {
         self.t
     }
 }
 
 impl<'a> Box<'a> {
-    fn or<'b,G:GetRef<'b>>(&self, g2: G) -> &'a int {
-        g2.get() //~ ERROR cannot infer an appropriate lifetime for automatic coercion due to
+    fn or<'b,G:GetRef<'b>>(&self, g2: G) -> &'a isize {
+        g2.get()
+        //~^ ERROR cannot infer an appropriate lifetime for automatic coercion due to
+        //~| ERROR mismatched types
+        //~| expected `&'a isize`
+        //~| found `&'b isize`
+        //~| lifetime mismatch
+
     }
 }
 

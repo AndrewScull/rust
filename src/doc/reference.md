@@ -14,7 +14,7 @@ provides three kinds of material:
     influenced the design.
 
 This document does not serve as an introduction to the language. Background
-familiarity with the language is assumed. A separate [guide] is available to
+familiarity with the language is assumed. A separate [book] is available to
 help acquire such background familiarity.
 
 This document also does not serve as a reference to the [standard] library
@@ -23,7 +23,7 @@ separately by extracting documentation attributes from their source code. Many
 of the features that one might expect to be language features are library
 features in Rust, so what you're looking for may be there, not here.
 
-[guide]: guide.html
+[book]: book/index.html
 [standard]: std/index.html
 
 # Notation
@@ -603,7 +603,7 @@ mod b {
 ```
 
 * Paths starting with the keyword `super` begin resolution relative to the
-  parent module. Each further identifier must resolve to an item
+  parent module. Each further identifier must resolve to an item.
 
 ```rust
 mod a {
@@ -647,10 +647,10 @@ All of the above extensions are expressions with values.
 
 Users of `rustc` can define new syntax extensions in two ways:
 
-* [Compiler plugins](guide-plugin.html#syntax-extensions) can include arbitrary
+* [Compiler plugins](book/syntax-extensions.html) can include arbitrary
   Rust code that manipulates syntax trees at compile time.
 
-* [Macros](guide-macros.html) define new syntax in a higher-level,
+* [Macros](book/macros.html) define new syntax in a higher-level,
   declarative way.
 
 ## Macros
@@ -985,7 +985,7 @@ top of [modules](#modules) and [blocks](#blocks).
 
 Use declarations support a number of convenient shortcuts:
 
-* Rebinding the target name as a new local name, using the syntax `use p::q::r as x;`.
+* Rebinding the target name as a new local name, using the syntax `use p::q::r as x;`
 * Simultaneously binding a list of paths differing only in their final element,
   using the glob-like brace syntax `use a::b::{c,d,e,f};`
 * Binding all paths matching a given prefix, using the asterisk wildcard syntax
@@ -1091,7 +1091,7 @@ set of *input* [*slots*](#memory-slots) as parameters, through which the caller
 passes arguments into the function, and an *output* [*slot*](#memory-slots)
 through which the function passes results back to the caller.
 
-A function may also be copied into a first class *value*, in which case the
+A function may also be copied into a first-class *value*, in which case the
 value has the corresponding [*function type*](#function-types), and can be used
 otherwise exactly as a function item (with a minor additional cost of calling
 the function indirectly).
@@ -1224,7 +1224,7 @@ the guarantee that these issues are never caused by safe code.
   * A value other than `false` (0) or `true` (1) in a `bool`
   * A discriminant in an `enum` not included in the type definition
   * A value in a `char` which is a surrogate or above `char::MAX`
-  * non-UTF-8 byte sequences in a `str`
+  * Non-UTF-8 byte sequences in a `str`
 * Unwinding into Rust from foreign code or unwinding from Rust into foreign
   code. Rust's failure system is not compatible with exception handling in
   other languages. Unwinding must be caught and handled at FFI boundaries.
@@ -1588,7 +1588,6 @@ pointer values (pointing to a type for which an implementation of the given
 trait is in scope) to pointers to the trait name, used as a type.
 
 ```
-# use std::boxed::Box;
 # trait Shape { }
 # impl Shape for int { }
 # let mycircle = 0i;
@@ -1647,7 +1646,6 @@ fn radius_times_area<T: Circle>(c: T) -> f64 {
 Likewise, supertrait methods may also be called on trait objects.
 
 ```{.ignore}
-# use std::boxed::Box;
 # trait Shape { fn area(&self) -> f64; }
 # trait Circle : Shape { fn radius(&self) -> f64; }
 # impl Shape for int { fn area(&self) -> f64 { 0.0 } }
@@ -1827,7 +1825,7 @@ accesses in two cases:
 
 These two cases are surprisingly powerful for creating module hierarchies
 exposing public APIs while hiding internal implementation details. To help
-explain, here's a few use cases and what they would entail.
+explain, here's a few use cases and what they would entail:
 
 * A library developer needs to expose functionality to crates which link
   against their library. As a consequence of the first case, this means that
@@ -1858,7 +1856,7 @@ import/expression is only valid if the destination is in the current visibility
 scope.
 
 Here's an example of a program which exemplifies the three cases outlined
-above.
+above:
 
 ```
 // This module is private, meaning that no external crate can access this
@@ -2076,7 +2074,7 @@ On `struct`s:
   list of names `#[macro_use(foo, bar)]` restricts the import to just those
   macros named.  The `extern crate` must appear at the crate root, not inside
   `mod`, which ensures proper function of the [`$crate` macro
-  variable](guide-macros.html#the-variable-$crate).
+  variable](book/macros.html#the-variable-$crate).
 
 - `macro_reexport` on an `extern crate` — re-export the named macros.
 
@@ -2090,8 +2088,9 @@ On `struct`s:
 - `no_link` on an `extern crate` — even if we load this crate for macros or
   compiler plugins, don't link it into the output.
 
-See the [macros guide](guide-macros.html#scoping-and-macro-import/export) for
-more information on macro scope.
+See the [macros section of the
+book](book/macros.html#scoping-and-macro-import/export) for more information on
+macro scope.
 
 
 ### Miscellaneous attributes
@@ -2116,6 +2115,13 @@ more information on macro scope.
   destructors from being run twice. Destructors might be run multiple times on
   the same object with this attribute.
 - `doc` - Doc comments such as `/// foo` are equivalent to `#[doc = "foo"]`.
+- `rustc_on_unimplemented` - Write a custom note to be shown along with the error
+   when the trait is found to be unimplemented on a type.
+   You may use format arguments like `{T}`, `{A}` to correspond to the
+   types at the point of use corresponding to the type parameters of the
+   trait of the same name. `{Self}` will be replaced with the type that is supposed
+   to implement the trait but doesn't. To use this, the `on_unimplemented` feature gate
+   must be enabled.
 
 ### Conditional compilation
 
@@ -2162,7 +2168,7 @@ arbitrarily complex configurations through nesting.
 The following configurations must be defined by the implementation:
 
 * `target_arch = "..."`. Target CPU architecture, such as `"x86"`, `"x86_64"`
-  `"mips"`, `"arm"`, or `"aarch64"`.
+  `"mips"`, `"powerpc"`, `"arm"`, or `"aarch64"`.
 * `target_endian = "..."`. Endianness of the target CPU, either `"little"` or
   `"big"`.
 * `target_family = "..."`. Operating system family of the target, e. g.
@@ -2193,7 +2199,7 @@ For any lint check `C`:
 
 The lint checks supported by the compiler can be found via `rustc -W help`,
 along with their default settings.  [Compiler
-plugins](guide-plugin.html#lint-plugins) can provide additional lint checks.
+plugins](book/plugin.html#lint-plugins) can provide additional lint checks.
 
 ```{.ignore}
 mod m1 {
@@ -2212,7 +2218,7 @@ mod m1 {
 ```
 
 This example shows how one can use `allow` and `warn` to toggle a particular
-check on and off.
+check on and off:
 
 ```{.ignore}
 #[warn(missing_docs)]
@@ -2234,7 +2240,7 @@ mod m2{
 ```
 
 This example shows how one can use `forbid` to disallow uses of `allow` for
-that lint check.
+that lint check:
 
 ```{.ignore}
 #[forbid(missing_docs)]
@@ -2317,9 +2323,9 @@ These language items are traits:
 * `ord`
   : Elements have a partial ordering.
 * `deref`
-  : `*` can be applied, yielding a reference to another type
+  : `*` can be applied, yielding a reference to another type.
 * `deref_mut`
-  : `*` can be applied, yielding a mutable reference to another type
+  : `*` can be applied, yielding a mutable reference to another type.
 
 These are functions:
 
@@ -2340,7 +2346,7 @@ These are functions:
 * `type_id`
   : The type returned by the `type_id` intrinsic.
 * `unsafe`
-  : A type whose contents can be mutated through an immutable reference
+  : A type whose contents can be mutated through an immutable reference.
 
 #### Marker types
 
@@ -2349,11 +2355,11 @@ These types help drive the compiler's analysis
 * `begin_unwind`
   : ___Needs filling in___
 * `no_copy_bound`
-  : This type does not implement "copy", even if eligible
+  : This type does not implement "copy", even if eligible.
 * `no_send_bound`
-  : This type does not implement "send", even if eligible
+  : This type does not implement "send", even if eligible.
 * `no_sync_bound`
-  : This type does not implement "sync", even if eligible
+  : This type does not implement "sync", even if eligible.
 * `eh_personality`
   : ___Needs filling in___
 * `exchange_free`
@@ -2375,11 +2381,11 @@ These types help drive the compiler's analysis
 * `iterator`
   : ___Needs filling in___
 * `contravariant_lifetime`
-  : The lifetime parameter should be considered contravariant
+  : The lifetime parameter should be considered contravariant.
 * `covariant_lifetime`
-  : The lifetime parameter should be considered covariant
+  : The lifetime parameter should be considered covariant.
 * `invariant_lifetime`
-  : The lifetime parameter should be considered invariant
+  : The lifetime parameter should be considered invariant.
 * `malloc`
   : Allocate memory on the managed heap.
 * `owned_box`
@@ -2389,11 +2395,11 @@ These types help drive the compiler's analysis
 * `start`
   : ___Needs filling in___
 * `contravariant_type`
-  : The type parameter should be considered contravariant
+  : The type parameter should be considered contravariant.
 * `covariant_type`
-  : The type parameter should be considered covariant
+  : The type parameter should be considered covariant.
 * `invariant_type`
-  : The type parameter should be considered invariant
+  : The type parameter should be considered invariant.
 * `ty_desc`
   : ___Needs filling in___
 
@@ -2424,15 +2430,15 @@ There are three different types of inline attributes:
 * `#[inline(always)]` asks the compiler to always perform an inline expansion.
 * `#[inline(never)]` asks the compiler to never perform an inline expansion.
 
-### Deriving
+### Derive
 
-The `deriving` attribute allows certain traits to be automatically implemented
+The `derive` attribute allows certain traits to be automatically implemented
 for data structures. For example, the following will create an `impl` for the
 `PartialEq` and `Clone` traits for `Foo`, the type parameter `T` will be given
 the `PartialEq` or `Clone` constraints for the appropriate `impl`:
 
 ```
-#[deriving(PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 struct Foo<T> {
     a: int,
     b: T
@@ -2454,7 +2460,7 @@ impl<T: PartialEq> PartialEq for Foo<T> {
 }
 ```
 
-Supported traits for `deriving` are:
+Supported traits for `derive` are:
 
 * Comparison traits: `PartialEq`, `Eq`, `PartialOrd`, `Ord`.
 * Serialization: `Encodable`, `Decodable`. These require `serialize`.
@@ -2920,13 +2926,13 @@ automatically dereferenced to make the field access possible.
 ```{.ebnf .gram}
 array_expr : '[' "mut" ? vec_elems? ']' ;
 
-array_elems : [expr [',' expr]*] | [expr ',' ".." expr] ;
+array_elems : [expr [',' expr]*] | [expr ';' expr] ;
 ```
 
 An [array](#array,-and-slice-types) _expression_ is written by enclosing zero
 or more comma-separated expressions of uniform type in square brackets.
 
-In the `[expr ',' ".." expr]` form, the expression after the `".."` must be a
+In the `[expr ';' expr]` form, the expression after the `';'` must be a
 constant expression that can be evaluated at compile time, such as a
 [literal](#literals) or a [static item](#static-items).
 
@@ -2959,8 +2965,8 @@ _panicked state_.
 
 ### Unary operator expressions
 
-Rust defines six symbolic unary operators. They are all written as prefix
-operators, before the expression they apply to.
+Rust defines three unary operators. They are all written as prefix operators,
+before the expression they apply to.
 
 * `-`
   : Negation. May only be applied to numeric types.
@@ -2978,13 +2984,6 @@ operators, before the expression they apply to.
   : Logical negation. On the boolean type, this flips between `true` and
     `false`. On integer types, this inverts the individual bits in the
     two's complement representation of the value.
-* `box`
-  : [Boxing](#pointer-types) operators. Allocate a box to hold the value they
-    are applied to, and store the value in it. `box` creates a box.
-* `&`
-  : Borrow operator. Returns a reference, pointing to its operand. The operand
-    of a borrow is statically proven to outlive the resulting pointer. If the
-    borrow-checker cannot prove this, it is a compilation error.
 
 ### Binary operator expressions
 
@@ -3218,11 +3217,11 @@ the simplest and least-expensive form (analogous to a ```|| { }``` expression),
 the lambda expression captures its environment by reference, effectively
 borrowing pointers to all outer variables mentioned inside the function.
 Alternately, the compiler may infer that a lambda expression should copy or
-move values (depending on their type.) from the environment into the lambda
+move values (depending on their type) from the environment into the lambda
 expression's captured environment.
 
 In this example, we define a function `ten_times` that takes a higher-order
-function argument, and call it with a lambda expression as an argument.
+function argument, and call it with a lambda expression as an argument:
 
 ```
 fn ten_times<F>(f: F) where F: Fn(int) {
@@ -3660,14 +3659,14 @@ within an object along with one byte past the end.
 The types `char` and `str` hold textual data.
 
 A value of type `char` is a [Unicode scalar value](
-http://www.unicode.org/glossary/#unicode_scalar_value) (ie. a code point that
+http://www.unicode.org/glossary/#unicode_scalar_value) (i.e. a code point that
 is not a surrogate), represented as a 32-bit unsigned word in the 0x0000 to
 0xD7FF or 0xE000 to 0x10FFFF range. A `[char]` array is effectively an UCS-4 /
 UTF-32 string.
 
 A value of type `str` is a Unicode string, represented as an array of 8-bit
 unsigned bytes holding a sequence of UTF-8 codepoints. Since `str` is of
-unknown size, it is not a _first class_ type, but can only be instantiated
+unknown size, it is not a _first-class_ type, but can only be instantiated
 through a pointer type, such as `&str` or `String`.
 
 ### Tuple types
@@ -3697,7 +3696,7 @@ assert!(b != "world");
 
 Rust has two different types for a list of items:
 
-* `[T ..N]`, an 'array'
+* `[T; N]`, an 'array'.
 * `&[T]`, a 'slice'.
 
 An array has a fixed size, and can be allocated on either the stack or the
@@ -3709,9 +3708,9 @@ to, it borrows it.
 An example of each kind:
 
 ```{rust}
-let vec: Vec<int>  = vec![1, 2, 3];
-let arr: [int; 3] = [1, 2, 3];
-let s: &[int]      = vec.as_slice();
+let vec: Vec<i32> = vec![1, 2, 3];
+let arr: [i32; 3] = [1, 2, 3];
+let s: &[i32] = vec.as_slice();
 ```
 
 As you can see, the `vec!` macro allows you to create a `Vec<T>` easily. The
@@ -3791,13 +3790,12 @@ enclosing `enum` or `struct` type itself. Such recursion has restrictions:
 An example of a *recursive* type and its use:
 
 ```
-# use std::boxed::Box;
 enum List<T> {
     Nil,
     Cons(T, Box<List<T>>)
 }
 
-let a: List<int> = List::Cons(7, Box::new(List::Cons(13, Box::new(List::Nil))));
+let a: List<i32> = List::Cons(7, Box::new(List::Cons(13, Box::new(List::Nil))));
 ```
 
 ### Pointer types
@@ -3904,7 +3902,6 @@ implementation of `R`, and the pointer value of `E`.
 An example of an object type:
 
 ```
-# use std::boxed::Box;
 trait Printable {
   fn stringify(&self) -> String;
 }
@@ -4112,7 +4109,6 @@ the type of a box is `std::owned::Box<T>`.
 An example of a box type and value:
 
 ```
-# use std::boxed::Box;
 let x: Box<int> = Box::new(10);
 ```
 
@@ -4122,7 +4118,6 @@ copy of a box to move ownership of the value. After a value has been moved,
 the source location cannot be used unless it is reinitialized.
 
 ```
-# use std::boxed::Box;
 let x: Box<int> = Box::new(10);
 let y = x;
 // attempting to use `x` will result in an error here
@@ -4227,7 +4222,7 @@ communication facilities.
 The Rust compiler supports various methods to link crates together both
 statically and dynamically. This section will explore the various methods to
 link Rust crates together, and more information about native libraries can be
-found in the [ffi guide][ffi].
+found in the [ffi section of the book][ffi].
 
 In one session of compilation, the compiler can generate multiple artifacts
 through the usage of either command line flags or the `crate_type` attribute.
@@ -4359,5 +4354,5 @@ that have since been removed):
 * [Unicode Annex #31](http://www.unicode.org/reports/tr31/): identifier and
   pattern syntax
 
-[ffi]: guide-ffi.html
-[plugin]: guide-plugin.html
+[ffi]: book/ffi.html
+[plugin]: book/plugin.html

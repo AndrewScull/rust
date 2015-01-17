@@ -13,11 +13,11 @@
 use prelude::v1::*;
 
 use os;
-use sync::atomic::{AtomicUint, ATOMIC_UINT_INIT, Ordering};
+use sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
 
 /// Get a port number, starting at 9600, for use in tests
 pub fn next_test_port() -> u16 {
-    static NEXT_OFFSET: AtomicUint = ATOMIC_UINT_INIT;
+    static NEXT_OFFSET: AtomicUsize = ATOMIC_USIZE_INIT;
     base_port() + NEXT_OFFSET.fetch_add(1, Ordering::Relaxed) as u16
 }
 
@@ -70,7 +70,7 @@ pub fn raise_fd_limit() {
 /// multithreaded scheduler testing, depending on the number of cores available.
 ///
 /// This fixes issue #7772.
-#[cfg(target_os="macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 #[allow(non_camel_case_types)]
 mod darwin_fd_limit {
     use libc;
@@ -127,7 +127,7 @@ mod darwin_fd_limit {
     }
 }
 
-#[cfg(not(target_os="macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 mod darwin_fd_limit {
     pub unsafe fn raise_fd_limit() {}
 }

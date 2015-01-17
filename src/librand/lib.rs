@@ -22,9 +22,9 @@
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/",
        html_playground_url = "http://play.rust-lang.org/")]
-
+#![allow(unknown_features)] #![feature(int_uint)]
 #![no_std]
-#![experimental]
+#![unstable]
 #![staged_api]
 
 #[macro_use]
@@ -270,8 +270,7 @@ pub trait Rng : Sized {
     /// let choices = [1i, 2, 4, 8, 16, 32];
     /// let mut rng = thread_rng();
     /// println!("{:?}", rng.choose(&choices));
-    /// # // uncomment when slicing syntax is stable
-    /// //assert_eq!(rng.choose(&choices[0..0]), None);
+    /// assert_eq!(rng.choose(&choices[..0]), None);
     /// ```
     fn choose<'a, T>(&mut self, values: &'a [T]) -> Option<&'a T> {
         if values.is_empty() {

@@ -15,6 +15,8 @@ use metadata::filesearch;
 use session::search_paths::PathKind;
 use util::nodemap::NodeMap;
 
+use regex::Regex;
+
 use syntax::ast::NodeId;
 use syntax::codemap::Span;
 use syntax::diagnostic::{self, Emitter};
@@ -24,6 +26,8 @@ use syntax::parse;
 use syntax::parse::token;
 use syntax::parse::ParseSess;
 use syntax::{ast, codemap};
+
+use rustc_back::target::Target;
 
 use std::os;
 use std::cell::{Cell, RefCell};
@@ -35,6 +39,7 @@ pub mod search_paths;
 // session for a single crate.
 pub struct Session {
     pub target: config::Config,
+    pub host: Target,
     pub opts: config::Options,
     pub cstore: CStore,
     pub parse_sess: ParseSess,
@@ -68,7 +73,58 @@ impl Session {
         self.diagnostic().handler().fatal(msg)
     }
     pub fn span_err(&self, sp: Span, msg: &str) {
-        self.diagnostic().span_err(sp, msg)
+        // Conditions for enabling multi-line errors:
+        if !msg.contains("mismatched types") &&
+           !msg.contains("type mismatch resolving") &&
+           !msg.contains("if and else have incompatible types") &&
+           !msg.contains("if may be missing an else clause") &&
+           !msg.contains("match arms have incompatible types") &&
+           !msg.contains("structure constructor specifies a structure of type") {
+            return self.diagnostic().span_err(sp, msg);
+        }
+
+        let first  = Regex::new(r"[( ]expected").unwrap();
+        let second = Regex::new(r" found").unwrap();
+        let third  = Regex::new(
+                     r"\((values differ|lifetime|cyclic type of infinite size)").unwrap();
+
+        let mut new_msg = String::new();
+        let mut head = 0u;
+
+        // Insert `\n` before expected and found.
+        for (pos1, pos2) in first.find_iter(msg).zip(
+                            second.find_iter(msg)) {
+            new_msg = new_msg +
+            // A `(` may be preceded by a space and it should be trimmed
+                      msg[head..pos1.0].trim_right() + // prefix
+                      "\n" +                           // insert before first
+                      &msg[pos1.0..pos1.1] +           // insert what first matched
+                      &msg[pos1.1..pos2.0] +           // between matches
+                      "\n   " +                        // insert before second
+            //           123
+            // `expected` is 3 char longer than `found`. To align the types, `found` gets
+            // 3 spaces prepended.
+                      &msg[pos2.0..pos2.1];            // insert what second matched
+
+            head = pos2.1;
+        }
+
+        let mut tail = &msg[head..];
+        // Insert `\n` before any remaining messages which match.
+        for pos in third.find_iter(tail).take(1) {
+            // The end of the message may just be wrapped in `()` without `expected`/`found`.
+            // Push this also to a new line and add the final tail after.
+            new_msg = new_msg +
+            // `(` is usually preceded by a space and should be trimmed.
+                      tail[..pos.0].trim_right() + // prefix
+                      "\n" +                       // insert before paren
+                      &tail[pos.0..];              // append the tail
+
+            tail = "";
+        }
+
+        new_msg.push_str(tail);
+        self.diagnostic().span_err(sp, &new_msg[])
     }
     pub fn span_err_with_code(&self, sp: Span, msg: &str, code: &str) {
         self.diagnostic().span_err_with_code(sp, msg, code)
@@ -118,6 +174,9 @@ impl Session {
     pub fn fileline_note(&self, sp: Span, msg: &str) {
         self.diagnostic().fileline_note(sp, msg)
     }
+    pub fn fileline_help(&self, sp: Span, msg: &str) {
+        self.diagnostic().fileline_help(sp, msg)
+    }
     pub fn note(&self, msg: &str) {
         self.diagnostic().handler().note(msg)
     }
@@ -164,9 +223,6 @@ impl Session {
     pub fn diagnostic<'a>(&'a self) -> &'a diagnostic::SpanHandler {
         &self.parse_sess.span_diagnostic
     }
-    pub fn debugging_opt(&self, opt: u64) -> bool {
-        (self.opts.debugging_opts & opt) != 0
-    }
     pub fn codemap<'a>(&'a self) -> &'a codemap::CodeMap {
         &self.parse_sess.span_diagnostic.cm
     }
@@ -176,36 +232,36 @@ impl Session {
         self.span_bug(sp,
                       &format!("impossible case reached: {}", msg)[]);
     }
-    pub fn verbose(&self) -> bool { self.debugging_opt(config::VERBOSE) }
-    pub fn time_passes(&self) -> bool { self.debugging_opt(config::TIME_PASSES) }
+    pub fn verbose(&self) -> bool { self.opts.debugging_opts.verbose }
+    pub fn time_passes(&self) -> bool { self.opts.debugging_opts.time_passes }
     pub fn count_llvm_insns(&self) -> bool {
-        self.debugging_opt(config::COUNT_LLVM_INSNS)
+        self.opts.debugging_opts.count_llvm_insns
     }
     pub fn count_type_sizes(&self) -> bool {
-        self.debugging_opt(config::COUNT_TYPE_SIZES)
+        self.opts.debugging_opts.count_type_sizes
     }
     pub fn time_llvm_passes(&self) -> bool {
-        self.debugging_opt(config::TIME_LLVM_PASSES)
+        self.opts.debugging_opts.time_llvm_passes
     }
-    pub fn trans_stats(&self) -> bool { self.debugging_opt(config::TRANS_STATS) }
-    pub fn meta_stats(&self) -> bool { self.debugging_opt(config::META_STATS) }
-    pub fn asm_comments(&self) -> bool { self.debugging_opt(config::ASM_COMMENTS) }
-    pub fn no_verify(&self) -> bool { self.debugging_opt(config::NO_VERIFY) }
-    pub fn borrowck_stats(&self) -> bool { self.debugging_opt(config::BORROWCK_STATS) }
+    pub fn trans_stats(&self) -> bool { self.opts.debugging_opts.trans_stats }
+    pub fn meta_stats(&self) -> bool { self.opts.debugging_opts.meta_stats }
+    pub fn asm_comments(&self) -> bool { self.opts.debugging_opts.asm_comments }
+    pub fn no_verify(&self) -> bool { self.opts.debugging_opts.no_verify }
+    pub fn borrowck_stats(&self) -> bool { self.opts.debugging_opts.borrowck_stats }
     pub fn print_llvm_passes(&self) -> bool {
-        self.debugging_opt(config::PRINT_LLVM_PASSES)
+        self.opts.debugging_opts.print_llvm_passes
     }
     pub fn lto(&self) -> bool {
         self.opts.cg.lto
     }
     pub fn no_landing_pads(&self) -> bool {
-        self.debugging_opt(config::NO_LANDING_PADS)
+        self.opts.debugging_opts.no_landing_pads
     }
     pub fn unstable_options(&self) -> bool {
-        self.debugging_opt(config::UNSTABLE_OPTIONS)
+        self.opts.debugging_opts.unstable_options
     }
     pub fn print_enum_sizes(&self) -> bool {
-        self.debugging_opt(config::PRINT_ENUM_SIZES)
+        self.opts.debugging_opts.print_enum_sizes
     }
     pub fn sysroot<'a>(&'a self) -> &'a Path {
         match self.opts.maybe_sysroot {
@@ -246,6 +302,13 @@ pub fn build_session_(sopts: config::Options,
                       local_crate_source_file: Option<Path>,
                       span_diagnostic: diagnostic::SpanHandler)
                       -> Session {
+    let host = match Target::search(config::host_triple()) {
+        Ok(t) => t,
+        Err(e) => {
+            span_diagnostic.handler()
+                .fatal((format!("Error loading host specification: {}", e)).as_slice());
+    }
+    };
     let target_cfg = config::build_target_config(&sopts, &span_diagnostic);
     let p_s = parse::new_parse_sess_special_handler(span_diagnostic);
     let default_sysroot = match sopts.maybe_sysroot {
@@ -271,6 +334,7 @@ pub fn build_session_(sopts: config::Options,
 
     let sess = Session {
         target: target_cfg,
+        host: host,
         opts: sopts,
         cstore: CStore::new(token::get_ident_interner()),
         parse_sess: p_s,

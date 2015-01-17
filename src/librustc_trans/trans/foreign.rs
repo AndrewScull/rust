@@ -36,6 +36,7 @@ use syntax::parse::token::{InternedString, special_idents};
 use syntax::parse::token;
 use syntax::{ast};
 use syntax::{attr, ast_map};
+use syntax::print::pprust;
 use util::ppaux::Repr;
 
 ///////////////////////////////////////////////////////////////////////////
@@ -426,16 +427,47 @@ pub fn trans_native_call<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
     return bcx;
 }
 
+// feature gate SIMD types in FFI, since I (huonw) am not sure the
+// ABIs are handled at all correctly.
+fn gate_simd_ffi(tcx: &ty::ctxt, decl: &ast::FnDecl, ty: &ty::BareFnTy) {
+    if !tcx.sess.features.borrow().simd_ffi {
+        let check = |&: ast_ty: &ast::Ty, ty: ty::Ty| {
+            if ty::type_is_simd(tcx, ty) {
+                tcx.sess.span_err(ast_ty.span,
+                              &format!("use of SIMD type `{}` in FFI is highly experimental and \
+                                        may result in invalid code",
+                                       pprust::ty_to_string(ast_ty))[]);
+                tcx.sess.span_help(ast_ty.span,
+                                   "add #![feature(simd_ffi)] to the crate attributes to enable");
+            }
+        };
+        let sig = &ty.sig.0;
+        for (input, ty) in decl.inputs.iter().zip(sig.inputs.iter()) {
+            check(&*input.ty, *ty)
+        }
+        match decl.output {
+            ast::NoReturn(_) => {}
+            ast::Return(ref ty) => check(&**ty, sig.output.unwrap())
+        }
+    }
+}
+
 pub fn trans_foreign_mod(ccx: &CrateContext, foreign_mod: &ast::ForeignMod) {
     let _icx = push_ctxt("foreign::trans_foreign_mod");
     for foreign_item in foreign_mod.items.iter() {
         let lname = link_name(&**foreign_item);
 
-        if let ast::ForeignItemFn(..) = foreign_item.node {
+        if let ast::ForeignItemFn(ref decl, _) = foreign_item.node {
             match foreign_mod.abi {
                 Rust | RustIntrinsic => {}
                 abi => {
                     let ty = ty::node_id_to_type(ccx.tcx(), foreign_item.id);
+                    match ty.sty {
+                        ty::ty_bare_fn(_, bft) => gate_simd_ffi(ccx.tcx(), &**decl, bft),
+                        _ => ccx.tcx().sess.span_bug(foreign_item.span,
+                                                     "foreign fn's sty isn't a bare_fn_ty?")
+                    }
+
                     register_foreign_item_fn(ccx, abi, ty,
                                              &lname.get()[]);
                     // Unlike for other items, we shouldn't call
@@ -736,6 +768,13 @@ pub fn trans_rust_fn_with_foreign_abi<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
                 if ty::type_is_bool(rust_ty) {
                     let tmp = builder.load_range_assert(llforeign_arg, 0, 2, llvm::False);
                     builder.trunc(tmp, Type::i1(ccx))
+                } else if type_of::type_of(ccx, rust_ty).is_aggregate() {
+                    // We want to pass small aggregates as immediate values, but using an aggregate
+                    // LLVM type for this leads to bad optimizations, so its arg type is an
+                    // appropriately sized integer and we have to convert it
+                    let tmp = builder.bitcast(llforeign_arg,
+                                              type_of::arg_type_of(ccx, rust_ty).ptr_to());
+                    builder.load(tmp)
                 } else {
                     builder.load(llforeign_arg)
                 }
@@ -834,10 +873,10 @@ fn foreign_signature<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
                                fn_sig: &ty::FnSig<'tcx>,
                                arg_tys: &[Ty<'tcx>])
                                -> LlvmSignature {
-    let llarg_tys = arg_tys.iter().map(|&arg| arg_type_of(ccx, arg)).collect();
+    let llarg_tys = arg_tys.iter().map(|&arg| foreign_arg_type_of(ccx, arg)).collect();
     let (llret_ty, ret_def) = match fn_sig.output {
         ty::FnConverging(ret_ty) =>
-            (type_of::arg_type_of(ccx, ret_ty), !return_type_is_void(ccx, ret_ty)),
+            (type_of::foreign_arg_type_of(ccx, ret_ty), !return_type_is_void(ccx, ret_ty)),
         ty::FnDiverging =>
             (Type::nil(ccx), false)
     };

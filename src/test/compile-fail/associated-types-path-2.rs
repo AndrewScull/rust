@@ -14,8 +14,8 @@ pub trait Foo {
     type A;
 }
 
-impl Foo for int {
-    type A = uint;
+impl Foo for isize {
+    type A = usize;
 }
 
 pub fn f1<T: Foo>(a: T, x: T::A) {}
@@ -25,7 +25,9 @@ pub fn f2<T: Foo>(a: T) -> T::A {
 
 pub fn f1_int_int() {
     f1(2is, 4is);
-    //~^ ERROR expected usize, found isize
+    //~^ ERROR type mismatch resolving
+    //~| expected usize
+    //~| found isize
 }
 
 pub fn f1_int_uint() {
@@ -45,8 +47,12 @@ pub fn f1_uint_int() {
 }
 
 pub fn f2_int() {
-    let _: int = f2(2is);
-    //~^ ERROR expected `isize`, found `usize`
+    let _: isize = f2(2is);
+    //~^ ERROR mismatched types
+    //~| expected `isize`
+    //~| found `usize`
+    //~| expected isize
+    //~| found usize
 }
 
 pub fn main() { }

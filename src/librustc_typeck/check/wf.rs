@@ -56,8 +56,37 @@ impl<'ccx, 'tcx> CheckTypeWellFormedVisitor<'ccx, 'tcx> {
                ty::item_path_str(ccx.tcx, local_def(item.id)));
 
         match item.node {
-            ast::ItemImpl(..) => {
+            /// Right now we check that every default trait implementation
+            /// has an implementation of itself. Basically, a case like:
+            ///
+            /// `impl Trait for T {}`
+            ///
+            /// has a requirement of `T: Trait` which was required for default
+            /// method implementations. Although this could be improved now that
+            /// there's a better infrastructure in place for this, it's being left
+            /// for a follow-up work.
+            ///
+            /// Since there's such a requirement, we need to check *just* positive
+            /// implementations, otherwise things like:
+            ///
+            /// impl !Send for T {}
+            ///
+            /// won't be allowed unless there's an *explicit* implementation of `Send`
+            /// for `T`
+            ast::ItemImpl(_, ast::ImplPolarity::Positive, _, _, _, _) => {
                 self.check_impl(item);
+            }
+            ast::ItemImpl(_, ast::ImplPolarity::Negative, _, Some(ref tref), _, _) => {
+                let trait_ref = ty::node_id_to_trait_ref(ccx.tcx, tref.ref_id);
+                match ccx.tcx.lang_items.to_builtin_kind(trait_ref.def_id) {
+                    Some(ty::BoundSend) | Some(ty::BoundSync) => {}
+                    Some(_) | None => {
+                        ccx.tcx.sess.span_err(
+                            item.span,
+                            format!("negative impls are currently \
+                                     allowed just for `Send` and `Sync`").as_slice())
+                    }
+                }
             }
             ast::ItemFn(..) => {
                 self.check_item_type(item);
@@ -235,8 +264,15 @@ impl<'ccx, 'tcx> CheckTypeWellFormedVisitor<'ccx, 'tcx> {
             // Find the supertrait bounds. This will add `int:Bar`.
             let poly_trait_ref = ty::Binder(trait_ref);
             let predicates = ty::predicates_for_trait_ref(fcx.tcx(), &poly_trait_ref);
-            for predicate in predicates.into_iter() {
+            let predicates = {
+                let selcx = &mut traits::SelectionContext::new(fcx.infcx(), fcx);
+                traits::normalize(selcx, cause.clone(), &predicates)
+            };
+            for predicate in predicates.value.into_iter() {
                 fcx.register_predicate(traits::Obligation::new(cause.clone(), predicate));
+            }
+            for obligation in predicates.obligations.into_iter() {
+                fcx.register_predicate(obligation);
             }
         });
     }

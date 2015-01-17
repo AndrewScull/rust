@@ -11,13 +11,13 @@
 // Test that certain pattern-match type errors are non-fatal
 
 enum A {
-    B(int, int),
-    C(int, int, int),
+    B(isize, isize),
+    C(isize, isize, isize),
     D
 }
 
 struct S {
-    a: int
+    a: isize
 }
 
 fn f(_c: char) {}
@@ -30,9 +30,18 @@ fn main() {
     }
     match 'c' {
         S { .. } => (),
-        //~^ ERROR mismatched types: expected `char`, found `S` (expected char, found struct S)
+        //~^ ERROR mismatched types
+        //~| expected `char`
+        //~| found `S`
+        //~| expected char
+        //~| found struct `S`
 
         _ => ()
     }
-    f(true);            //~ ERROR mismatched types: expected `char`, found `bool`
+    f(true);
+    //~^ ERROR mismatched types
+    //~| expected `char`
+    //~| found `bool`
+    //~| expected char
+    //~| found bool
 }

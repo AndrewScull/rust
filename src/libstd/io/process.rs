@@ -10,7 +10,7 @@
 
 //! Bindings for executing child processes
 
-#![allow(experimental)]
+#![allow(unstable)]
 #![allow(non_upper_case_globals)]
 
 pub use self::StdioContainer::*;
@@ -21,6 +21,8 @@ use prelude::v1::*;
 use collections::HashMap;
 use ffi::CString;
 use fmt;
+// NOTE(stage0) remove import after a snapshot
+#[cfg(stage0)]
 use hash::Hash;
 use io::pipe::{PipeStream, PipePair};
 use io::{IoResult, IoError};
@@ -665,7 +667,7 @@ impl Process {
     /// # Example
     ///
     /// ```no_run
-    /// # #![allow(experimental)]
+    /// # #![allow(unstable)]
     /// use std::io::{Command, IoResult};
     /// use std::io::process::ProcessExit;
     ///
@@ -693,7 +695,7 @@ impl Process {
     ///     p.wait()
     /// }
     /// ```
-    #[experimental = "the type of the timeout is likely to change"]
+    #[unstable = "the type of the timeout is likely to change"]
     pub fn set_timeout(&mut self, timeout_ms: Option<u64>) {
         self.deadline = timeout_ms.map(|i| i + sys::timer::now()).unwrap_or(0);
     }

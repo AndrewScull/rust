@@ -18,9 +18,12 @@ use super::{
     SelectionError,
 };
 
+use fmt_macros::{Parser, Piece, Position};
 use middle::infer::InferCtxt;
-use middle::ty::{self, AsPredicate, ReferencesError, ToPolyTraitRef};
-use syntax::codemap::Span;
+use middle::ty::{self, AsPredicate, ReferencesError, ToPolyTraitRef, TraitRef};
+use std::collections::HashMap;
+use syntax::codemap::{DUMMY_SP, Span};
+use syntax::attr::{AttributeMethods, AttrMetaMethods};
 use util::ppaux::{Repr, UserString};
 
 pub fn report_fulfillment_errors<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
@@ -62,6 +65,83 @@ pub fn report_projection_error<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
     }
 }
 
+fn report_on_unimplemented<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
+                                     trait_ref: &TraitRef<'tcx>,
+                                     span: Span) -> Option<String> {
+    let def_id = trait_ref.def_id;
+    let mut report = None;
+    for item in ty::get_attrs(infcx.tcx, def_id).iter() {
+        if item.check_name("rustc_on_unimplemented") {
+            let err_sp = if item.meta().span == DUMMY_SP {
+                span
+            } else {
+                item.meta().span
+            };
+            let def = ty::lookup_trait_def(infcx.tcx, def_id);
+            let trait_str = def.trait_ref.user_string(infcx.tcx);
+            if let Some(ref istring) = item.value_str() {
+                let mut generic_map = def.generics.types.iter_enumerated()
+                                         .map(|(param, i, gen)| {
+                                               (gen.name.as_str().to_string(),
+                                                trait_ref.substs.types.get(param, i)
+                                                         .user_string(infcx.tcx))
+                                              }).collect::<HashMap<String, String>>();
+                generic_map.insert("Self".to_string(),
+                                   trait_ref.self_ty().user_string(infcx.tcx));
+                let parser = Parser::new(istring.get());
+                let mut errored = false;
+                let err: String = parser.filter_map(|p| {
+                    match p {
+                        Piece::String(s) => Some(s),
+                        Piece::NextArgument(a) => match a.position {
+                            Position::ArgumentNamed(s) => match generic_map.get(s) {
+                                Some(val) => Some(val.as_slice()),
+                                None => {
+                                    infcx.tcx.sess
+                                         .span_err(err_sp,
+                                                   format!("the #[rustc_on_unimplemented] \
+                                                            attribute on \
+                                                            trait definition for {} refers to \
+                                                            non-existent type parameter {}",
+                                                           trait_str, s)
+                                                   .as_slice());
+                                    errored = true;
+                                    None
+                                }
+                            },
+                            _ => {
+                                infcx.tcx.sess
+                                     .span_err(err_sp,
+                                               format!("the #[rustc_on_unimplemented] \
+                                                        attribute on \
+                                                        trait definition for {} must have named \
+                                                        format arguments, \
+                                                        eg `#[rustc_on_unimplemented = \
+                                                        \"foo {{T}}\"]`",
+                                                       trait_str).as_slice());
+                                errored = true;
+                                None
+                            }
+                        }
+                    }
+                }).collect();
+                // Report only if the format string checks out
+                if !errored {
+                    report = Some(err);
+                }
+            } else {
+                infcx.tcx.sess.span_err(err_sp,
+                                        format!("the #[rustc_on_unimplemented] attribute on \
+                                                 trait definition for {} must have a value, \
+                                                 eg `#[rustc_on_unimplemented = \"foo\"]`",
+                                                 trait_str).as_slice());
+            }
+            break;
+        }
+    }
+    report
+}
+
 pub fn report_selection_error<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
                                         obligation: &PredicateObligation<'tcx>,
                                         error: &SelectionError<'tcx>)
@@ -81,58 +161,80 @@ pub fn report_selection_error<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
 
             note_obligation_cause(infcx, obligation);
         }
+
         SelectionError::Unimplemented => {
-            match obligation.predicate {
-                ty::Predicate::Trait(ref trait_predicate) => {
-                    let trait_predicate =
-                        infcx.resolve_type_vars_if_possible(trait_predicate);
-                    if !trait_predicate.references_error() {
-                        let trait_ref = trait_predicate.to_poly_trait_ref();
-                        infcx.tcx.sess.span_err(
-                            obligation.cause.span,
-                            format!(
-                                "the trait `{}` is not implemented for the type `{}`",
-                                trait_ref.user_string(infcx.tcx),
-                                trait_ref.self_ty().user_string(infcx.tcx)).as_slice());
+            match &obligation.cause.code {
+                &ObligationCauseCode::CompareImplMethodObligation => {
+                    infcx.tcx.sess.span_err(
+                        obligation.cause.span,
+                        format!(
+                            "the requirement `{}` appears on the impl \
+                            method but not on the corresponding trait method",
+                            obligation.predicate.user_string(infcx.tcx)).as_slice());
+                }
+                _ => {
+                    match obligation.predicate {
+                        ty::Predicate::Trait(ref trait_predicate) => {
+                            let trait_predicate =
+                                infcx.resolve_type_vars_if_possible(trait_predicate);
+
+                            if !trait_predicate.references_error() {
+                                let trait_ref = trait_predicate.to_poly_trait_ref();
+                                infcx.tcx.sess.span_err(
+                                    obligation.cause.span,
+                                    format!(
+                                        "the trait `{}` is not implemented for the type `{}`",
+                                        trait_ref.user_string(infcx.tcx),
+                                        trait_ref.self_ty().user_string(infcx.tcx)).as_slice());
+                                // Check if it has a custom "#[rustc_on_unimplemented]"
+                                // error message, report with that message if it does
+                                let custom_note = report_on_unimplemented(infcx, &*trait_ref.0,
+                                                                          obligation.cause.span);
+                                if let Some(s) = custom_note {
+                                    infcx.tcx.sess.span_note(obligation.cause.span,
+                                                             s.as_slice());
+                                }
+                            }
+                        }
+
+                        ty::Predicate::Equate(ref predicate) => {
+                            let predicate = infcx.resolve_type_vars_if_possible(predicate);
+                            let err = infcx.equality_predicate(obligation.cause.span,
+                                                               &predicate).unwrap_err();
+                            infcx.tcx.sess.span_err(
+                                obligation.cause.span,
+                                format!(
+                                    "the requirement `{}` is not satisfied (`{}`)",
+                                    predicate.user_string(infcx.tcx),
+                                    ty::type_err_to_str(infcx.tcx, &err)).as_slice());
+                        }
+
+                        ty::Predicate::RegionOutlives(ref predicate) => {
+                            let predicate = infcx.resolve_type_vars_if_possible(predicate);
+                            let err = infcx.region_outlives_predicate(obligation.cause.span,
+                                                                      &predicate).unwrap_err();
+                            infcx.tcx.sess.span_err(
+                                obligation.cause.span,
+                                format!(
+                                    "the requirement `{}` is not satisfied (`{}`)",
+                                    predicate.user_string(infcx.tcx),
+                                    ty::type_err_to_str(infcx.tcx, &err)).as_slice());
+                        }
+
+                        ty::Predicate::Projection(..) | ty::Predicate::TypeOutlives(..) => {
+                                let predicate =
+                                    infcx.resolve_type_vars_if_possible(&obligation.predicate);
+                                infcx.tcx.sess.span_err(
+                                    obligation.cause.span,
+                                    format!(
+                                        "the requirement `{}` is not satisfied",
+                                        predicate.user_string(infcx.tcx)).as_slice());
+                        }
                     }
-                }
-
-                ty::Predicate::Equate(ref predicate) => {
-                    let predicate = infcx.resolve_type_vars_if_possible(predicate);
-                    let err = infcx.equality_predicate(obligation.cause.span,
-                                                             &predicate).unwrap_err();
-                    infcx.tcx.sess.span_err(
-                        obligation.cause.span,
-                        format!(
-                            "the requirement `{}` is not satisfied (`{}`)",
-                            predicate.user_string(infcx.tcx),
-                            ty::type_err_to_str(infcx.tcx, &err)).as_slice());
-                }
-
-                ty::Predicate::RegionOutlives(ref predicate) => {
-                    let predicate = infcx.resolve_type_vars_if_possible(predicate);
-                    let err = infcx.region_outlives_predicate(obligation.cause.span,
-                                                              &predicate).unwrap_err();
-                    infcx.tcx.sess.span_err(
-                        obligation.cause.span,
-                        format!(
-                            "the requirement `{}` is not satisfied (`{}`)",
-                            predicate.user_string(infcx.tcx),
-                            ty::type_err_to_str(infcx.tcx, &err)).as_slice());
-                }
-
-                ty::Predicate::Projection(..) |
-                ty::Predicate::TypeOutlives(..) => {
-                    let predicate =
-                        infcx.resolve_type_vars_if_possible(&obligation.predicate);
-                    infcx.tcx.sess.span_err(
-                        obligation.cause.span,
-                        format!(
-                            "the requirement `{}` is not satisfied",
-                            predicate.user_string(infcx.tcx)).as_slice());
                 }
             }
         }
+
         OutputTypeParameterMismatch(ref expected_trait_ref, ref actual_trait_ref, ref e) => {
             let expected_trait_ref = infcx.resolve_type_vars_if_possible(&*expected_trait_ref);
             let actual_trait_ref = infcx.resolve_type_vars_if_possible(&*actual_trait_ref);
@@ -141,12 +243,12 @@ pub fn report_selection_error<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
                     obligation.cause.span,
                     format!(
                         "type mismatch: the type `{}` implements the trait `{}`, \
-                         but the trait `{}` is required ({})",
+                        but the trait `{}` is required ({})",
                         expected_trait_ref.self_ty().user_string(infcx.tcx),
                         expected_trait_ref.user_string(infcx.tcx),
                         actual_trait_ref.user_string(infcx.tcx),
                         ty::type_err_to_str(infcx.tcx, e)).as_slice());
-                note_obligation_cause(infcx, obligation);
+                    note_obligation_cause(infcx, obligation);
             }
         }
     }
@@ -242,7 +344,7 @@ fn note_obligation_cause<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
 }
 
 fn note_obligation_cause_code<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
-                                        _predicate: &ty::Predicate<'tcx>,
+                                        predicate: &ty::Predicate<'tcx>,
                                         cause_span: Span,
                                         cause_code: &ObligationCauseCode<'tcx>)
 {
@@ -328,6 +430,12 @@ fn note_obligation_cause_code<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
                        parent_trait_ref.0.self_ty().user_string(infcx.tcx));
             let parent_predicate = parent_trait_ref.as_predicate();
             note_obligation_cause_code(infcx, &parent_predicate, cause_span, &*data.parent_code);
+        }
+        ObligationCauseCode::CompareImplMethodObligation => {
+            span_note!(tcx.sess, cause_span,
+                      "the requirement `{}` appears on the impl method\
+                      but not on the corresponding trait method",
+                      predicate.user_string(infcx.tcx));
         }
     }
 }

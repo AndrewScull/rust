@@ -10,15 +10,19 @@
 
 
 struct foo {
-    a: int,
-    b: int,
+    a: isize,
+    b: isize,
 }
 
 type bar = Box<foo>;
 
 fn want_foo(f: foo) {}
 fn have_bar(b: bar) {
-    want_foo(b); //~ ERROR (expected struct foo, found box)
+    want_foo(b); //~  ERROR mismatched types
+                 //~| expected `foo`
+                 //~| found `Box<foo>`
+                 //~| expected struct `foo`
+                 //~| found box
 }
 
 fn main() {}

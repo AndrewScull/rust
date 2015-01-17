@@ -142,7 +142,7 @@ pub fn run(sess: &session::Session, llmod: ModuleRef,
     let cstrs: Vec<CString> = reachable.iter().map(|s| {
         CString::from_slice(s.as_bytes())
     }).collect();
-    let arr: Vec<*const i8> = cstrs.iter().map(|c| c.as_ptr()).collect();
+    let arr: Vec<*const libc::c_char> = cstrs.iter().map(|c| c.as_ptr()).collect();
     let ptr = arr.as_ptr();
     unsafe {
         llvm::LLVMRustRunRestrictionPass(llmod,
@@ -167,7 +167,10 @@ pub fn run(sess: &session::Session, llmod: ModuleRef,
         llvm::LLVMRustAddAnalysisPasses(tm, pm, llmod);
         llvm::LLVMRustAddPass(pm, "verify\0".as_ptr() as *const _);
 
+        let opt = sess.opts.cg.opt_level.unwrap_or(0) as libc::c_uint;
+
         let builder = llvm::LLVMPassManagerBuilderCreate();
+        llvm::LLVMPassManagerBuilderSetOptLevel(builder, opt);
         llvm::LLVMPassManagerBuilderPopulateLTOPassManager(builder, pm,
             /* Internalize = */ False,
             /* RunInliner = */ True);
@@ -186,7 +189,7 @@ pub fn run(sess: &session::Session, llmod: ModuleRef,
 fn is_versioned_bytecode_format(bc: &[u8]) -> bool {
     let magic_id_byte_count = link::RLIB_BYTECODE_OBJECT_MAGIC.len();
     return bc.len() > magic_id_byte_count &&
-           &bc[0..magic_id_byte_count] == link::RLIB_BYTECODE_OBJECT_MAGIC;
+           &bc[..magic_id_byte_count] == link::RLIB_BYTECODE_OBJECT_MAGIC;
 }
 
 fn extract_bytecode_format_version(bc: &[u8]) -> u32 {

@@ -202,7 +202,7 @@ impl<T:Copy> Cell<T> {
     ///
     /// This function is `unsafe` because `UnsafeCell`'s field is public.
     #[inline]
-    #[experimental]
+    #[unstable]
     pub unsafe fn as_unsafe_cell<'a>(&'a self) -> &'a UnsafeCell<T> {
         &self.value
     }
@@ -332,7 +332,7 @@ impl<T> RefCell<T> {
     ///
     /// This function is `unsafe` because `UnsafeCell`'s field is public.
     #[inline]
-    #[experimental]
+    #[unstable]
     pub unsafe fn as_unsafe_cell<'a>(&'a self) -> &'a UnsafeCell<T> {
         &self.value
     }
@@ -424,7 +424,7 @@ impl<'b, T> Deref for Ref<'b, T> {
 ///
 /// A `Clone` implementation would interfere with the widespread
 /// use of `r.borrow().clone()` to clone the contents of a `RefCell`.
-#[experimental = "likely to be moved to a method, pending language changes"]
+#[unstable = "likely to be moved to a method, pending language changes"]
 pub fn clone_ref<'b, T:Clone>(orig: &Ref<'b, T>) -> Ref<'b, T> {
     Ref {
         _value: orig._value,
@@ -509,12 +509,13 @@ impl<'b, T> DerefMut for RefMut<'b, T> {
 ///
 /// ```rust
 /// use std::cell::UnsafeCell;
-/// use std::marker;
+/// use std::marker::Sync;
 ///
 /// struct NotThreadSafe<T> {
 ///     value: UnsafeCell<T>,
-///     marker: marker::NoSync
 /// }
+///
+/// unsafe impl<T> Sync for NotThreadSafe<T> {}
 /// ```
 ///
 /// **NOTE:** `UnsafeCell<T>` fields are public to allow static initializers. It

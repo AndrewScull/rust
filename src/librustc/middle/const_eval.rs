@@ -244,7 +244,7 @@ impl<'a, 'tcx> ConstEvalVisitor<'a, 'tcx> {
 
             // FIXME: (#3728) we can probably do something CCI-ish
             // surrounding nonlocal constants. But we don't yet.
-            ast::ExprPath(_) => self.lookup_constness(e),
+            ast::ExprPath(_) | ast::ExprQPath(_) => self.lookup_constness(e),
 
             ast::ExprRepeat(..) => general_const,
 
@@ -353,6 +353,13 @@ pub fn const_expr_to_pat(tcx: &ty::ctxt, expr: &Expr) -> P<ast::Pat> {
                         _ => unreachable!()
                     }
                 }
+            }
+        }
+
+        ast::ExprQPath(_) => {
+            match lookup_const(tcx, expr) {
+                Some(actual) => return const_expr_to_pat(tcx, actual),
+                _ => unreachable!()
             }
         }
 
@@ -528,12 +535,12 @@ pub fn eval_const_expr_partial(tcx: &ty::ctxt, e: &Expr) -> Result<const_val, St
 
         eval_const_expr_partial(tcx, &**base)
             .and_then(|val| define_casts!(val, {
-                ty::ty_int(ast::TyIs) => (int, const_int, i64),
+                ty::ty_int(ast::TyIs(_)) => (int, const_int, i64),
                 ty::ty_int(ast::TyI8) => (i8, const_int, i64),
                 ty::ty_int(ast::TyI16) => (i16, const_int, i64),
                 ty::ty_int(ast::TyI32) => (i32, const_int, i64),
                 ty::ty_int(ast::TyI64) => (i64, const_int, i64),
-                ty::ty_uint(ast::TyUs) => (uint, const_uint, u64),
+                ty::ty_uint(ast::TyUs(_)) => (uint, const_uint, u64),
                 ty::ty_uint(ast::TyU8) => (u8, const_uint, u64),
                 ty::ty_uint(ast::TyU16) => (u16, const_uint, u64),
                 ty::ty_uint(ast::TyU32) => (u32, const_uint, u64),
@@ -542,7 +549,7 @@ pub fn eval_const_expr_partial(tcx: &ty::ctxt, e: &Expr) -> Result<const_val, St
                 ty::ty_float(ast::TyF64) => (f64, const_float, f64)
             }))
       }
-      ast::ExprPath(_) => {
+      ast::ExprPath(_) | ast::ExprQPath(_) => {
           match lookup_const(tcx, e) {
               Some(actual_e) => eval_const_expr_partial(tcx, &*actual_e),
               None => Err("non-constant path in constant expr".to_string())

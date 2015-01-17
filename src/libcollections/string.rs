@@ -92,7 +92,7 @@ impl String {
     /// assert_eq!(s.as_slice(), "hello");
     /// ```
     #[inline]
-    #[experimental = "needs investigation to see if to_string() can match perf"]
+    #[unstable = "needs investigation to see if to_string() can match perf"]
     pub fn from_str(string: &str) -> String {
         String { vec: ::slice::SliceExt::to_vec(string.as_bytes()) }
     }
@@ -168,7 +168,7 @@ impl String {
 
         if i > 0 {
             unsafe {
-                res.as_mut_vec().push_all(&v[0..i])
+                res.as_mut_vec().push_all(&v[..i])
             };
         }
 
@@ -302,6 +302,7 @@ impl String {
     /// assert_eq!(String::from_utf16_lossy(v),
     ///            "𝄞mus\u{FFFD}ic\u{FFFD}".to_string());
     /// ```
+    #[inline]
     #[stable]
     pub fn from_utf16_lossy(v: &[u16]) -> String {
         unicode_str::utf16_items(v).map(|c| c.to_char_lossy()).collect()
@@ -556,6 +557,7 @@ impl String {
     /// assert_eq!(s.remove(1), 'o');
     /// assert_eq!(s.remove(0), 'o');
     /// ```
+    #[inline]
     #[stable]
     pub fn remove(&mut self, idx: uint) -> char {
         let len = self.len();
@@ -582,6 +584,7 @@ impl String {
     ///
     /// If `idx` does not lie on a character boundary or is out of bounds, then
     /// this function will panic.
+    #[inline]
     #[stable]
     pub fn insert(&mut self, idx: uint, ch: char) {
         let len = self.len();
@@ -618,6 +621,7 @@ impl String {
     /// }
     /// assert_eq!(s.as_slice(), "olleh");
     /// ```
+    #[inline]
     #[stable]
     pub unsafe fn as_mut_vec<'a>(&'a mut self) -> &'a mut Vec<u8> {
         &mut self.vec
@@ -645,6 +649,7 @@ impl String {
     /// v.push('a');
     /// assert!(!v.is_empty());
     /// ```
+    #[inline]
     #[stable]
     pub fn is_empty(&self) -> bool { self.len() == 0 }
 
@@ -719,7 +724,7 @@ impl<'a> FromIterator<&'a str> for String {
     }
 }
 
-#[experimental = "waiting on Extend stabilization"]
+#[unstable = "waiting on Extend stabilization"]
 impl Extend<char> for String {
     fn extend<I:Iterator<Item=char>>(&mut self, mut iterator: I) {
         let (lower_bound, _) = iterator.size_hint();
@@ -730,7 +735,7 @@ impl Extend<char> for String {
     }
 }
 
-#[experimental = "waiting on Extend stabilization"]
+#[unstable = "waiting on Extend stabilization"]
 impl<'a> Extend<&'a str> for String {
     fn extend<I: Iterator<Item=&'a str>>(&mut self, mut iterator: I) {
         // A guess that at least one byte per iterator element will be needed.
@@ -790,7 +795,7 @@ impl<'a, 'b> PartialEq<CowString<'a>> for &'b str {
     fn ne(&self, other: &CowString<'a>) -> bool { PartialEq::ne(&**self, &**other) }
 }
 
-#[experimental = "waiting on Str stabilization"]
+#[unstable = "waiting on Str stabilization"]
 impl Str for String {
     #[inline]
     #[stable]
@@ -801,6 +806,7 @@ impl Str for String {
 
 #[stable]
 impl Default for String {
+    #[inline]
     #[stable]
     fn default() -> String {
         String::new()
@@ -809,19 +815,21 @@ impl Default for String {
 
 #[stable]
 impl fmt::String for String {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::String::fmt(&**self, f)
     }
 }
 
-#[experimental = "waiting on fmt stabilization"]
+#[unstable = "waiting on fmt stabilization"]
 impl fmt::Show for String {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Show::fmt(&**self, f)
     }
 }
 
-#[experimental = "waiting on Hash stabilization"]
+#[unstable = "waiting on Hash stabilization"]
 #[cfg(stage0)]
 impl<H: hash::Writer> hash::Hash<H> for String {
     #[inline]
@@ -829,7 +837,7 @@ impl<H: hash::Writer> hash::Hash<H> for String {
         (**self).hash(hasher)
     }
 }
-#[experimental = "waiting on Hash stabilization"]
+#[unstable = "waiting on Hash stabilization"]
 #[cfg(not(stage0))]
 impl<H: hash::Writer + hash::Hasher> hash::Hash<H> for String {
     #[inline]
@@ -842,6 +850,7 @@ impl<H: hash::Writer + hash::Hasher> hash::Hash<H> for String {
 impl<'a> Add<&'a str> for String {
     type Output = String;
 
+    #[inline]
     fn add(mut self, other: &str) -> String {
         self.push_str(other);
         self
@@ -881,13 +890,14 @@ impl ops::Index<ops::FullRange> for String {
 impl ops::Deref for String {
     type Target = str;
 
+    #[inline]
     fn deref<'a>(&'a self) -> &'a str {
         unsafe { mem::transmute(&self.vec[]) }
     }
 }
 
 /// Wrapper type providing a `&String` reference via `Deref`.
-#[experimental]
+#[unstable]
 pub struct DerefString<'a> {
     x: DerefVec<'a, u8>
 }
@@ -895,6 +905,7 @@ pub struct DerefString<'a> {
 impl<'a> Deref for DerefString<'a> {
     type Target = String;
 
+    #[inline]
     fn deref<'b>(&'b self) -> &'b String {
         unsafe { mem::transmute(&*self.x) }
     }
@@ -914,7 +925,7 @@ impl<'a> Deref for DerefString<'a> {
 /// let string = as_string("foo").clone();
 /// string_consumer(string);
 /// ```
-#[experimental]
+#[unstable]
 pub fn as_string<'a>(x: &'a str) -> DerefString<'a> {
     DerefString { x: as_vec(x.as_bytes()) }
 }
@@ -932,7 +943,8 @@ pub trait ToString {
     fn to_string(&self) -> String;
 }
 
-impl<T: fmt::String> ToString for T {
+impl<T: fmt::String + ?Sized> ToString for T {
+    #[inline]
     fn to_string(&self) -> String {
         use core::fmt::Writer;
         let mut buf = String::new();
@@ -943,12 +955,14 @@ impl<T: fmt::String> ToString for T {
 }
 
 impl IntoCow<'static, String, str> for String {
+    #[inline]
     fn into_cow(self) -> CowString<'static> {
         Cow::Owned(self)
     }
 }
 
 impl<'a> IntoCow<'a, String, str> for &'a str {
+    #[inline]
     fn into_cow(self) -> CowString<'a> {
         Cow::Borrowed(self)
     }
@@ -966,6 +980,7 @@ impl<'a> Str for CowString<'a> {
 }
 
 impl fmt::Writer for String {
+    #[inline]
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.push_str(s);
         Ok(())
@@ -992,6 +1007,12 @@ mod tests {
     fn test_from_str() {
       let owned: Option<::std::string::String> = "string".parse();
       assert_eq!(owned.as_ref().map(|s| s.as_slice()), Some("string"));
+    }
+
+    #[test]
+    fn test_unsized_to_string() {
+        let s: &str = "abc";
+        let _: String = (*s).to_string();
     }
 
     #[test]

@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! A growable list type, written `Vec<T>` but pronounced 'vector.'
+//! A growable list type with heap-allocated contents, written `Vec<T>` but pronounced 'vector.'
 //!
 //! Vectors have `O(1)` indexing, push (to the end) and pop (from the end).
 //!
@@ -376,7 +376,7 @@ impl<T> Vec<T> {
     /// Note that this will drop any excess capacity. Calling this and
     /// converting back to a vector with `into_vec()` is equivalent to calling
     /// `shrink_to_fit()`.
-    #[experimental]
+    #[unstable]
     pub fn into_boxed_slice(mut self) -> Box<[T]> {
         self.shrink_to_fit();
         unsafe {
@@ -777,7 +777,7 @@ impl<T> Vec<T> {
     /// let newtyped_bytes = bytes.map_in_place(|x| Newtype(x));
     /// assert_eq!(newtyped_bytes.as_slice(), [Newtype(0x11), Newtype(0x22)].as_slice());
     /// ```
-    #[experimental = "API may change to provide stronger guarantees"]
+    #[unstable = "API may change to provide stronger guarantees"]
     pub fn map_in_place<U, F>(self, mut f: F) -> Vec<U> where F: FnMut(T) -> U {
         // FIXME: Assert statically that the types `T` and `U` have the same
         // size.
@@ -995,7 +995,7 @@ impl<T: Clone> Vec<T> {
     /// assert_eq!(vec, vec![1, 2, 3, 4]);
     /// ```
     #[inline]
-    #[experimental = "likely to be replaced by a more optimized extend"]
+    #[unstable = "likely to be replaced by a more optimized extend"]
     pub fn push_all(&mut self, other: &[T]) {
         self.reserve(other.len());
 
@@ -1200,7 +1200,7 @@ impl<S: hash::Writer + hash::Hasher, T: Hash<S>> Hash<S> for Vec<T> {
     }
 }
 
-#[experimental = "waiting on Index stability"]
+#[unstable = "waiting on Index stability"]
 impl<T> Index<uint> for Vec<T> {
     type Output = T;
 
@@ -1304,7 +1304,7 @@ impl<T> FromIterator<T> for Vec<T> {
     }
 }
 
-#[experimental = "waiting on Extend stability"]
+#[unstable = "waiting on Extend stability"]
 impl<T> Extend<T> for Vec<T> {
     #[inline]
     fn extend<I: Iterator<Item=T>>(&mut self, mut iterator: I) {
@@ -1457,7 +1457,7 @@ impl<T> Default for Vec<T> {
     }
 }
 
-#[experimental = "waiting on Show stability"]
+#[unstable = "waiting on Show stability"]
 impl<T: fmt::Show> fmt::Show for Vec<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Show::fmt(self.as_slice(), f)
@@ -1475,7 +1475,7 @@ impl<'a> fmt::Writer for Vec<u8> {
 // Clone-on-write
 ////////////////////////////////////////////////////////////////////////////////
 
-#[experimental = "unclear how valuable this alias is"]
+#[unstable = "unclear how valuable this alias is"]
 /// A clone-on-write vector
 pub type CowVec<'a, T> = Cow<'a, Vec<T>, [T]>;
 
@@ -1510,6 +1510,9 @@ pub struct IntoIter<T> {
     ptr: *const T,
     end: *const T
 }
+
+unsafe impl<T: Send> Send for IntoIter<T> { }
+unsafe impl<T: Sync> Sync for IntoIter<T> { }
 
 impl<T> IntoIter<T> {
     #[inline]
@@ -1693,13 +1696,13 @@ impl<'a, T> Drop for Drain<'a, T> {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Wrapper type providing a `&Vec<T>` reference via `Deref`.
-#[experimental]
+#[unstable]
 pub struct DerefVec<'a, T> {
     x: Vec<T>,
     l: ContravariantLifetime<'a>
 }
 
-#[experimental]
+#[unstable]
 impl<'a, T> Deref for DerefVec<'a, T> {
     type Target = Vec<T>;
 
@@ -1719,7 +1722,7 @@ impl<'a, T> Drop for DerefVec<'a, T> {
 }
 
 /// Convert a slice to a wrapper type providing a `&Vec<T>` reference.
-#[experimental]
+#[unstable]
 pub fn as_vec<'a, T>(x: &'a [T]) -> DerefVec<'a, T> {
     unsafe {
         DerefVec {
@@ -2199,7 +2202,7 @@ mod tests {
 
     #[test]
     fn test_map_in_place_zero_drop_count() {
-        use std::sync::atomic::{AtomicUint, Ordering, ATOMIC_UINT_INIT};
+        use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 
         #[derive(Clone, PartialEq, Show)]
         struct Nothing;
@@ -2213,7 +2216,7 @@ mod tests {
             }
         }
         const NUM_ELEMENTS: uint = 2;
-        static DROP_COUNTER: AtomicUint = ATOMIC_UINT_INIT;
+        static DROP_COUNTER: AtomicUsize = ATOMIC_USIZE_INIT;
 
         let v = repeat(Nothing).take(NUM_ELEMENTS).collect::<Vec<_>>();
 

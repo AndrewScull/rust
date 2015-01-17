@@ -24,7 +24,7 @@
 // build off of.
 
 #![crate_name = "test"]
-#![experimental]
+#![unstable]
 #![staged_api]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
@@ -34,8 +34,7 @@
 #![allow(unknown_features)]
 #![feature(asm, slicing_syntax)]
 #![feature(box_syntax)]
-#![allow(staged_experimental)]
-#![allow(staged_unstable)]
+#![allow(unknown_features)] #![feature(int_uint)]
 
 extern crate getopts;
 extern crate regex;
@@ -211,6 +210,8 @@ pub struct TestDesc {
     pub ignore: bool,
     pub should_fail: ShouldFail,
 }
+
+unsafe impl Send for TestDesc {}
 
 #[derive(Show)]
 pub struct TestDescAndFn {
@@ -525,6 +526,8 @@ pub enum TestResult {
     TrMetrics(MetricMap),
     TrBench(BenchSamples),
 }
+
+unsafe impl Send for TestResult {}
 
 enum OutputLocation<T> {
     Pretty(Box<term::Terminal<term::WriterWrapper> + Send>),
@@ -979,7 +982,6 @@ enum TestEvent {
 
 pub type MonitorMsg = (TestDesc, TestResult, Vec<u8> );
 
-unsafe impl Send for MonitorMsg {}
 
 fn run_tests<F>(opts: &TestOpts,
                 tests: Vec<TestDescAndFn> ,
@@ -1333,10 +1335,11 @@ impl MetricMap {
 /// elimination.
 ///
 /// This function is a no-op, and does not even read from `dummy`.
-pub fn black_box<T>(dummy: T) {
+pub fn black_box<T>(dummy: T) -> T {
     // we need to "use" the argument in some way LLVM can't
     // introspect.
     unsafe {asm!("" : : "r"(&dummy))}
+    dummy
 }
 
 

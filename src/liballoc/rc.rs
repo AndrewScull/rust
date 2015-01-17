@@ -174,6 +174,7 @@ struct RcBox<T> {
 /// See the [module level documentation](../index.html) for more details.
 #[unsafe_no_drop_flag]
 #[stable]
+#[cfg(stage0)] // NOTE remove impl after next snapshot
 pub struct Rc<T> {
     // FIXME #12808: strange names to try to avoid interfering with field accesses of the contained
     // type via Deref
@@ -181,6 +182,24 @@ pub struct Rc<T> {
     _nosend: marker::NoSend,
     _noshare: marker::NoSync
 }
+
+/// An immutable reference-counted pointer type.
+///
+/// See the [module level documentation](../index.html) for more details.
+#[unsafe_no_drop_flag]
+#[stable]
+#[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+pub struct Rc<T> {
+    // FIXME #12808: strange names to try to avoid interfering with field accesses of the contained
+    // type via Deref
+    _ptr: NonZero<*mut RcBox<T>>,
+}
+
+#[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+impl<T> !marker::Send for Rc<T> {}
+
+#[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+impl<T> !marker::Sync for Rc<T> {}
 
 impl<T> Rc<T> {
     /// Constructs a new `Rc<T>`.
@@ -193,6 +212,7 @@ impl<T> Rc<T> {
     /// let five = Rc::new(5i);
     /// ```
     #[stable]
+    #[cfg(stage0)] // NOTE remove after next snapshot
     pub fn new(value: T) -> Rc<T> {
         unsafe {
             Rc {
@@ -210,6 +230,32 @@ impl<T> Rc<T> {
         }
     }
 
+    /// Constructs a new `Rc<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    ///
+    /// let five = Rc::new(5i);
+    /// ```
+    #[stable]
+    #[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+    pub fn new(value: T) -> Rc<T> {
+        unsafe {
+            Rc {
+                // there is an implicit weak pointer owned by all the strong pointers, which
+                // ensures that the weak destructor never frees the allocation while the strong
+                // destructor is running, even if the weak pointer is stored inside the strong one.
+                _ptr: NonZero::new(transmute(box RcBox {
+                    value: value,
+                    strong: Cell::new(1),
+                    weak: Cell::new(1)
+                })),
+            }
+        }
+    }
+
     /// Downgrades the `Rc<T>` to a `Weak<T>` reference.
     ///
     /// # Examples
@@ -221,7 +267,8 @@ impl<T> Rc<T> {
     ///
     /// let weak_five = five.downgrade();
     /// ```
-    #[experimental = "Weak pointers may not belong in this module"]
+    #[cfg(stage0)] // NOTE remove after next snapshot
+    #[unstable = "Weak pointers may not belong in this module"]
     pub fn downgrade(&self) -> Weak<T> {
         self.inc_weak();
         Weak {
@@ -230,16 +277,34 @@ impl<T> Rc<T> {
             _noshare: marker::NoSync
         }
     }
+
+    /// Downgrades the `Rc<T>` to a `Weak<T>` reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    ///
+    /// let five = Rc::new(5i);
+    ///
+    /// let weak_five = five.downgrade();
+    /// ```
+    #[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+    #[unstable = "Weak pointers may not belong in this module"]
+    pub fn downgrade(&self) -> Weak<T> {
+        self.inc_weak();
+        Weak { _ptr: self._ptr }
+    }
 }
 
 /// Get the number of weak references to this value.
 #[inline]
-#[experimental]
+#[unstable]
 pub fn weak_count<T>(this: &Rc<T>) -> uint { this.weak() - 1 }
 
 /// Get the number of strong references to this value.
 #[inline]
-#[experimental]
+#[unstable]
 pub fn strong_count<T>(this: &Rc<T>) -> uint { this.strong() }
 
 /// Returns true if there are no other `Rc` or `Weak<T>` values that share the same inner value.
@@ -255,7 +320,7 @@ pub fn strong_count<T>(this: &Rc<T>) -> uint { this.strong() }
 /// rc::is_unique(&five);
 /// ```
 #[inline]
-#[experimental]
+#[unstable]
 pub fn is_unique<T>(rc: &Rc<T>) -> bool {
     weak_count(rc) == 0 && strong_count(rc) == 1
 }
@@ -277,7 +342,7 @@ pub fn is_unique<T>(rc: &Rc<T>) -> bool {
 /// assert_eq!(rc::try_unwrap(x), Err(Rc::new(4u)));
 /// ```
 #[inline]
-#[experimental]
+#[unstable]
 pub fn try_unwrap<T>(rc: Rc<T>) -> Result<T, Rc<T>> {
     if is_unique(&rc) {
         unsafe {
@@ -311,7 +376,7 @@ pub fn try_unwrap<T>(rc: Rc<T>) -> Result<T, Rc<T>> {
 /// assert!(rc::get_mut(&mut x).is_none());
 /// ```
 #[inline]
-#[experimental]
+#[unstable]
 pub fn get_mut<'a, T>(rc: &'a mut Rc<T>) -> Option<&'a mut T> {
     if is_unique(rc) {
         let inner = unsafe { &mut **rc._ptr };
@@ -337,7 +402,7 @@ impl<T: Clone> Rc<T> {
     /// let mut_five = five.make_unique();
     /// ```
     #[inline]
-    #[experimental]
+    #[unstable]
     pub fn make_unique(&mut self) -> &mut T {
         if !is_unique(self) {
             *self = Rc::new((**self).clone())
@@ -432,9 +497,30 @@ impl<T> Clone for Rc<T> {
     /// five.clone();
     /// ```
     #[inline]
+    #[cfg(stage0)] // NOTE remove after next snapshot
     fn clone(&self) -> Rc<T> {
         self.inc_strong();
         Rc { _ptr: self._ptr, _nosend: marker::NoSend, _noshare: marker::NoSync }
+    }
+
+    /// Makes a clone of the `Rc<T>`.
+    ///
+    /// This increases the strong reference count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    ///
+    /// let five = Rc::new(5i);
+    ///
+    /// five.clone();
+    /// ```
+    #[inline]
+    #[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+    fn clone(&self) -> Rc<T> {
+        self.inc_strong();
+        Rc { _ptr: self._ptr }
     }
 }
 
@@ -615,7 +701,7 @@ impl<S: hash::Hasher, T: Hash<S>> Hash<S> for Rc<T> {
     }
 }
 
-#[experimental = "Show is experimental."]
+#[unstable = "Show is experimental."]
 impl<T: fmt::Show> fmt::Show for Rc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Rc({:?})", **self)
@@ -635,7 +721,8 @@ impl<T: fmt::String> fmt::String for Rc<T> {
 ///
 /// See the [module level documentation](../index.html) for more.
 #[unsafe_no_drop_flag]
-#[experimental = "Weak pointers may not belong in this module."]
+#[unstable = "Weak pointers may not belong in this module."]
+#[cfg(stage0)] // NOTE remove impl after next snapshot
 pub struct Weak<T> {
     // FIXME #12808: strange names to try to avoid interfering with
     // field accesses of the contained type via Deref
@@ -644,7 +731,30 @@ pub struct Weak<T> {
     _noshare: marker::NoSync
 }
 
-#[experimental = "Weak pointers may not belong in this module."]
+/// A weak version of `Rc<T>`.
+///
+/// Weak references do not count when determining if the inner value should be dropped.
+///
+/// See the [module level documentation](../index.html) for more.
+#[unsafe_no_drop_flag]
+#[unstable = "Weak pointers may not belong in this module."]
+#[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+pub struct Weak<T> {
+    // FIXME #12808: strange names to try to avoid interfering with
+    // field accesses of the contained type via Deref
+    _ptr: NonZero<*mut RcBox<T>>,
+}
+
+#[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+#[allow(unstable)]
+impl<T> !marker::Send for Weak<T> {}
+
+#[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+#[allow(unstable)]
+impl<T> !marker::Sync for Weak<T> {}
+
+
+#[unstable = "Weak pointers may not belong in this module."]
 impl<T> Weak<T> {
     /// Upgrades a weak reference to a strong reference.
     ///
@@ -663,12 +773,40 @@ impl<T> Weak<T> {
     ///
     /// let strong_five: Option<Rc<_>> = weak_five.upgrade();
     /// ```
+    #[cfg(stage0)] // NOTE remove after next snapshot
     pub fn upgrade(&self) -> Option<Rc<T>> {
         if self.strong() == 0 {
             None
         } else {
             self.inc_strong();
             Some(Rc { _ptr: self._ptr, _nosend: marker::NoSend, _noshare: marker::NoSync })
+        }
+    }
+
+    /// Upgrades a weak reference to a strong reference.
+    ///
+    /// Upgrades the `Weak<T>` reference to an `Rc<T>`, if possible.
+    ///
+    /// Returns `None` if there were no strong references and the data was destroyed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    ///
+    /// let five = Rc::new(5i);
+    ///
+    /// let weak_five = five.downgrade();
+    ///
+    /// let strong_five: Option<Rc<_>> = weak_five.upgrade();
+    /// ```
+    #[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+    pub fn upgrade(&self) -> Option<Rc<T>> {
+        if self.strong() == 0 {
+            None
+        } else {
+            self.inc_strong();
+            Some(Rc { _ptr: self._ptr })
         }
     }
 }
@@ -717,7 +855,7 @@ impl<T> Drop for Weak<T> {
     }
 }
 
-#[experimental = "Weak pointers may not belong in this module."]
+#[unstable = "Weak pointers may not belong in this module."]
 impl<T> Clone for Weak<T> {
     /// Makes a clone of the `Weak<T>`.
     ///
@@ -733,13 +871,34 @@ impl<T> Clone for Weak<T> {
     /// weak_five.clone();
     /// ```
     #[inline]
+    #[cfg(stage0)] // NOTE remove after next snapshot
     fn clone(&self) -> Weak<T> {
         self.inc_weak();
         Weak { _ptr: self._ptr, _nosend: marker::NoSend, _noshare: marker::NoSync }
     }
+
+    /// Makes a clone of the `Weak<T>`.
+    ///
+    /// This increases the weak reference count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    ///
+    /// let weak_five = Rc::new(5i).downgrade();
+    ///
+    /// weak_five.clone();
+    /// ```
+    #[inline]
+    #[cfg(not(stage0))] // NOTE remove cfg after next snapshot
+    fn clone(&self) -> Weak<T> {
+        self.inc_weak();
+        Weak { _ptr: self._ptr }
+    }
 }
 
-#[experimental = "Show is experimental."]
+#[unstable = "Show is experimental."]
 impl<T: fmt::Show> fmt::Show for Weak<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(Weak)")
@@ -780,7 +939,7 @@ impl<T> RcBoxPtr<T> for Weak<T> {
 }
 
 #[cfg(test)]
-#[allow(experimental)]
+#[allow(unstable)]
 mod tests {
     use super::{Rc, Weak, weak_count, strong_count};
     use std::cell::RefCell;

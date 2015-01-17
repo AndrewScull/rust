@@ -73,7 +73,7 @@
 //!
 //! ## Concurrency, I/O, and the runtime
 //!
-//! The [`task`](task/index.html) module contains Rust's threading abstractions,
+//! The [`thread`](thread/index.html) module contains Rust's threading abstractions,
 //! while [`comm`](comm/index.html) contains the channel types for message
 //! passing. [`sync`](sync/index.html) contains further, primitive, shared
 //! memory types, including [`atomic`](sync/atomic/index.html).
@@ -110,8 +110,8 @@
 #![feature(slicing_syntax, unboxed_closures)]
 #![feature(box_syntax)]
 #![feature(old_impl_check)]
-#![allow(staged_experimental)]
-#![allow(staged_unstable)]
+#![feature(optin_builtin_traits)]
+#![allow(unknown_features)] #![feature(int_uint)]
 
 // Don't link to std. We are std.
 #![no_std]
@@ -123,7 +123,8 @@
 extern crate log;
 
 #[macro_use]
-#[macro_reexport(write, writeln)]
+#[macro_reexport(assert, assert_eq, debug_assert, debug_assert_eq,
+    unreachable, unimplemented, write, writeln)]
 extern crate core;
 
 #[macro_use]

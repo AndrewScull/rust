@@ -715,7 +715,7 @@ pub fn run_passes(sess: &Session,
 
         cmd.args(&sess.target.target.options.post_link_args[]);
 
-        if (sess.opts.debugging_opts & config::PRINT_LINK_ARGS) != 0 {
+        if sess.opts.debugging_opts.print_link_args {
             println!("{}", &cmd);
         }
 
@@ -1038,6 +1038,12 @@ unsafe fn configure_llvm(sess: &Session) {
         llvm::LLVMInitializeMipsTargetMC();
         llvm::LLVMInitializeMipsAsmPrinter();
         llvm::LLVMInitializeMipsAsmParser();
+
+        llvm::LLVMInitializePowerPCTargetInfo();
+        llvm::LLVMInitializePowerPCTarget();
+        llvm::LLVMInitializePowerPCTargetMC();
+        llvm::LLVMInitializePowerPCAsmPrinter();
+        llvm::LLVMInitializePowerPCAsmParser();
 
         llvm::LLVMRustSetLLVMOptions(llvm_args.len() as c_int,
                                      llvm_args.as_ptr());

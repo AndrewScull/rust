@@ -9,7 +9,7 @@
 // except according to those terms.
 
 #![crate_name = "rustc_resolve"]
-#![experimental]
+#![unstable]
 #![staged_api]
 #![crate_type = "dylib"]
 #![crate_type = "rlib"]
@@ -19,6 +19,7 @@
 
 #![feature(slicing_syntax)]
 #![feature(rustc_diagnostic_macros)]
+#![allow(unknown_features)] #![feature(int_uint)]
 
 #[macro_use] extern crate log;
 #[macro_use] extern crate syntax;
@@ -60,7 +61,7 @@ use rustc::util::lev_distance::lev_distance;
 use syntax::ast::{Arm, BindByRef, BindByValue, BindingMode, Block, Crate, CrateNum};
 use syntax::ast::{DefId, Expr, ExprAgain, ExprBreak, ExprField};
 use syntax::ast::{ExprClosure, ExprForLoop, ExprLoop, ExprWhile, ExprMethodCall};
-use syntax::ast::{ExprPath, ExprStruct, FnDecl};
+use syntax::ast::{ExprPath, ExprQPath, ExprStruct, FnDecl};
 use syntax::ast::{ForeignItemFn, ForeignItemStatic, Generics};
 use syntax::ast::{Ident, ImplItem, Item, ItemConst, ItemEnum, ItemFn};
 use syntax::ast::{ItemForeignMod, ItemImpl, ItemMac, ItemMod, ItemStatic};
@@ -819,15 +820,15 @@ impl PrimitiveTypeTable {
         table.intern("char",    TyChar);
         table.intern("f32",     TyFloat(TyF32));
         table.intern("f64",     TyFloat(TyF64));
-        table.intern("int",     TyInt(TyIs));
-        table.intern("isize",   TyInt(TyIs));
+        table.intern("int",     TyInt(TyIs(true)));
+        table.intern("isize",   TyInt(TyIs(false)));
         table.intern("i8",      TyInt(TyI8));
         table.intern("i16",     TyInt(TyI16));
         table.intern("i32",     TyInt(TyI32));
         table.intern("i64",     TyInt(TyI64));
         table.intern("str",     TyStr);
-        table.intern("uint",    TyUint(TyUs));
-        table.intern("usize",   TyUint(TyUs));
+        table.intern("uint",    TyUint(TyUs(true)));
+        table.intern("usize",   TyUint(TyUs(false)));
         table.intern("u8",      TyUint(TyU8));
         table.intern("u16",     TyUint(TyU16));
         table.intern("u32",     TyUint(TyU32));
@@ -2080,7 +2081,7 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
                                             // idx +- 1 to account for the
                                             // colons on either side
                                             &mpath[(idx + 1)..],
-                                            &mpath[0..(idx - 1)]);
+                                            &mpath[..(idx - 1)]);
                         return Failed(Some((span, msg)));
                     },
                     None => {
@@ -3168,7 +3169,7 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
                     TraitImplementation        => "implement",
                     TraitDerivation            => "derive",
                     TraitObject                => "reference",
-                    TraitQPath                 => "extract an associated type from",
+                    TraitQPath                 => "extract an associated item from",
                 };
 
                 let msg = format!("attempt to {} a nonexistent trait `{}`", usage_str, path_str);
@@ -3564,31 +3565,17 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
                     }
                 }
 
-                match result_def {
-                    None => {
-                        match self.resolve_path(ty.id, path, TypeNS, true) {
-                            Some(def) => {
-                                debug!("(resolving type) resolved `{:?}` to \
-                                        type {:?}",
-                                       token::get_ident(path.segments.last().unwrap() .identifier),
-                                       def);
-                                result_def = Some(def);
-                            }
-                            None => {
-                                result_def = None;
-                            }
-                        }
-                    }
-                    Some(_) => {}   // Continue.
+                if let None = result_def {
+                    result_def = self.resolve_path(ty.id, path, TypeNS, true);
                 }
 
                 match result_def {
                     Some(def) => {
                         // Write the result into the def map.
                         debug!("(resolving type) writing resolution for `{}` \
-                                (id {})",
+                                (id {}) = {:?}",
                                self.path_names_to_string(path),
-                               path_id);
+                               path_id, def);
                         self.record_def(path_id, def);
                     }
                     None => {
@@ -3608,6 +3595,12 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
             TyQPath(ref qpath) => {
                 self.resolve_type(&*qpath.self_type);
                 self.resolve_trait_reference(ty.id, &*qpath.trait_ref, TraitQPath);
+                for ty in qpath.item_path.parameters.types().into_iter() {
+                    self.resolve_type(&**ty);
+                }
+                for binding in qpath.item_path.parameters.bindings().into_iter() {
+                    self.resolve_type(&*binding.ty);
+                }
             }
 
             TyPolyTraitRef(ref bounds) => {
@@ -4399,15 +4392,25 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
             // The interpretation of paths depends on whether the path has
             // multiple elements in it or not.
 
-            ExprPath(ref path) => {
+            ExprPath(_) | ExprQPath(_) => {
+                let mut path_from_qpath;
+                let path = match expr.node {
+                    ExprPath(ref path) => path,
+                    ExprQPath(ref qpath) => {
+                        self.resolve_type(&*qpath.self_type);
+                        self.resolve_trait_reference(expr.id, &*qpath.trait_ref, TraitQPath);
+                        path_from_qpath = qpath.trait_ref.path.clone();
+                        path_from_qpath.segments.push(qpath.item_path.clone());
+                        &path_from_qpath
+                    }
+                    _ => unreachable!()
+                };
                 // This is a local path in the value namespace. Walk through
                 // scopes looking for it.
-
-                let path_name = self.path_names_to_string(path);
-
                 match self.resolve_path(expr.id, path, ValueNS, true) {
                     // Check if struct variant
                     Some((DefVariant(_, _, true), _)) => {
+                        let path_name = self.path_names_to_string(path);
                         self.resolve_error(expr.span,
                                 format!("`{}` is a struct variant name, but \
                                          this expression \
@@ -4422,7 +4425,7 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
                     Some(def) => {
                         // Write the result into the def map.
                         debug!("(resolving expr) resolved `{}`",
-                               path_name);
+                               self.path_names_to_string(path));
 
                         self.record_def(expr.id, def);
                     }
@@ -4431,6 +4434,7 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
                         // (The pattern matching def_tys where the id is in self.structs
                         // matches on regular structs while excluding tuple- and enum-like
                         // structs, which wouldn't result in this error.)
+                        let path_name = self.path_names_to_string(path);
                         match self.with_no_errors(|this|
                             this.resolve_path(expr.id, path, TypeNS, false)) {
                             Some((DefTy(struct_id, _), _))

@@ -22,7 +22,7 @@
 //! so we will not _hide_ the facts of which OS the user is on -- they should be given the
 //! opportunity to write OS-ignorant code by default.
 
-#![experimental]
+#![unstable]
 
 #![allow(missing_docs)]
 #![allow(non_snake_case)]
@@ -54,7 +54,7 @@ use result::Result::{Err, Ok};
 use slice::{AsSlice, SliceExt};
 use str::{Str, StrExt};
 use string::{String, ToString};
-use sync::atomic::{AtomicInt, ATOMIC_INT_INIT, Ordering};
+use sync::atomic::{AtomicIsize, ATOMIC_ISIZE_INIT, Ordering};
 use vec::Vec;
 
 #[cfg(any(unix, dios))] use ffi::{self, CString};
@@ -600,7 +600,7 @@ pub fn last_os_error() -> String {
     error_string(errno() as uint)
 }
 
-static EXIT_STATUS: AtomicInt = ATOMIC_INT_INIT;
+static EXIT_STATUS: AtomicIsize = ATOMIC_ISIZE_INIT;
 
 /// Sets the process exit code
 ///
@@ -1451,6 +1451,11 @@ mod arch_consts {
 #[cfg(target_arch = "mipsel")]
 mod arch_consts {
     pub const ARCH: &'static str = "mipsel";
+}
+
+#[cfg(target_arch = "powerpc")]
+mod arch_consts {
+    pub const ARCH: &'static str = "powerpc";
 }
 
 #[cfg(test)]

@@ -9,12 +9,17 @@
 // except according to those terms.
 
 
-struct S { a: int }
-enum E { C(int) }
+struct S { a: isize }
+enum E { C(isize) }
 
 fn main() {
     match (S { a: 1 }) {
-        E::C(_) => (), //~ ERROR mismatched types: expected `S`, found `E`
+        E::C(_) => (),
+        //~^ ERROR mismatched types
+        //~| expected `S`
+        //~| found `E`
+        //~| expected struct `S`
+        //~| found enum `E`
         _ => ()
     }
 }

@@ -1,4 +1,4 @@
-// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -221,13 +221,16 @@ impl<T> DList<T> {
         DList{list_head: None, list_tail: Rawlink::none(), length: 0}
     }
 
-    /// Adds all elements from `other` to the end of the list.
+    /// Moves all elements from `other` to the end of the list.
     ///
-    /// This operation should compute in O(1) time.
+    /// This reuses all the nodes from `other` and moves them into `self`. After
+    /// this operation, `other` becomes empty.
+    ///
+    /// This operation should compute in O(1) time and O(1) memory.
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// use std::collections::DList;
     ///
     /// let mut a = DList::new();
@@ -237,16 +240,20 @@ impl<T> DList<T> {
     /// b.push_back(3i);
     /// b.push_back(4);
     ///
-    /// a.append(b);
+    /// a.append(&mut b);
     ///
     /// for e in a.iter() {
     ///     println!("{}", e); // prints 1, then 2, then 3, then 4
     /// }
+    /// println!("{}", b.len()); // prints 0
     /// ```
-    #[unstable = "append should be by-mutable-reference"]
-    pub fn append(&mut self, mut other: DList<T>) {
+    pub fn append(&mut self, other: &mut DList<T>) {
         match self.list_tail.resolve() {
-            None => *self = other,
+            None => {
+                self.length = other.length;
+                self.list_head = other.list_head.take();
+                self.list_tail = other.list_tail.take();
+            },
             Some(tail) => {
                 // Carefully empty `other`.
                 let o_tail = other.list_tail.take();
@@ -261,6 +268,7 @@ impl<T> DList<T> {
                 }
             }
         }
+        other.length = 0;
     }
 
     /// Provides a forward iterator.
@@ -296,6 +304,18 @@ impl<T> DList<T> {
     /// Returns `true` if the `DList` is empty.
     ///
     /// This operation should compute in O(1) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut dl = DList::new();
+    /// assert!(dl.is_empty());
+    ///
+    /// dl.push_front("foo");
+    /// assert!(!dl.is_empty());
+    /// ```
     #[inline]
     #[stable]
     pub fn is_empty(&self) -> bool {
@@ -305,6 +325,24 @@ impl<T> DList<T> {
     /// Returns the length of the `DList`.
     ///
     /// This operation should compute in O(1) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut dl = DList::new();
+    ///
+    /// dl.push_front(2is);
+    /// assert_eq!(dl.len(), 1);
+    ///
+    /// dl.push_front(1);
+    /// assert_eq!(dl.len(), 2);
+    ///
+    /// dl.push_back(3);
+    /// assert_eq!(dl.len(), 3);
+    ///
+    /// ```
     #[inline]
     #[stable]
     pub fn len(&self) -> uint {
@@ -314,6 +352,24 @@ impl<T> DList<T> {
     /// Removes all elements from the `DList`.
     ///
     /// This operation should compute in O(n) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut dl = DList::new();
+    ///
+    /// dl.push_front(2is);
+    /// dl.push_front(1);
+    /// assert_eq!(dl.len(), 2);
+    /// assert_eq!(dl.front(), Some(&1is));
+    ///
+    /// dl.clear();
+    /// assert_eq!(dl.len(), 0);
+    /// assert_eq!(dl.front(), None);
+    ///
+    /// ```
     #[inline]
     #[stable]
     pub fn clear(&mut self) {
@@ -322,6 +378,19 @@ impl<T> DList<T> {
 
     /// Provides a reference to the front element, or `None` if the list is
     /// empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut dl = DList::new();
+    /// assert_eq!(dl.front(), None);
+    ///
+    /// dl.push_front(1);
+    /// assert_eq!(dl.front(), Some(&1is));
+    ///
+    /// ```
     #[inline]
     #[stable]
     pub fn front(&self) -> Option<&T> {
@@ -330,6 +399,25 @@ impl<T> DList<T> {
 
     /// Provides a mutable reference to the front element, or `None` if the list
     /// is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut dl = DList::new();
+    /// assert_eq!(dl.front(), None);
+    ///
+    /// dl.push_front(1);
+    /// assert_eq!(dl.front(), Some(&1is));
+    ///
+    /// match dl.front_mut() {
+    ///     None => {},
+    ///     Some(x) => *x = 5is,
+    /// }
+    /// assert_eq!(dl.front(), Some(&5is));
+    ///
+    /// ```
     #[inline]
     #[stable]
     pub fn front_mut(&mut self) -> Option<&mut T> {
@@ -338,6 +426,19 @@ impl<T> DList<T> {
 
     /// Provides a reference to the back element, or `None` if the list is
     /// empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut dl = DList::new();
+    /// assert_eq!(dl.back(), None);
+    ///
+    /// dl.push_back(1);
+    /// assert_eq!(dl.back(), Some(&1is));
+    ///
+    /// ```
     #[inline]
     #[stable]
     pub fn back(&self) -> Option<&T> {
@@ -346,6 +447,25 @@ impl<T> DList<T> {
 
     /// Provides a mutable reference to the back element, or `None` if the list
     /// is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut dl = DList::new();
+    /// assert_eq!(dl.back(), None);
+    ///
+    /// dl.push_back(1);
+    /// assert_eq!(dl.back(), Some(&1is));
+    ///
+    /// match dl.back_mut() {
+    ///     None => {},
+    ///     Some(x) => *x = 5is,
+    /// }
+    /// assert_eq!(dl.back(), Some(&5is));
+    ///
+    /// ```
     #[inline]
     #[stable]
     pub fn back_mut(&mut self) -> Option<&mut T> {
@@ -355,6 +475,21 @@ impl<T> DList<T> {
     /// Adds an element first in the list.
     ///
     /// This operation should compute in O(1) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut dl = DList::new();
+    ///
+    /// dl.push_front(2is);
+    /// assert_eq!(dl.front().unwrap(), &2is);
+    ///
+    /// dl.push_front(1);
+    /// assert_eq!(dl.front().unwrap(), &1);
+    ///
+    /// ```
     #[stable]
     pub fn push_front(&mut self, elt: T) {
         self.push_front_node(box Node::new(elt))
@@ -364,6 +499,23 @@ impl<T> DList<T> {
     /// empty.
     ///
     /// This operation should compute in O(1) time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut d = DList::new();
+    /// assert_eq!(d.pop_front(), None);
+    ///
+    /// d.push_front(1is);
+    /// d.push_front(3);
+    /// assert_eq!(d.pop_front(), Some(3));
+    /// assert_eq!(d.pop_front(), Some(1));
+    /// assert_eq!(d.pop_front(), None);
+    ///
+    /// ```
+    ///
     #[stable]
     pub fn pop_front(&mut self) -> Option<T> {
         self.pop_front_node().map(|box Node{value, ..}| value)
@@ -373,7 +525,7 @@ impl<T> DList<T> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// use std::collections::DList;
     ///
     /// let mut d = DList::new();
@@ -391,7 +543,7 @@ impl<T> DList<T> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// use std::collections::DList;
     ///
     /// let mut d = DList::new();
@@ -403,6 +555,67 @@ impl<T> DList<T> {
     #[stable]
     pub fn pop_back(&mut self) -> Option<T> {
         self.pop_back_node().map(|box Node{value, ..}| value)
+    }
+
+    /// Splits the list into two at the given index. Returns everything after the given index,
+    /// including the index.
+    ///
+    /// This operation should compute in O(n) time.
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::DList;
+    ///
+    /// let mut d = DList::new();
+    ///
+    /// d.push_front(1is);
+    /// d.push_front(2);
+    /// d.push_front(3);
+    ///
+    /// let mut splitted = d.split_off(2);
+    ///
+    /// assert_eq!(splitted.pop_front(), Some(1));
+    /// assert_eq!(splitted.pop_front(), None);
+    /// ```
+    #[stable]
+    pub fn split_off(&mut self, at: uint) -> DList<T> {
+        let len = self.len();
+        assert!(at < len, "Cannot split off at a nonexistent index");
+        if at == 0 {
+            return mem::replace(self, DList::new());
+        }
+
+        // Below, we iterate towards the `i-1`th node, either from the start or the end,
+        // depending on which would be faster.
+        let mut split_node = if at - 1 <= len - 1 - (at - 1) {
+            let mut iter = self.iter_mut();
+            // instead of skipping using .skip() (which creates a new struct),
+            // we skip manually so we can access the head field without
+            // depending on implementation details of Skip
+            for _ in range(0, at - 1) {
+                iter.next();
+            }
+            iter.head
+        }  else {
+            // better off starting from the end
+            let mut iter = self.iter_mut();
+            for _ in range(0, len - 1 - (at - 1)) {
+                iter.next_back();
+            }
+            iter.tail
+        };
+
+        let mut splitted_list = DList {
+            list_head: None,
+            list_tail: self.list_tail,
+            length: len - at
+        };
+
+        mem::swap(&mut split_node.resolve().unwrap().next, &mut splitted_list.list_head);
+        self.list_tail = split_node;
+        self.length = at;
+
+        splitted_list
     }
 }
 
@@ -540,7 +753,7 @@ impl<'a, A> IterMut<'a, A> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// use std::collections::DList;
     ///
     /// let mut list: DList<int> = vec![1, 3, 4].into_iter().collect();
@@ -566,7 +779,7 @@ impl<'a, A> IterMut<'a, A> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// use std::collections::DList;
     ///
     /// let mut list: DList<int> = vec![1, 2, 3].into_iter().collect();
@@ -775,6 +988,108 @@ mod tests {
     #[cfg(test)]
     fn list_from<T: Clone>(v: &[T]) -> DList<T> {
         v.iter().map(|x| (*x).clone()).collect()
+    }
+
+    #[test]
+    fn test_append() {
+        // Empty to empty
+        {
+            let mut m: DList<int> = DList::new();
+            let mut n = DList::new();
+            m.append(&mut n);
+            check_links(&m);
+            assert_eq!(m.len(), 0);
+            assert_eq!(n.len(), 0);
+        }
+        // Non-empty to empty
+        {
+            let mut m = DList::new();
+            let mut n = DList::new();
+            n.push_back(2i);
+            m.append(&mut n);
+            check_links(&m);
+            assert_eq!(m.len(), 1);
+            assert_eq!(m.pop_back(), Some(2));
+            assert_eq!(n.len(), 0);
+            check_links(&m);
+        }
+        // Empty to non-empty
+        {
+            let mut m = DList::new();
+            let mut n = DList::new();
+            m.push_back(2i);
+            m.append(&mut n);
+            check_links(&m);
+            assert_eq!(m.len(), 1);
+            assert_eq!(m.pop_back(), Some(2));
+            check_links(&m);
+        }
+
+        // Non-empty to non-empty
+        let v = vec![1i,2,3,4,5];
+        let u = vec![9i,8,1,2,3,4,5];
+        let mut m = list_from(v.as_slice());
+        let mut n = list_from(u.as_slice());
+        m.append(&mut n);
+        check_links(&m);
+        let mut sum = v;
+        sum.push_all(u.as_slice());
+        assert_eq!(sum.len(), m.len());
+        for elt in sum.into_iter() {
+            assert_eq!(m.pop_front(), Some(elt))
+        }
+        assert_eq!(n.len(), 0);
+        // let's make sure it's working properly, since we
+        // did some direct changes to private members
+        n.push_back(3);
+        assert_eq!(n.len(), 1);
+        assert_eq!(n.pop_front(), Some(3));
+        check_links(&n);
+    }
+
+    #[test]
+    fn test_split_off() {
+        // singleton
+        {
+            let mut m = DList::new();
+            m.push_back(1i);
+
+            let p = m.split_off(0);
+            assert_eq!(m.len(), 0);
+            assert_eq!(p.len(), 1);
+            assert_eq!(p.back(), Some(&1));
+            assert_eq!(p.front(), Some(&1));
+        }
+
+        // not singleton, forwards
+        {
+            let u = vec![1i,2,3,4,5];
+            let mut m = list_from(u.as_slice());
+            let mut n = m.split_off(2);
+            assert_eq!(m.len(), 2);
+            assert_eq!(n.len(), 3);
+            for elt in range(1i, 3) {
+                assert_eq!(m.pop_front(), Some(elt));
+            }
+            for elt in range(3i, 6) {
+                assert_eq!(n.pop_front(), Some(elt));
+            }
+        }
+        // not singleton, backwards
+        {
+            let u = vec![1i,2,3,4,5];
+            let mut m = list_from(u.as_slice());
+            let mut n = m.split_off(4);
+            assert_eq!(m.len(), 4);
+            assert_eq!(n.len(), 1);
+            for elt in range(1i, 5) {
+                assert_eq!(m.pop_front(), Some(elt));
+            }
+            for elt in range(5i, 6) {
+                assert_eq!(n.pop_front(), Some(elt));
+            }
+        }
+
     }
 
     #[test]
@@ -1063,41 +1378,6 @@ mod tests {
             assert_eq!(a, b);
         }
         assert_eq!(i, v.len());
-    }
-
-    #[allow(deprecated)]
-    #[test]
-    fn test_append() {
-        {
-            let mut m = DList::new();
-            let mut n = DList::new();
-            n.push_back(2i);
-            m.append(n);
-            assert_eq!(m.len(), 1);
-            assert_eq!(m.pop_back(), Some(2));
-            check_links(&m);
-        }
-        {
-            let mut m = DList::new();
-            let n = DList::new();
-            m.push_back(2i);
-            m.append(n);
-            assert_eq!(m.len(), 1);
-            assert_eq!(m.pop_back(), Some(2));
-            check_links(&m);
-        }
-
-        let v = vec![1i,2,3,4,5];
-        let u = vec![9i,8,1,2,3,4,5];
-        let mut m = list_from(v.as_slice());
-        m.append(list_from(u.as_slice()));
-        check_links(&m);
-        let mut sum = v;
-        sum.push_all(u.as_slice());
-        assert_eq!(sum.len(), m.len());
-        for elt in sum.into_iter() {
-            assert_eq!(m.pop_front(), Some(elt))
-        }
     }
 
     #[bench]
