@@ -1,4 +1,4 @@
-// Copyright 2012-2015 The Rust Project Developers. See the COPYRIGHT
+
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -57,7 +57,7 @@ use string::{String, ToString};
 use sync::atomic::{AtomicInt, ATOMIC_INT_INIT, Ordering};
 use vec::Vec;
 
-#[cfg(unix)] use ffi::{self, CString};
+#[cfg(any(unix, dios))] use ffi::{self, CString};
 
 #[cfg(unix)] pub use sys::ext as unix;
 #[cfg(windows)] pub use sys::ext as windows;
@@ -160,7 +160,7 @@ pub fn env_as_bytes() -> Vec<(Vec<u8>,Vec<u8>)> {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, dios))]
 /// Fetches the environment variable `n` from the current process, returning
 /// None if the variable isn't set.
 ///
@@ -186,7 +186,7 @@ pub fn getenv(n: &str) -> Option<String> {
     getenv_as_bytes(n).map(|v| String::from_utf8_lossy(v.as_slice()).into_owned())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, dios))]
 /// Fetches the environment variable `n` byte vector from the current process,
 /// returning None if the variable isn't set.
 ///
@@ -230,6 +230,7 @@ pub fn getenv_as_bytes(n: &str) -> Option<Vec<u8>> {
     getenv(n).map(|s| s.into_bytes())
 }
 
+#[cfg(not(dios))]
 /// Sets the environment variable `n` to the value `v` for the currently running
 /// process.
 ///
@@ -279,6 +280,7 @@ pub fn setenv<T: BytesContainer>(n: &str, v: T) {
     _setenv(n, v.container_as_bytes())
 }
 
+#[cfg(not(dios))]
 /// Remove a variable from the environment entirely.
 pub fn unsetenv(n: &str) {
     #[cfg(unix)]
@@ -385,7 +387,7 @@ pub unsafe fn pipe() -> IoResult<Pipe> {
 
 /// Returns the proper dll filename for the given basename of a file
 /// as a String.
-#[cfg(not(target_os="ios"))]
+#[cfg(not(any(target_os="ios", dios)))]
 pub fn dll_filename(base: &str) -> String {
     format!("{}{}{}", consts::DLL_PREFIX, base, consts::DLL_SUFFIX)
 }
@@ -452,6 +454,12 @@ pub fn self_exe_path() -> Option<Path> {
 /// ```
 pub fn homedir() -> Option<Path> {
     #[inline]
+    #[cfg(dios)]
+    fn _homedir() -> Option<Path> {
+        None
+    }
+
+    #[inline]
     #[cfg(unix)]
     fn _homedir() -> Option<Path> {
         aux_homedir("HOME")
@@ -464,6 +472,7 @@ pub fn homedir() -> Option<Path> {
     }
 
     #[inline]
+    #[cfg(any(unix, windows))]
     fn aux_homedir(home_name: &str) -> Option<Path> {
         match getenv_as_bytes(home_name) {
             Some(p)  => {
@@ -475,6 +484,7 @@ pub fn homedir() -> Option<Path> {
     _homedir()
 }
 
+#[cfg(not(dios))]
 /// Returns the path to a temporary directory.
 ///
 /// On Unix, returns the value of the 'TMPDIR' environment variable if it is
@@ -691,7 +701,8 @@ fn real_args_as_bytes() -> Vec<Vec<u8>> {
 #[cfg(any(target_os = "linux",
           target_os = "android",
           target_os = "freebsd",
-          target_os = "dragonfly"))]
+          target_os = "dragonfly",
+          dios))]
 fn real_args_as_bytes() -> Vec<Vec<u8>> {
     use rt;
     rt::args::clone().unwrap_or_else(|| vec![])
@@ -944,6 +955,7 @@ impl FromError<MapError> for Box<Error> {
 }
 
 // Round up `from` to be divisible by `to`
+#[cfg(any(unix, windows))]
 fn round_up(from: uint, to: uint) -> uint {
     let r = if from % to == 0 {
         from
@@ -1390,6 +1402,25 @@ pub mod consts {
     /// Specifies the file extension, if any, used for executable binaries
     /// on this platform: in this case, `exe`.
     pub const EXE_EXTENSION: &'static str = "exe";
+}
+
+#[cfg(dios)]
+pub mod consts {
+    pub use os::arch_consts::ARCH;
+
+    pub const FAMILY: &'static str = "dios";
+
+    /// A string describing the specific operating system in use: in this
+    /// case, `ios`.
+    pub const SYSNAME: &'static str = "dios";
+
+    /// Specifies the filename suffix used for executable binaries on this
+    /// platform: in this case, the empty string.
+    pub const EXE_SUFFIX: &'static str = "";
+
+    /// Specifies the file extension, if any, used for executable binaries
+    /// on this platform: in this case, the empty string.
+    pub const EXE_EXTENSION: &'static str = "";
 }
 
 #[cfg(target_arch = "x86")]

@@ -110,6 +110,8 @@
 #![feature(slicing_syntax, unboxed_closures)]
 #![feature(box_syntax)]
 #![feature(old_impl_check)]
+#![allow(staged_experimental)]
+#![allow(staged_unstable)]
 
 // Don't link to std. We are std.
 #![no_std]
@@ -254,6 +256,8 @@ pub mod sync;
 #[path = "sys/unix/mod.rs"] mod sys;
 #[cfg(windows)]
 #[path = "sys/windows/mod.rs"] mod sys;
+#[cfg(dios)]
+#[path = "sys/dios/mod.rs"] mod sys;
 
 #[path = "sys/common/mod.rs"] mod sys_common;
 

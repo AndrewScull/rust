@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg(not(dios))]
+
 //! TCP network connections
 //!
 //! This module contains the ability to open a TCP stream to a socket address,

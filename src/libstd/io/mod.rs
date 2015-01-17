@@ -261,9 +261,6 @@ pub use self::stdio::println;
 
 pub use self::fs::File;
 pub use self::timer::Timer;
-pub use self::net::ip::IpAddr;
-pub use self::net::tcp::TcpListener;
-pub use self::net::tcp::TcpStream;
 pub use self::pipe::PipeStream;
 pub use self::process::{Process, Command};
 pub use self::tempfile::TempDir;

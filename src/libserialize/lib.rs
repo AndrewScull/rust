@@ -28,6 +28,8 @@ Core encoding and decoding interfaces.
 #![feature(box_syntax)]
 #![feature(old_impl_check)]
 #![feature(slicing_syntax)]
+#![allow(staged_experimental)]
+#![allow(staged_unstable)]
 
 // test harness access
 #[cfg(test)] extern crate test;

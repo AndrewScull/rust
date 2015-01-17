@@ -34,6 +34,8 @@
 #![allow(unknown_features)]
 #![feature(asm, slicing_syntax)]
 #![feature(box_syntax)]
+#![allow(staged_experimental)]
+#![allow(staged_unstable)]
 
 extern crate getopts;
 extern crate regex;

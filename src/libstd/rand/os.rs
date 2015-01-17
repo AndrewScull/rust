@@ -348,6 +348,41 @@ mod imp {
     }
 }
 
+#[cfg(dios)]
+mod imp {
+    use io::IoResult;
+    use rand::Rng;
+    use result::Result::Err;
+    use sys_common;
+
+    #[allow(missing_copy_implementations)]
+    /// STUB
+    pub struct OsRng;
+
+    impl OsRng {
+        /// Create a new `OsRng`.
+        pub fn new() -> IoResult<OsRng> {
+            // STUB:
+            Err(sys_common::unimpl())
+        }
+    }
+
+    impl Rng for OsRng {
+        fn next_u32(&mut self) -> u32 {
+            // STUB: much random. wow!
+            0
+        }
+        fn next_u64(&mut self) -> u64 {
+            // STUB: much random. wow!
+            0
+        }
+        fn fill_bytes(&mut self, v: &mut [u8]) {
+            // STUB: much random. wow!
+            let _ = v;
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use prelude::v1::*;

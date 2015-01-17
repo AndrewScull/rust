@@ -45,10 +45,14 @@ use thread::Thread;
 #[cfg(windows)] pub const MustDieSignal: int = 9;
 /// Signal a process to exit, without forcibly killing it. Corresponds to
 /// SIGTERM on unix platforms.
-#[cfg(not(windows))] pub const PleaseExitSignal: int = libc::SIGTERM as int;
+#[cfg(unix)] pub const PleaseExitSignal: int = libc::SIGTERM as int;
 /// Signal a process to exit immediately, forcibly killing it. Corresponds to
 /// SIGKILL on unix platforms.
-#[cfg(not(windows))] pub const MustDieSignal: int = libc::SIGKILL as int;
+#[cfg(unix)] pub const MustDieSignal: int = libc::SIGKILL as int;
+
+// STUB: Doesn't mean much on DIOS
+#[cfg(dios)] pub const PleaseExitSignal: int = 0;
+#[cfg(dios)] pub const MustDieSignal: int = 0;
 
 /// Representation of a running or exited child process.
 ///
@@ -582,7 +586,7 @@ impl Process {
                 }
             }
         }
-        #[cfg(windows)] fn collect_status(_p: &mut Process) {}
+        #[cfg(any(windows, dios))] fn collect_status(_p: &mut Process) {}
 
         collect_status(self);
 

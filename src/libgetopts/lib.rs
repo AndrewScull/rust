@@ -88,6 +88,8 @@
        html_playground_url = "http://play.rust-lang.org/")]
 #![feature(slicing_syntax)]
 #![deny(missing_docs)]
+#![allow(staged_experimental)]
+#![allow(staged_unstable)]
 
 #[cfg(test)] #[macro_use] extern crate log;
 

@@ -273,6 +273,8 @@
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/")]
 #![feature(slicing_syntax)]
+#![allow(staged_experimental)]
+#![allow(staged_unstable)]
 
 use self::LabelText::*;
 

@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg(not(dios))]
+
 //! Networking I/O
 
 use io::{IoError, IoResult, InvalidInput};

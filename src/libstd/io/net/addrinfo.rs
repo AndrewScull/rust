@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg(not(dios))]
+
 //! Synchronous DNS Resolution
 //!
 //! Contains the functionality to perform DNS resolution or reverse lookup,

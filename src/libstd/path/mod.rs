@@ -84,7 +84,7 @@ pub use self::posix::Path as PosixPath;
 pub use self::windows::Path as WindowsPath;
 
 /// Typedef for the platform-native path type
-#[cfg(unix)]
+#[cfg(any(unix, dios))]
 pub use self::posix::Path as Path;
 /// Typedef for the platform-native path type
 #[cfg(windows)]

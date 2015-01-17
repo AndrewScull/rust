@@ -28,6 +28,8 @@
 #![feature(unboxed_closures)]
 #![feature(old_impl_check)]
 #![no_std]
+#![allow(staged_experimental)]
+#![allow(staged_unstable)]
 
 #[macro_use]
 extern crate core;

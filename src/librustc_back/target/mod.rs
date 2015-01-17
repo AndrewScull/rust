@@ -73,6 +73,7 @@ mod x86_64_pc_windows_gnu;
 mod x86_64_unknown_freebsd;
 mod x86_64_unknown_dragonfly;
 mod x86_64_unknown_linux_gnu;
+mod x86_64_linux_dios;
 
 /// Everything `rustc` knows about how to compile for a specific target.
 ///
@@ -149,6 +150,8 @@ pub struct TargetOptions {
     /// only realy used for figuring out how to find libraries, since Windows uses its own
     /// library naming convention. Defaults to false.
     pub is_like_windows: bool,
+    /// Whether the target toolchain is like DIOS's. Defaults to false.
+    pub is_like_dios: bool,
     /// Whether the linker support GNU-like arguments such as -O. Defaults to false.
     pub linker_is_gnu: bool,
     /// Whether the linker support rpaths or not. Defaults to false.
@@ -188,6 +191,7 @@ impl Default for TargetOptions {
             staticlib_suffix: ".a".to_string(),
             is_like_osx: false,
             is_like_windows: false,
+            is_like_dios: false,
             linker_is_gnu: false,
             has_rpath: false,
             no_compiler_rt: false,
@@ -278,6 +282,7 @@ impl Target {
         key!(function_sections, bool);
         key!(is_like_osx, bool);
         key!(is_like_windows, bool);
+        key!(is_like_dios, bool);
         key!(linker_is_gnu, bool);
         key!(has_rpath, bool);
         key!(no_compiler_rt, bool);
@@ -350,7 +355,9 @@ impl Target {
             arm_apple_ios,
 
             x86_64_pc_windows_gnu,
-            i686_pc_windows_gnu
+            i686_pc_windows_gnu,
+
+            x86_64_linux_dios
         );
 
 

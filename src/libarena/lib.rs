@@ -33,6 +33,8 @@
 #![feature(unboxed_closures)]
 #![feature(box_syntax)]
 #![allow(missing_docs)]
+#![allow(staged_experimental)]
+#![allow(staged_unstable)]
 
 extern crate alloc;
 
