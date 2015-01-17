@@ -12,55 +12,13 @@
 
 use prelude::v1::*;
 
-use libc;
 use os;
-use std::io::net::ip::*;
-use sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
+use sync::atomic::{AtomicUint, ATOMIC_UINT_INIT, Ordering};
 
 /// Get a port number, starting at 9600, for use in tests
 pub fn next_test_port() -> u16 {
     static NEXT_OFFSET: AtomicUsize = ATOMIC_USIZE_INIT;
     base_port() + NEXT_OFFSET.fetch_add(1, Ordering::Relaxed) as u16
-}
-
-// iOS has a pretty long tmpdir path which causes pipe creation
-// to like: invalid argument: path must be smaller than SUN_LEN
-fn next_test_unix_socket() -> String {
-    static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
-    // base port and pid are an attempt to be unique between multiple
-    // test-runners of different configurations running on one
-    // buildbot, the count is to be unique within this executable.
-    format!("rust-test-unix-path-{}-{}-{}",
-            base_port(),
-            unsafe {libc::getpid()},
-            COUNT.fetch_add(1, Ordering::Relaxed))
-}
-
-/// Get a temporary path which could be the location of a unix socket
-#[cfg(not(target_os = "ios"))]
-pub fn next_test_unix() -> Path {
-    let string = next_test_unix_socket();
-    if cfg!(unix) {
-        os::tmpdir().join(string)
-    } else {
-        Path::new(format!("{}{}", r"\\.\pipe\", string))
-    }
-}
-
-/// Get a temporary path which could be the location of a unix socket
-#[cfg(target_os = "ios")]
-pub fn next_test_unix() -> Path {
-    Path::new(format!("/var/tmp/{}", next_test_unix_socket()))
-}
-
-/// Get a unique IPv4 localhost:port pair starting at 9600
-pub fn next_test_ip4() -> SocketAddr {
-    SocketAddr { ip: Ipv4Addr(127, 0, 0, 1), port: next_test_port() }
-}
-
-/// Get a unique IPv6 localhost:port pair starting at 9600
-pub fn next_test_ip6() -> SocketAddr {
-    SocketAddr { ip: Ipv6Addr(0, 0, 0, 0, 0, 0, 0, 1), port: next_test_port() }
 }
 
 /*

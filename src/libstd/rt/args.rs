@@ -138,7 +138,8 @@ mod imp {
 
 #[cfg(any(target_os = "macos",
           target_os = "ios",
-          target_os = "windows"))]
+          target_os = "windows",
+          dios))]
 mod imp {
     use core::prelude::*;
     use vec::Vec;

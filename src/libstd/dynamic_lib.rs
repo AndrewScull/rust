@@ -12,6 +12,8 @@
 //!
 //! A simple wrapper over the platform's dynamic library facilities
 
+#![cfg(not(dios))]
+
 #![unstable]
 #![allow(missing_docs)]
 

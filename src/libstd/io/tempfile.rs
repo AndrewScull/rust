@@ -126,6 +126,7 @@ impl TempDir {
                        detail: None});
     }
 
+    #[cfg(not(dios))]
     /// Attempts to make a temporary directory inside of `os::tmpdir()` whose
     /// name will have the prefix `prefix`. The directory will be automatically
     /// deleted once the returned wrapper is destroyed.

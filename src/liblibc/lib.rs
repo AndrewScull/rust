@@ -72,6 +72,7 @@
 //! one from Berkeley after the lawsuits died down and the CSRG dissolved.
 
 #![allow(bad_style, raw_pointer_derive)]
+#![allow(staged_experimental)]
 
 #[cfg(feature = "cargo-build")] extern crate "std" as core;
 #[cfg(not(feature = "cargo-build"))] extern crate core;
@@ -87,10 +88,10 @@ pub use types::common::c95::{FILE, c_void, fpos_t};
 pub use types::common::c99::{int8_t, int16_t, int32_t, int64_t};
 pub use types::common::c99::{uint8_t, uint16_t, uint32_t, uint64_t};
 pub use types::common::posix88::{DIR, dirent_t};
-pub use types::os::common::posix01::{timeval};
-pub use types::os::common::bsd44::{addrinfo, in_addr, in6_addr, sockaddr_storage};
-pub use types::os::common::bsd44::{ip_mreq, ip6_mreq, sockaddr, sockaddr_un};
-pub use types::os::common::bsd44::{sa_family_t, sockaddr_in, sockaddr_in6, socklen_t};
+#[cfg(not(dios))] pub use types::os::common::posix01::{timeval};
+#[cfg(not(dios))] pub use types::os::common::bsd44::{addrinfo, in_addr, in6_addr, sockaddr_storage};
+#[cfg(not(dios))] pub use types::os::common::bsd44::{ip_mreq, ip6_mreq, sockaddr, sockaddr_un};
+#[cfg(not(dios))] pub use types::os::common::bsd44::{sa_family_t, sockaddr_in, sockaddr_in6, socklen_t};
 pub use types::os::arch::c95::{c_char, c_double, c_float, c_int, c_uint};
 pub use types::os::arch::c95::{c_long, c_short, c_uchar, c_ulong, wchar_t};
 pub use types::os::arch::c95::{c_ushort, clock_t, ptrdiff_t, c_schar};
@@ -98,29 +99,29 @@ pub use types::os::arch::c95::{size_t, time_t, suseconds_t};
 pub use types::os::arch::c99::{c_longlong, c_ulonglong};
 pub use types::os::arch::c99::{intptr_t, uintptr_t};
 pub use types::os::arch::c99::{intmax_t, uintmax_t};
-pub use types::os::arch::posix88::{dev_t, ino_t, mode_t};
-pub use types::os::arch::posix88::{off_t, pid_t, ssize_t};
+#[cfg(not(dios))] pub use types::os::arch::posix88::{dev_t, ino_t, mode_t};
+#[cfg(not(dios))] pub use types::os::arch::posix88::{off_t, pid_t, ssize_t};
 
 pub use consts::os::c95::{_IOFBF, _IOLBF, _IONBF, BUFSIZ, EOF};
 pub use consts::os::c95::{EXIT_FAILURE, EXIT_SUCCESS};
 pub use consts::os::c95::{FILENAME_MAX, FOPEN_MAX, L_tmpnam};
 pub use consts::os::c95::{RAND_MAX, SEEK_CUR, SEEK_END};
 pub use consts::os::c95::{SEEK_SET, TMP_MAX};
-pub use consts::os::posix88::{F_OK, O_APPEND, O_CREAT, O_EXCL};
-pub use consts::os::posix88::{O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY};
-pub use consts::os::posix88::{R_OK, S_IEXEC, S_IFBLK, S_IFCHR};
-pub use consts::os::posix88::{S_IFDIR, S_IFIFO, S_IFMT, S_IFREG, S_IFLNK};
-pub use consts::os::posix88::{S_IREAD, S_IRUSR, S_IRWXU, S_IWUSR};
-pub use consts::os::posix88::{STDERR_FILENO, STDIN_FILENO, S_IXUSR};
-pub use consts::os::posix88::{STDOUT_FILENO, W_OK, X_OK};
-pub use consts::os::bsd44::{AF_INET, AF_INET6, SOCK_STREAM, SOCK_DGRAM, SOCK_RAW};
-pub use consts::os::bsd44::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP, TCP_NODELAY};
-pub use consts::os::bsd44::{SOL_SOCKET, SO_KEEPALIVE, SO_ERROR};
-pub use consts::os::bsd44::{SO_REUSEADDR, SO_BROADCAST, SHUT_WR, IP_MULTICAST_LOOP};
-pub use consts::os::bsd44::{IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP};
-pub use consts::os::bsd44::{IPV6_ADD_MEMBERSHIP, IPV6_DROP_MEMBERSHIP};
-pub use consts::os::bsd44::{IP_MULTICAST_TTL, IP_TTL, IP_HDRINCL, SHUT_RD};
-pub use consts::os::extra::{IPPROTO_RAW};
+#[cfg(not(dios))] pub use consts::os::posix88::{F_OK, O_APPEND, O_CREAT, O_EXCL};
+#[cfg(not(dios))] pub use consts::os::posix88::{O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY};
+#[cfg(not(dios))] pub use consts::os::posix88::{R_OK, S_IEXEC, S_IFBLK, S_IFCHR};
+#[cfg(not(dios))] pub use consts::os::posix88::{S_IFDIR, S_IFIFO, S_IFMT, S_IFREG, S_IFLNK};
+#[cfg(not(dios))] pub use consts::os::posix88::{S_IREAD, S_IRUSR, S_IRWXU, S_IWUSR};
+#[cfg(not(dios))] pub use consts::os::posix88::{STDERR_FILENO, STDIN_FILENO, S_IXUSR};
+#[cfg(not(dios))] pub use consts::os::posix88::{STDOUT_FILENO, W_OK, X_OK};
+#[cfg(not(dios))] pub use consts::os::bsd44::{AF_INET, AF_INET6, SOCK_STREAM, SOCK_DGRAM, SOCK_RAW};
+#[cfg(not(dios))] pub use consts::os::bsd44::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP, TCP_NODELAY};
+#[cfg(not(dios))] pub use consts::os::bsd44::{SOL_SOCKET, SO_KEEPALIVE, SO_ERROR};
+#[cfg(not(dios))] pub use consts::os::bsd44::{SO_REUSEADDR, SO_BROADCAST, SHUT_WR, IP_MULTICAST_LOOP};
+#[cfg(not(dios))] pub use consts::os::bsd44::{IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP};
+#[cfg(not(dios))] pub use consts::os::bsd44::{IPV6_ADD_MEMBERSHIP, IPV6_DROP_MEMBERSHIP};
+#[cfg(not(dios))] pub use consts::os::bsd44::{IP_MULTICAST_TTL, IP_TTL, IP_HDRINCL, SHUT_RD};
+#[cfg(not(dios))] pub use consts::os::extra::{IPPROTO_RAW};
 
 pub use funcs::c95::ctype::{isalnum, isalpha, iscntrl, isdigit};
 pub use funcs::c95::ctype::{islower, isprint, ispunct, isspace};
@@ -144,17 +145,17 @@ pub use funcs::c95::string::{strlen, strncat, strncmp, strncpy};
 pub use funcs::c95::string::{strpbrk, strrchr, strspn, strstr};
 pub use funcs::c95::string::{strtok, strxfrm};
 
-pub use funcs::posix88::fcntl::{open, creat};
-pub use funcs::posix88::stat_::{chmod, fstat, mkdir, stat};
-pub use funcs::posix88::stdio::{fdopen, fileno, pclose, popen};
-pub use funcs::posix88::unistd::{access, chdir, close, dup, dup2};
-pub use funcs::posix88::unistd::{execv, execve, execvp, getcwd};
-pub use funcs::posix88::unistd::{getpid, isatty, lseek, pipe, read};
-pub use funcs::posix88::unistd::{rmdir, unlink, write};
+#[cfg(not(dios))] pub use funcs::posix88::fcntl::{open, creat};
+#[cfg(not(dios))] pub use funcs::posix88::stat_::{chmod, fstat, mkdir, stat};
+#[cfg(not(dios))] pub use funcs::posix88::stdio::{fdopen, fileno, pclose, popen};
+#[cfg(not(dios))] pub use funcs::posix88::unistd::{access, chdir, close, dup, dup2};
+#[cfg(not(dios))] pub use funcs::posix88::unistd::{execv, execve, execvp, getcwd};
+#[cfg(not(dios))] pub use funcs::posix88::unistd::{getpid, isatty, lseek, pipe, read};
+#[cfg(not(dios))] pub use funcs::posix88::unistd::{rmdir, unlink, write};
 
-pub use funcs::bsd43::{socket, setsockopt, bind, send, recv, recvfrom};
-pub use funcs::bsd43::{listen, sendto, accept, connect, getpeername, getsockname};
-pub use funcs::bsd43::{shutdown};
+#[cfg(not(dios))] pub use funcs::bsd43::{socket, setsockopt, bind, send, recv, recvfrom};
+#[cfg(not(dios))] pub use funcs::bsd43::{listen, sendto, accept, connect, getpeername, getsockname};
+#[cfg(not(dios))] pub use funcs::bsd43::{shutdown};
 
 // But we also reexport most everything
 // if you're interested in writing platform-specific code.
@@ -272,6 +273,18 @@ pub use funcs::bsd43::{shutdown};
 #[cfg(windows)] pub use funcs::extra::kernel32::{MoveFileExW, VirtualProtect};
 #[cfg(windows)] pub use funcs::extra::msvcrt::{get_osfhandle, open_osfhandle};
 #[cfg(windows)] pub use funcs::extra::winsock::{ioctlsocket};
+
+#[cfg(dios)] pub use consts::os::extra::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+#[cfg(dios)] pub use consts::os::extra::{STDOUT_NAME};
+#[cfg(dios)] pub use types::os::extra::{pid_t, timeval, socklen_t, ssize_t};
+#[cfg(dios)] pub use types::os::extra::{dios_flags_t};
+#[cfg(dios)] pub use types::os::extra::{dios_ref_t, dios_name_t};
+#[cfg(dios)] pub use types::os::extra::{dios_task_spec_t, dios_iovec_t};
+#[cfg(dios)] pub use funcs::extra::{dios_create, dios_delete};
+#[cfg(dios)] pub use funcs::extra::{dios_lookup, dios_run, dios_copy};
+#[cfg(dios)] pub use funcs::extra::{dios_begin_read, dios_end_read};
+#[cfg(dios)] pub use funcs::extra::{dios_begin_write, dios_end_write};
+#[cfg(dios)] pub use funcs::extra::{dios_select, dios_test};
 
 #[cfg(any(target_os = "linux",
           target_os = "android",
@@ -2075,6 +2088,122 @@ pub mod types {
 
                 pub type mach_timebase_info_data_t = mach_timebase_info;
             }
+        }
+    }
+
+    #[cfg(dios)]
+    pub mod os {
+        #[cfg(target_arch = "x86_64")]
+        pub mod arch {
+            pub mod c95 {
+                pub type c_char = i8;
+                pub type c_schar = i8;
+                pub type c_uchar = u8;
+                pub type c_short = i16;
+                pub type c_ushort = u16;
+                pub type c_int = i32;
+                pub type c_uint = u32;
+                pub type c_long = i64;
+                pub type c_ulong = u64;
+                pub type c_float = f32;
+                pub type c_double = f64;
+                pub type size_t = u64;
+                pub type ptrdiff_t = i64;
+                pub type clock_t = i64;
+                pub type time_t = i64;
+                pub type suseconds_t = i64;
+                pub type wchar_t = i32;
+            }
+            pub mod c99 {
+                pub type c_longlong = i64;
+                pub type c_ulonglong = u64;
+                pub type intptr_t = i64;
+                pub type uintptr_t = u64;
+                pub type intmax_t = i64;
+                pub type uintmax_t = u64;
+            }
+        }
+        pub mod extra {
+            use types::common::c95::{c_void};
+            use types::common::c99::{uint8_t, uint64_t};
+            use types::os::arch::c95::{time_t, suseconds_t};
+           
+            pub type dios_flags_t = uint64_t;
+           
+            #[repr(C)]
+            #[derive(Copy)] pub enum dios_ref_type_t {
+                D_REF_PRIVMEM,
+                D_REF_SHMEM,
+                D_REF_BLOB,
+                D_REF_HDFS,
+                D_REF_SPECIAL,
+                D_REF_TASK,
+            }
+           
+            #[repr(C)]
+            #[derive(Copy)] pub enum dios_ref_proximity_t {
+                D_REF_LOCAL_TO_CPU,
+                D_REF_LOCAL_MEMORY,
+                D_REF_LOCAL_DISK,
+                D_REF_LOCAL_DEVICE,
+                D_REF_REMOTE_MEMORY_1HOP,
+                D_REF_REMOTE_MEMORY_MULTIHOP,
+                D_REF_REMOTE_MEMORY_DISTANT,
+                D_REF_REMOTE_DISK_1HOP,
+                D_REF_REMOTE_DISK_MULTIHOP,
+                D_REF_REMOTE_DISK_DISTANT,
+            }
+           
+            #[repr(C)]
+            #[derive(Copy)] pub enum dios_ref_consistency_t {
+                D_REF_CONSISTENCY_NONE,
+                D_REF_CONSISTENCY_EVENTUAL,
+                D_REF_CONSISTENCY_MUTEX,
+            }
+           
+            #[repr(C)]
+            #[derive(Copy)] pub struct dios_ref_t {
+                pub id: uint64_t,
+                pub dtype: dios_ref_type_t,
+                pub proximity: dios_ref_proximity_t,
+                pub read_consistency: dios_ref_consistency_t,
+                pub write_consistency: dios_ref_consistency_t,
+                pub io_ready: bool,
+                pub read_buffer_size: uint64_t,
+                pub write_buffer_size: uint64_t,
+            }
+           
+            #[repr(C)]
+            #[derive(Copy)] pub struct dios_name_t {
+                pub raw: [uint8_t; 32],
+            }
+           
+            #[repr(C)]
+            #[derive(Copy)] pub struct dios_task_spec_t {
+                pub input_names: *mut *mut dios_name_t,
+                pub input_count: uint64_t,
+                pub output_names: *mut *mut dios_name_t,
+                pub output_count: uint64_t,
+            }
+           
+            #[repr(C)]
+            #[derive(Copy)] pub struct dios_iovec_t {
+                pub buf: *mut c_void,
+                pub len: uint64_t,
+            }
+
+            // Hacky: Some POSIX emulation
+            pub type pid_t = dios_name_t;
+
+            #[repr(C)]
+            #[derive(Copy)] pub struct timeval {
+                pub tv_sec: time_t,
+                pub tv_usec: suseconds_t,
+            }
+            
+            pub type socklen_t = u32;
+
+            pub type ssize_t = i64;
         }
     }
 }
@@ -4060,6 +4189,43 @@ pub mod consts {
             pub const _SC_XBS5_LPBIG_OFFBIG : c_int = 125;
         }
     }
+    
+    #[cfg(dios)]
+    pub mod os {
+        pub mod c95 {
+            use types::os::arch::c95::{c_int, c_uint};
+
+            pub const EXIT_FAILURE : c_int = 1;
+            pub const EXIT_SUCCESS : c_int = 0;
+            pub const RAND_MAX : c_int = 2147483647;
+            pub const EOF : c_int = -1;
+            pub const SEEK_SET : c_int = 0;
+            pub const SEEK_CUR : c_int = 1;
+            pub const SEEK_END : c_int = 2;
+            pub const _IOFBF : c_int = 0;
+            pub const _IONBF : c_int = 2;
+            pub const _IOLBF : c_int = 1;
+            pub const BUFSIZ : c_uint = 8192_u32;
+            pub const FOPEN_MAX : c_uint = 16_u32;
+            pub const FILENAME_MAX : c_uint = 4096_u32;
+            pub const L_tmpnam : c_uint = 20_u32;
+            pub const TMP_MAX : c_uint = 238328_u32;
+        }
+
+        pub mod extra {
+            use types::os::arch::c95::c_int;
+            use types::os::extra::dios_name_t;
+            
+            pub const STDIN_FILENO : c_int = 0;
+            pub const STDOUT_FILENO : c_int = 1;
+            pub const STDERR_FILENO : c_int = 2;
+
+            // :(
+            pub const STDOUT_NAME: dios_name_t = dios_name_t{raw: [
+                0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+            ]};
+        }
+    }
 }
 
 
@@ -4697,7 +4863,7 @@ pub mod funcs {
         }
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub mod bsd43 {
         use types::common::c95::{c_void};
         use types::os::common::bsd44::{socklen_t, sockaddr, ifaddrs};
@@ -5066,6 +5232,67 @@ pub mod funcs {
             extern "system" {
                 pub fn ioctlsocket(s: SOCKET, cmd: c_long, argp: *mut c_ulong) -> c_int;
             }
+        }
+    }
+
+    #[cfg(dios)]
+    pub mod extra {
+        use types::common::c99::{uint64_t};
+        use types::os::arch::c95::{c_long};
+        use types::os::extra::{dios_flags_t,
+                               dios_ref_t,
+                               dios_name_t,
+                               dios_task_spec_t,
+                               dios_iovec_t};
+       
+        extern {
+            pub fn dios_create(flags: dios_flags_t,
+                               name: *mut dios_name_t,
+                               dref: *mut *mut dios_ref_t)
+                               -> c_long;
+            pub fn dios_lookup(flags: dios_flags_t,
+                               name: *const  dios_name_t,
+                               drefs: *mut *mut dios_ref_t,
+                               refs_count: *mut uint64_t)
+                               -> c_long;
+            pub fn dios_run(flags: dios_flags_t,
+                            dref: *mut dios_ref_t,
+                            task_spec: *mut dios_task_spec_t,
+                            new_ref: *mut *mut dios_ref_t)
+                            -> c_long;
+            pub fn dios_copy(flags: dios_flags_t,
+                             drefs: *mut *mut dios_ref_t,
+                             ref_count: uint64_t,
+                             target: *mut dios_ref_t)
+                             -> c_long;
+            pub fn dios_delete(flags: dios_flags_t,
+                               dref: *mut dios_ref_t)
+                               -> c_long;
+            pub fn dios_begin_read(flags: dios_flags_t,
+                                   dref: *mut dios_ref_t,
+                                   len: uint64_t,
+                                   iov: *mut *mut dios_iovec_t)
+                                   -> c_long;
+            pub fn dios_end_read(flags: dios_flags_t,
+                                 dref: *mut dios_ref_t,
+                                 iov: *mut dios_iovec_t)
+                                 -> c_long;
+            pub fn dios_begin_write(flags: dios_flags_t,
+                                    dref: *mut dios_ref_t,
+                                    len: uint64_t,
+                                    iov: *mut *mut dios_iovec_t)
+                                    -> c_long;
+            pub fn dios_end_write(flags: dios_flags_t,
+                                  dref: *mut dios_ref_t,
+                                  len: uint64_t,
+                                  iov: *mut dios_iovec_t)
+                                  -> c_long;
+            pub fn dios_select(flags: dios_flags_t,
+                               drefs: *mut *mut dios_ref_t,
+                               num_refs: uint64_t,
+                               selected: *mut *mut dios_ref_t)
+                               -> c_long;
+            pub fn dios_test() -> c_long;
         }
     }
 }

@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg(not(dios))]
+
 //! Named pipes
 //!
 //! This module contains the ability to communicate over named pipes with

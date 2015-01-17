@@ -29,6 +29,8 @@
 #![feature(old_impl_check)]
 #![allow(unknown_features)] #![feature(int_uint)]
 #![no_std]
+#![allow(staged_experimental)]
+#![allow(staged_unstable)]
 
 #[macro_use]
 extern crate core;

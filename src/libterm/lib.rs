@@ -53,6 +53,8 @@
 #![feature(box_syntax)]
 #![allow(unknown_features)] #![feature(int_uint)]
 #![deny(missing_docs)]
+#![allow(staged_experimental)]
+#![allow(staged_unstable)]
 
 #[macro_use] extern crate log;
 

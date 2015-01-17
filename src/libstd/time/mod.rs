@@ -10,6 +10,7 @@
 
 //! Temporal quantification.
 
+#[cfg(any(unix, windows))]
 use libc;
 
 pub use self::duration::Duration;
@@ -53,7 +54,13 @@ fn precise_time_ns() -> u64 {
         }
     }
 
-    #[cfg(not(any(windows, target_os = "macos", target_os = "ios")))]
+    #[cfg(dios)]
+    fn os_precise_time_ns() -> u64 {
+        // STUB:
+        0
+    }
+
+    #[cfg(not(any(windows, dios, target_os = "macos", target_os = "ios")))]
     fn os_precise_time_ns() -> u64 {
         let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
         unsafe {

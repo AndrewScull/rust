@@ -119,7 +119,7 @@ case $maybe_os in
   linux-musl* | linux-uclibc* | uclinux-uclibc* | uclinux-gnu* | kfreebsd*-gnu* | \
   knetbsd*-gnu* | netbsd*-gnu* | \
   kopensolaris*-gnu* | \
-  storm-chaos* | os2-emx* | rtmk-nova*)
+  storm-chaos* | os2-emx* | rtmk-nova* | linux-dios)
     os=-$maybe_os
     basic_machine=`echo $1 | sed 's/^\(.*\)-\([^-]*-[^-]*\)$/\1/'`
     ;;
@@ -1378,6 +1378,8 @@ case $os in
 	      | -powermax* | -dnix* | -nx6 | -nx7 | -sei* | -dragonfly* \
 	      | -skyos* | -haiku* | -rdos* | -toppers* | -drops* | -es*)
 	# Remember, each alternative MUST END IN *, to match a version number.
+		;;
+	-linux-dios)
 		;;
 	-qnx*)
 		case $basic_machine in

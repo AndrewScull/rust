@@ -152,6 +152,11 @@ pub unsafe fn record_rust_managed_stack_bounds(stack_lo: uint, stack_hi: uint) {
     }
 }
 
+// The TLS register stuff wasn't working so hack around
+// May be due to not using gcc crt0 etc. so fs isn't initialized?
+#[cfg(dios)]
+static mut STACK_LIMIT: uint = 0;
+
 /// Records the current limit of the stack as specified by `end`.
 ///
 /// This is stored in an OS-dependent location, likely inside of the thread
@@ -192,6 +197,10 @@ pub unsafe fn record_sp_limit(limit: uint) {
     #[cfg(all(target_arch = "x86_64", target_os = "dragonfly"))] #[inline(always)]
     unsafe fn target_record_sp_limit(limit: uint) {
         asm!("movq $0, %fs:32" :: "r"(limit) :: "volatile")
+    }
+    #[cfg(all(target_arch = "x86_64", dios))] #[inline(always)]
+    unsafe fn target_record_sp_limit(limit: uint) {
+        STACK_LIMIT = limit;
     }
 
     // x86
@@ -286,6 +295,10 @@ pub unsafe fn get_sp_limit() -> uint {
         let limit;
         asm!("movq %fs:32, $0" : "=r"(limit) ::: "volatile");
         return limit;
+    }
+    #[cfg(all(target_arch = "x86_64", dios))] #[inline(always)]
+    unsafe fn target_get_sp_limit() -> uint {
+        return STACK_LIMIT;
     }
 
 

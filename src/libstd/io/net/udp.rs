@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg(not(dios))]
+
 //! UDP (User Datagram Protocol) network connections.
 //!
 //! This module contains the ability to open a UDP stream to a socket address.

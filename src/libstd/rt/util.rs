@@ -96,6 +96,7 @@ pub const Stdout: Stdio = Stdio(libc::STDOUT_FILENO);
 pub const Stderr: Stdio = Stdio(libc::STDERR_FILENO);
 
 impl Stdio {
+    #[cfg(any(unix, windows))]
     pub fn write_bytes(&mut self, data: &[u8]) {
         #[cfg(unix)]
         type WriteLen = libc::size_t;
@@ -106,6 +107,23 @@ impl Stdio {
             libc::write(fd,
                         data.as_ptr() as *const libc::c_void,
                         data.len() as WriteLen);
+        }
+    }
+
+    #[cfg(dios)]
+    pub fn write_bytes(&mut self, data: &[u8]) {
+        use mem;
+        use ptr;
+
+        unsafe {
+            // Write both stdout and stderr to the same console
+            let mut obj_ref: *mut libc::dios_ref_t = mem::uninitialized();
+            let mut ref_count: libc::uint64_t = 1;
+            assert_eq!(libc::dios_lookup(1, &libc::STDOUT_NAME, &mut obj_ref, &mut ref_count), 1);
+            let mut iov: *mut libc::dios_iovec_t = mem::uninitialized();
+            assert_eq!(libc::dios_begin_write(0, obj_ref, data.len() as u64, &mut iov), 0);
+            ptr::copy_nonoverlapping_memory((*iov).buf, data.as_ptr() as *const libc::c_void, data.len());
+            assert_eq!(libc::dios_end_write(0, obj_ref, data.len() as u64, iov), 0);
         }
     }
 }

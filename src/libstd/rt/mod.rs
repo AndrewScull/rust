@@ -56,7 +56,8 @@ pub const DEFAULT_ERROR_CODE: int = 101;
 
 #[cfg(any(windows, android))]
 const OS_DEFAULT_STACK_ESTIMATE: uint = 1 << 20;
-#[cfg(all(unix, not(android)))]
+#[cfg(any(all(unix, not(android)),
+          dios))]
 const OS_DEFAULT_STACK_ESTIMATE: uint = 2 * (1 << 20);
 
 #[cfg(not(test))]
@@ -105,7 +106,7 @@ fn lang_start(main: *const u8, argc: int, argv: *const *const u8) -> int {
         //
         // Hence, we set SIGPIPE to ignore when the program starts up in order
         // to prevent this problem.
-        #[cfg(windows)] fn ignore_sigpipe() {}
+        #[cfg(any(windows, dios))] fn ignore_sigpipe() {}
         #[cfg(unix)] fn ignore_sigpipe() {
             use libc;
             use libc::funcs::posix01::signal::signal;

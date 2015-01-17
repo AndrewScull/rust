@@ -256,6 +256,8 @@ pub mod sync;
 #[path = "sys/unix/mod.rs"] mod sys;
 #[cfg(windows)]
 #[path = "sys/windows/mod.rs"] mod sys;
+#[cfg(dios)]
+#[path = "sys/dios/mod.rs"] mod sys;
 
 #[path = "sys/common/mod.rs"] mod sys_common;
 
