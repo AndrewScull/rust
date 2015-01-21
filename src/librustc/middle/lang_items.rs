@@ -167,7 +167,7 @@ impl<'a, 'v> Visitor<'v> for LanguageItemCollector<'a> {
 
 impl<'a> LanguageItemCollector<'a> {
     pub fn new(session: &'a Session) -> LanguageItemCollector<'a> {
-        let mut item_refs = FnvHashMap::new();
+        let mut item_refs = FnvHashMap();
 
         $( item_refs.insert($name, $variant as uint); )*
 
@@ -306,8 +306,6 @@ lets_do_this! {
 
     TyDescStructLangItem,            "ty_desc",                 ty_desc;
     OpaqueStructLangItem,            "opaque",                  opaque;
-
-    TypeIdLangItem,                  "type_id",                 type_id;
 
     EhPersonalityLangItem,           "eh_personality",          eh_personality;
 

@@ -253,9 +253,8 @@ pub fn file_to_filemap(sess: &ParseSess, path: &Path, spanopt: Option<Span>)
     let bytes = match File::open(path).read_to_end() {
         Ok(bytes) => bytes,
         Err(e) => {
-            err(&format!("couldn't read {:?}: {:?}",
-                        path.display(),
-                        e)[]);
+            err(&format!("couldn't read {:?}: {}",
+                        path.display(), e)[]);
             unreachable!()
         }
     };
@@ -1066,9 +1065,7 @@ mod test {
                                     }),
                                         id: ast::DUMMY_NODE_ID
                                     }),
-                                output: ast::Return(P(ast::Ty{id: ast::DUMMY_NODE_ID,
-                                                  node: ast::TyTup(vec![]),
-                                                  span:sp(15,15)})), // not sure
+                                output: ast::DefaultReturn(sp(15, 15)),
                                 variadic: false
                             }),
                                     ast::Unsafety::Normal,

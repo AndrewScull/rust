@@ -26,8 +26,8 @@
 #![feature(unsafe_destructor, slicing_syntax)]
 #![feature(box_syntax)]
 #![feature(unboxed_closures)]
-#![feature(old_impl_check)]
 #![allow(unknown_features)] #![feature(int_uint)]
+#![allow(unstable)]
 #![no_std]
 #![allow(staged_experimental)]
 #![allow(staged_unstable)]
@@ -72,12 +72,12 @@ pub mod string;
 pub mod vec;
 pub mod vec_map;
 
-#[stable]
+#[unstable = "RFC 509"]
 pub mod bitv {
     pub use bit::{Bitv, Iter};
 }
 
-#[stable]
+#[unstable = "RFC 509"]
 pub mod bitv_set {
     pub use bit::{BitvSet, Union, Intersection, Difference, SymmetricDifference};
     pub use bit::SetIter as Iter;
@@ -104,10 +104,10 @@ pub fn fixme_14344_be_sure_to_link_to_collections() {}
 mod std {
     pub use core::fmt;      // necessary for panic!()
     pub use core::option;   // necessary for panic!()
-    pub use core::clone;    // deriving(Clone)
-    pub use core::cmp;      // deriving(Eq, Ord, etc.)
-    pub use core::marker;  // deriving(Copy)
-    pub use core::hash;     // deriving(Hash)
+    pub use core::clone;    // derive(Clone)
+    pub use core::cmp;      // derive(Eq, Ord, etc.)
+    pub use core::marker;  // derive(Copy)
+    pub use core::hash;     // derive(Hash)
 }
 
 #[cfg(test)]
@@ -142,4 +142,14 @@ mod prelude {
     pub use slice::SliceConcatExt;
     pub use string::{String, ToString};
     pub use vec::Vec;
+}
+
+/// An endpoint of a range of keys.
+pub enum Bound<T> {
+    /// An inclusive bound.
+    Included(T),
+    /// An exclusive bound.
+    Excluded(T),
+    /// An infinite endpoint. Indicates that there is no bound in this direction.
+    Unbounded,
 }

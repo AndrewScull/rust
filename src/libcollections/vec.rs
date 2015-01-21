@@ -426,7 +426,7 @@ impl<T> Vec<T> {
     pub fn as_mut_slice<'a>(&'a mut self) -> &'a mut [T] {
         unsafe {
             mem::transmute(RawSlice {
-                data: *self.ptr as *const T,
+                data: *self.ptr,
                 len: self.len,
             })
         }
@@ -574,7 +574,7 @@ impl<T> Vec<T> {
                 let ptr = self.as_mut_ptr().offset(index as int);
                 // copy it out, unsafely having a copy of the value on
                 // the stack and in the vector at the same time.
-                ret = ptr::read(ptr as *const T);
+                ret = ptr::read(ptr);
 
                 // Shift everything down to fill in that spot.
                 ptr::copy_memory(ptr, &*ptr.offset(1), len - index - 1);
@@ -679,6 +679,43 @@ impl<T> Vec<T> {
                 Some(ptr::read(self.get_unchecked(self.len())))
             }
         }
+    }
+
+    /// Moves all the elements of `other` into `Self`, leaving `other` empty.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of elements in the vector overflows a `uint`.
+    ///
+    /// # Examples
+    /// ```rust
+    /// let mut vec = vec![1, 2, 3];
+    /// let mut vec2 = vec![4, 5, 6];
+    /// vec.append(&mut vec2);
+    /// assert_eq!(vec, vec![1, 2, 3, 4, 5, 6]);
+    /// assert_eq!(vec2, vec![]);
+    /// ```
+    #[inline]
+    #[unstable = "new API, waiting for dust to settle"]
+    pub fn append(&mut self, other: &mut Self) {
+        if mem::size_of::<T>() == 0 {
+            // zero-size types consume no memory, so we can't rely on the
+            // address space running out
+            self.len = self.len.checked_add(other.len()).expect("length overflow");
+            unsafe { other.set_len(0) }
+            return;
+        }
+        self.reserve(other.len());
+        let len = self.len();
+        unsafe {
+            ptr::copy_nonoverlapping_memory(
+                self.get_unchecked_mut(len),
+                other.as_ptr(),
+                other.len());
+        }
+
+        self.len += other.len();
+        unsafe { other.set_len(0); }
     }
 
     /// Creates a draining iterator that clears the `Vec` and iterates over
@@ -842,7 +879,7 @@ impl<T> Vec<T> {
                     //          |         |
                     //          end_u     end_t
 
-                    let t = ptr::read(pv.start_t as *const T);
+                    let t = ptr::read(pv.start_t);
                     //  start_u start_t
                     //  |       |
                     // +-+-+-+-+-+-+-+-+-+
@@ -1185,14 +1222,6 @@ impl<T:Clone> Clone for Vec<T> {
     }
 }
 
-#[cfg(stage0)]
-impl<S: hash::Writer, T: Hash<S>> Hash<S> for Vec<T> {
-    #[inline]
-    fn hash(&self, state: &mut S) {
-        self.as_slice().hash(state);
-    }
-}
-#[cfg(not(stage0))]
 impl<S: hash::Writer + hash::Hasher, T: Hash<S>> Hash<S> for Vec<T> {
     #[inline]
     fn hash(&self, state: &mut S) {
@@ -1414,7 +1443,7 @@ impl<T> AsSlice<T> for Vec<T> {
     fn as_slice<'a>(&'a self) -> &'a [T] {
         unsafe {
             mem::transmute(RawSlice {
-                data: *self.ptr as *const T,
+                data: *self.ptr,
                 len: self.len
             })
         }
@@ -1777,11 +1806,11 @@ impl<T,U> Drop for PartialVecNonZeroSized<T,U> {
 
             // We have instances of `U`s and `T`s in `vec`. Destruct them.
             while self.start_u != self.end_u {
-                let _ = ptr::read(self.start_u as *const U); // Run a `U` destructor.
+                let _ = ptr::read(self.start_u); // Run a `U` destructor.
                 self.start_u = self.start_u.offset(1);
             }
             while self.start_t != self.end_t {
-                let _ = ptr::read(self.start_t as *const T); // Run a `T` destructor.
+                let _ = ptr::read(self.start_t); // Run a `T` destructor.
                 self.start_t = self.start_t.offset(1);
             }
             // After this destructor ran, the destructor of `vec` will run,
@@ -2296,6 +2325,15 @@ mod tests {
         let xs = vec![1u, 2, 3];
         let ys = xs.into_boxed_slice();
         assert_eq!(ys.as_slice(), [1u, 2, 3]);
+    }
+
+    #[test]
+    fn test_append() {
+        let mut vec = vec![1, 2, 3];
+        let mut vec2 = vec![4, 5, 6];
+        vec.append(&mut vec2);
+        assert_eq!(vec, vec![1, 2, 3, 4, 5, 6]);
+        assert_eq!(vec2, vec![]);
     }
 
     #[bench]

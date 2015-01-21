@@ -355,18 +355,15 @@ pub fn trans_intrinsic_call<'a, 'blk, 'tcx>(mut bcx: Block<'blk, 'tcx>,
                 ccx.tcx(),
                 *substs.types.get(FnSpace, 0),
                 &ccx.link_meta().crate_hash);
-            // NB: This needs to be kept in lockstep with the TypeId struct in
-            //     the intrinsic module
             C_u64(ccx, hash)
         }
         (_, "init") => {
             let tp_ty = *substs.types.get(FnSpace, 0);
-            let lltp_ty = type_of::arg_type_of(ccx, tp_ty);
-            if return_type_is_void(ccx, tp_ty) {
-                C_nil(ccx)
-            } else {
-                C_null(lltp_ty)
+            if !return_type_is_void(ccx, tp_ty) {
+                // Just zero out the stack slot. (See comment on base::memzero for explaination)
+                zero_mem(bcx, llresult, tp_ty);
             }
+            C_nil(ccx)
         }
         // Effectively no-ops
         (_, "uninit") | (_, "forget") => {

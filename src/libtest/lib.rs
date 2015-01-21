@@ -35,6 +35,7 @@
 #![feature(asm, slicing_syntax)]
 #![feature(box_syntax)]
 #![allow(unknown_features)] #![feature(int_uint)]
+#![allow(unstable)]
 
 extern crate getopts;
 extern crate regex;
@@ -186,7 +187,7 @@ impl fmt::Show for TestFn {
 
 /// Manager of the benchmarking runs.
 ///
-/// This is feed into functions marked with `#[bench]` to allow for
+/// This is fed into functions marked with `#[bench]` to allow for
 /// set-up & tear-down before running a piece of code repeatedly via a
 /// call to `iter`.
 #[derive(Copy)]

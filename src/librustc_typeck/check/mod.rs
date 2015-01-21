@@ -104,7 +104,6 @@ use rscope::RegionScope;
 use session::Session;
 use {CrateCtxt, lookup_def_ccx, no_params, require_same_types};
 use TypeAndSubsts;
-use middle::lang_items::TypeIdLangItem;
 use lint;
 use util::common::{block_query, indenter, loop_query};
 use util::ppaux::{self, Repr};
@@ -373,16 +372,16 @@ impl<'a, 'tcx> Inherited<'a, 'tcx> {
            -> Inherited<'a, 'tcx> {
         Inherited {
             infcx: infer::new_infer_ctxt(tcx),
-            locals: RefCell::new(NodeMap::new()),
+            locals: RefCell::new(NodeMap()),
             param_env: param_env,
-            node_types: RefCell::new(NodeMap::new()),
-            item_substs: RefCell::new(NodeMap::new()),
-            adjustments: RefCell::new(NodeMap::new()),
-            method_map: RefCell::new(FnvHashMap::new()),
-            object_cast_map: RefCell::new(NodeMap::new()),
-            upvar_borrow_map: RefCell::new(FnvHashMap::new()),
-            unboxed_closures: RefCell::new(DefIdMap::new()),
-            fn_sig_map: RefCell::new(NodeMap::new()),
+            node_types: RefCell::new(NodeMap()),
+            item_substs: RefCell::new(NodeMap()),
+            adjustments: RefCell::new(NodeMap()),
+            method_map: RefCell::new(FnvHashMap()),
+            object_cast_map: RefCell::new(NodeMap()),
+            upvar_borrow_map: RefCell::new(FnvHashMap()),
+            unboxed_closures: RefCell::new(DefIdMap()),
+            fn_sig_map: RefCell::new(NodeMap()),
             fulfillment_cx: RefCell::new(traits::FulfillmentContext::new()),
         }
     }
@@ -3153,7 +3152,7 @@ fn check_expr_with_unifier<'a, 'tcx, F>(fcx: &FnCtxt<'a, 'tcx>,
                                                 enum_id_opt: Option<ast::DefId>)  {
         let tcx = fcx.ccx.tcx;
 
-        let mut class_field_map = FnvHashMap::new();
+        let mut class_field_map = FnvHashMap();
         let mut fields_found = 0;
         for field in field_types.iter() {
             class_field_map.insert(field.name, (field.id, false));
@@ -5239,18 +5238,7 @@ pub fn check_intrinsic_type(ccx: &CrateCtxt, it: &ast::ForeignItem) {
               });
               (1u, Vec::new(), td_ptr)
             }
-            "type_id" => {
-                let langid = ccx.tcx.lang_items.require(TypeIdLangItem);
-                match langid {
-                    Ok(did) => (1u,
-                                Vec::new(),
-                                ty::mk_struct(ccx.tcx, did,
-                                              ccx.tcx.mk_substs(subst::Substs::empty()))),
-                    Err(msg) => {
-                        tcx.sess.span_fatal(it.span, &msg[]);
-                    }
-                }
-            },
+            "type_id" => (1u, Vec::new(), ccx.tcx.types.u64),
             "offset" => {
               (1,
                vec!(

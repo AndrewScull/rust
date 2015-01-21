@@ -18,7 +18,7 @@
 //!
 //! The [`ptr`](ptr/index.html) and [`mem`](mem/index.html)
 //! modules deal with unsafe pointers and memory manipulation.
-//! [`markers`](markers/index.html) defines the special built-in traits,
+//! [`marker`](marker/index.html) defines the special built-in traits,
 //! and [`raw`](raw/index.html) the runtime representation of Rust types.
 //! These are some of the lowest-level building blocks in Rust.
 //!
@@ -111,7 +111,9 @@
 #![feature(box_syntax)]
 #![feature(old_impl_check)]
 #![feature(optin_builtin_traits)]
-#![allow(unknown_features)] #![feature(int_uint)]
+#![feature(int_uint)]
+#![feature(int_uint)]
+#![allow(unstable)]
 
 // Don't link to std. We are std.
 #![no_std]
@@ -135,6 +137,8 @@ extern crate "rand" as core_rand;
 extern crate alloc;
 extern crate unicode;
 extern crate libc;
+
+#[macro_use] #[no_link] extern crate rustc_bitflags;
 
 // Make std testable by not duplicating lang items. See #2912
 #[cfg(test)] extern crate "std" as realstd;
@@ -180,9 +184,6 @@ pub use unicode::char;
 
 #[macro_use]
 mod macros;
-
-#[macro_use]
-pub mod bitflags;
 
 mod rtdeps;
 

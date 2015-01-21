@@ -117,14 +117,6 @@ impl<T: ?Sized + Ord> Ord for Box<T> {
 #[stable]
 impl<T: ?Sized + Eq> Eq for Box<T> {}
 
-#[cfg(stage0)]
-impl<S: hash::Writer, T: ?Sized + Hash<S>> Hash<S> for Box<T> {
-    #[inline]
-    fn hash(&self, state: &mut S) {
-        (**self).hash(state);
-    }
-}
-#[cfg(not(stage0))]
 impl<S: hash::Hasher, T: ?Sized + Hash<S>> Hash<S> for Box<T> {
     #[inline]
     fn hash(&self, state: &mut S) {
@@ -133,8 +125,11 @@ impl<S: hash::Hasher, T: ?Sized + Hash<S>> Hash<S> for Box<T> {
 }
 
 /// Extension methods for an owning `Any` trait object.
-#[unstable = "post-DST and coherence changes, this will not be a trait but \
-              rather a direct `impl` on `Box<Any>`"]
+#[unstable = "this trait will likely disappear once compiler bugs blocking \
+              a direct impl on `Box<Any>` have been fixed "]
+// FIXME(#18737): this should be a direct impl on `Box<Any>`. If you're
+//                removing this please make sure that you can downcase on
+//                `Box<Any + Send>` as well as `Box<Any>`
 pub trait BoxAny {
     /// Returns the boxed value if it is of type `T`, or
     /// `Err(Self)` if it isn't.
@@ -142,10 +137,9 @@ pub trait BoxAny {
     fn downcast<T: 'static>(self) -> Result<Box<T>, Self>;
 }
 
+#[stable]
 impl BoxAny for Box<Any> {
     #[inline]
-    #[unstable = "method may be renamed with respect to other downcasting \
-                  methods"]
     fn downcast<T: 'static>(self) -> Result<Box<T>, Box<Any>> {
         if self.is::<T>() {
             unsafe {

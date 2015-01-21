@@ -33,7 +33,7 @@ pub struct Builder<'a, 'tcx: 'a> {
 // lot more efficient) than doing str::as_c_str("", ...) every time.
 pub fn noname() -> *const c_char {
     static CNULL: c_char = 0;
-    &CNULL as *const c_char
+    &CNULL
 }
 
 impl<'a, 'tcx> Builder<'a, 'tcx> {
@@ -59,7 +59,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 // Build version of path with cycles removed.
 
                 // Pass 1: scan table mapping str -> rightmost pos.
-                let mut mm = FnvHashMap::new();
+                let mut mm = FnvHashMap();
                 let len = v.len();
                 let mut i = 0u;
                 while i < len {

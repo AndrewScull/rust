@@ -234,7 +234,7 @@ use error::{FromError, Error};
 use fmt;
 use int;
 use iter::{Iterator, IteratorExt};
-use marker::Sized;
+use marker::{Sized, Send};
 use mem::transmute;
 use ops::FnOnce;
 use option::Option;
@@ -360,8 +360,8 @@ impl Error for IoError {
     }
 }
 
-impl FromError<IoError> for Box<Error> {
-    fn from_error(err: IoError) -> Box<Error> {
+impl FromError<IoError> for Box<Error + Send> {
+    fn from_error(err: IoError) -> Box<Error + Send> {
         box err
     }
 }
@@ -931,15 +931,14 @@ unsafe fn slice_vec_capacity<'a, T>(v: &'a mut Vec<T>, start: uint, end: uint) -
 /// A `RefReader` is a struct implementing `Reader` which contains a reference
 /// to another reader. This is often useful when composing streams.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
-/// # fn main() {}
-/// # fn process_input<R: Reader>(r: R) {}
-/// # fn foo() {
 /// use std::io;
 /// use std::io::ByRefReader;
 /// use std::io::util::LimitReader;
+///
+/// fn process_input<R: Reader>(r: R) {}
 ///
 /// let mut stream = io::stdin();
 ///
@@ -950,8 +949,6 @@ unsafe fn slice_vec_capacity<'a, T>(v: &'a mut Vec<T>, start: uint, end: uint) -
 /// }
 ///
 /// // 'stream' is still available for use here
-///
-/// # }
 /// ```
 pub struct RefReader<'a, R:'a> {
     /// The underlying reader which this is referencing
@@ -1266,11 +1263,10 @@ impl<'a> Writer for &'a mut (Writer+'a) {
 /// # Example
 ///
 /// ```
-/// # fn main() {}
-/// # fn process_input<R: Reader>(r: R) {}
-/// # fn foo () {
 /// use std::io::util::TeeReader;
 /// use std::io::{stdin, ByRefWriter};
+///
+/// fn process_input<R: Reader>(r: R) {}
 ///
 /// let mut output = Vec::new();
 ///
@@ -1282,7 +1278,6 @@ impl<'a> Writer for &'a mut (Writer+'a) {
 /// }
 ///
 /// println!("input processed: {:?}", output);
-/// # }
 /// ```
 pub struct RefWriter<'a, W:'a> {
     /// The underlying writer which this is referencing
@@ -1702,19 +1697,19 @@ pub enum FileType {
 /// A structure used to describe metadata information about a file. This
 /// structure is created through the `stat` method on a `Path`.
 ///
-/// # Example
+/// # Examples
 ///
-/// ```
-/// # use std::io::fs::PathExtensions;
-/// # fn main() {}
-/// # fn foo() {
+/// ```no_run
+/// # #![allow(unstable)]
+///
+/// use std::io::fs::PathExtensions;
+///
 /// let info = match Path::new("foo.txt").stat() {
 ///     Ok(stat) => stat,
 ///     Err(e) => panic!("couldn't read foo.txt: {}", e),
 /// };
 ///
 /// println!("byte size: {}", info.size);
-/// # }
 /// ```
 #[derive(Copy, Hash)]
 pub struct FileStat {

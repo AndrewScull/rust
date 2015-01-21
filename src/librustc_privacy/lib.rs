@@ -19,6 +19,7 @@
 
 #![feature(rustc_diagnostic_macros)]
 #![allow(unknown_features)] #![feature(int_uint)]
+#![allow(unstable)]
 
 #[macro_use] extern crate log;
 #[macro_use] extern crate syntax;
@@ -1538,7 +1539,7 @@ pub fn check_crate(tcx: &ty::ctxt,
 
     // Figure out who everyone's parent is
     let mut visitor = ParentVisitor {
-        parents: NodeMap::new(),
+        parents: NodeMap(),
         curparent: ast::DUMMY_NODE_ID,
     };
     visit::walk_crate(&mut visitor, krate);
@@ -1568,9 +1569,9 @@ pub fn check_crate(tcx: &ty::ctxt,
     // items which are reachable from external crates based on visibility.
     let mut visitor = EmbargoVisitor {
         tcx: tcx,
-        exported_items: NodeSet::new(),
-        public_items: NodeSet::new(),
-        reexports: NodeSet::new(),
+        exported_items: NodeSet(),
+        public_items: NodeSet(),
+        reexports: NodeSet(),
         export_map: export_map,
         prev_exported: true,
         prev_public: true,
