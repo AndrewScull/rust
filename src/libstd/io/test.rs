@@ -17,7 +17,7 @@ use sync::atomic::{AtomicUint, ATOMIC_UINT_INIT, Ordering};
 
 /// Get a port number, starting at 9600, for use in tests
 pub fn next_test_port() -> u16 {
-    static NEXT_OFFSET: AtomicUsize = ATOMIC_USIZE_INIT;
+    static NEXT_OFFSET: AtomicUint = ATOMIC_UINT_INIT;
     base_port() + NEXT_OFFSET.fetch_add(1, Ordering::Relaxed) as u16
 }
 
