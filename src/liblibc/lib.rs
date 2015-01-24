@@ -73,7 +73,6 @@
 //! one from Berkeley after the lawsuits died down and the CSRG dissolved.
 
 #![allow(bad_style, raw_pointer_derive)]
-#![allow(staged_experimental)]
 
 #[cfg(feature = "cargo-build")] extern crate "std" as core;
 #[cfg(not(feature = "cargo-build"))] extern crate core;
