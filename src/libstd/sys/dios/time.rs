@@ -13,7 +13,7 @@ mod inner {
             // STUB:
             SteadyTime {
                 t: 0
-            };
+            }
         }
 
         pub fn ns(&self) -> u64 {
