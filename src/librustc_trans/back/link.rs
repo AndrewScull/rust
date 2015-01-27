@@ -27,9 +27,9 @@ use util::common::time;
 use util::ppaux;
 use util::sha2::{Digest, Sha256};
 
-use std::io::fs::PathExtensions;
-use std::io::{fs, TempDir, Command};
-use std::io;
+use std::old_io::fs::PathExtensions;
+use std::old_io::{fs, TempDir, Command};
+use std::old_io;
 use std::mem;
 use std::str;
 use std::string::String;
@@ -178,7 +178,7 @@ pub fn build_link_meta(sess: &Session, krate: &ast::Crate,
 fn truncated_hash_result(symbol_hasher: &mut Sha256) -> String {
     let output = symbol_hasher.result_bytes();
     // 64 bits should be enough to avoid collisions.
-    output.slice_to(8).to_hex().to_string()
+    output[.. 8].to_hex().to_string()
 }
 
 
@@ -425,7 +425,7 @@ pub fn invalid_output_for_target(sess: &Session,
 fn is_writeable(p: &Path) -> bool {
     match p.stat() {
         Err(..) => true,
-        Ok(m) => m.perm & io::USER_WRITE == io::USER_WRITE
+        Ok(m) => m.perm & old_io::USER_WRITE == old_io::USER_WRITE
     }
 }
 
@@ -586,8 +586,7 @@ fn link_rlib<'a>(sess: &'a Session,
             // the same filename for metadata (stomping over one another)
             let tmpdir = TempDir::new("rustc").ok().expect("needs a temp dir");
             let metadata = tmpdir.path().join(METADATA_FILENAME);
-            match fs::File::create(&metadata).write(&trans.metadata
-                                                    []) {
+            match fs::File::create(&metadata).write_all(&trans.metadata[]) {
                 Ok(..) => {}
                 Err(e) => {
                     sess.err(&format!("failed to write {}: {}",
@@ -671,13 +670,13 @@ fn link_rlib<'a>(sess: &'a Session,
 
 fn write_rlib_bytecode_object_v1<T: Writer>(writer: &mut T,
                                             bc_data_deflated: &[u8])
-                                         -> ::std::io::IoResult<()> {
+                                         -> ::std::old_io::IoResult<()> {
     let bc_data_deflated_size: u64 = bc_data_deflated.len() as u64;
 
-    try! { writer.write(RLIB_BYTECODE_OBJECT_MAGIC) };
+    try! { writer.write_all(RLIB_BYTECODE_OBJECT_MAGIC) };
     try! { writer.write_le_u32(1) };
     try! { writer.write_le_u64(bc_data_deflated_size) };
-    try! { writer.write(&bc_data_deflated[]) };
+    try! { writer.write_all(&bc_data_deflated[]) };
 
     let number_of_bytes_written_so_far =
         RLIB_BYTECODE_OBJECT_MAGIC.len() +                // magic id
@@ -779,14 +778,14 @@ fn link_natively(sess: &Session, trans: &CrateTranslation, dylib: bool,
     }
 
     if sess.opts.debugging_opts.print_link_args {
-        println!("{}", &cmd);
+        println!("{:?}", &cmd);
     }
 
     // May have not found libraries in the right formats.
     sess.abort_if_errors();
 
     // Invoke the system linker
-    debug!("{}", &cmd);
+    debug!("{:?}", &cmd);
     let prog = time(sess.time_passes(), "running linker", (), |()| cmd.output());
     match prog {
         Ok(prog) => {
@@ -794,7 +793,7 @@ fn link_natively(sess: &Session, trans: &CrateTranslation, dylib: bool,
                 sess.err(&format!("linking with `{}` failed: {}",
                                  pname,
                                  prog.status)[]);
-                sess.note(&format!("{}", &cmd)[]);
+                sess.note(&format!("{:?}", &cmd)[]);
                 let mut output = prog.error.clone();
                 output.push_all(&prog.output[]);
                 sess.note(str::from_utf8(&output[]).unwrap());
@@ -1183,7 +1182,7 @@ fn add_upstream_rust_crates(cmd: &mut Command, sess: &Session,
         // against the archive.
         if sess.lto() {
             let name = cratepath.filename_str().unwrap();
-            let name = &name[3..(name.len() - 5)]; // chop off lib/.rlib
+            let name = &name[3..name.len() - 5]; // chop off lib/.rlib
             time(sess.time_passes(),
                  &format!("altering {}.rlib", name)[],
                  (), |()| {
@@ -1201,7 +1200,7 @@ fn add_upstream_rust_crates(cmd: &mut Command, sess: &Session,
                 // Fix up permissions of the copy, as fs::copy() preserves
                 // permissions, but the original file may have been installed
                 // by a package manager and may be read-only.
-                match fs::chmod(&dst, io::USER_READ | io::USER_WRITE) {
+                match fs::chmod(&dst, old_io::USER_READ | old_io::USER_WRITE) {
                     Ok(..) => {}
                     Err(e) => {
                         sess.err(&format!("failed to chmod {} when preparing \

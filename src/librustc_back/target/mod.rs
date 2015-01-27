@@ -48,7 +48,7 @@
 use serialize::json::Json;
 use syntax::{diagnostic, abi};
 use std::default::Default;
-use std::io::fs::PathExtensions;
+use std::old_io::fs::PathExtensions;
 
 mod windows_base;
 mod linux_base;
@@ -65,6 +65,7 @@ mod arm_linux_androideabi;
 mod arm_unknown_linux_gnueabi;
 mod arm_unknown_linux_gnueabihf;
 mod aarch64_apple_ios;
+mod aarch64_linux_android;
 mod aarch64_unknown_linux_gnu;
 mod i686_apple_darwin;
 mod i686_pc_windows_gnu;
@@ -306,7 +307,7 @@ impl Target {
     /// JSON decoding.
     pub fn search(target: &str) -> Result<Target, String> {
         use std::os;
-        use std::io::File;
+        use std::old_io::File;
         use std::path::Path;
         use serialize::json;
 
@@ -362,6 +363,7 @@ impl Target {
             i386_apple_ios,
             x86_64_apple_ios,
             aarch64_apple_ios,
+            aarch64_linux_android,
             armv7_apple_ios,
             armv7s_apple_ios,
 

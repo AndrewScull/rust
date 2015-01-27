@@ -40,6 +40,7 @@ use trans::common;
 use trans::common::*;
 use trans::consts;
 use trans::datum::*;
+use trans::debuginfo::{DebugLoc, ToDebugLoc};
 use trans::expr;
 use trans::glue;
 use trans::inline;
@@ -321,16 +322,17 @@ pub fn trans_fn_pointer_shim<'a, 'tcx>(
                               &function_name[]);
 
     //
-    let block_arena = TypedArena::new();
     let empty_substs = Substs::trans_empty();
-    let fcx = new_fn_ctxt(ccx,
-                          llfn,
-                          ast::DUMMY_NODE_ID,
-                          false,
-                          sig.output,
-                          &empty_substs,
-                          None,
-                          &block_arena);
+    let (block_arena, fcx): (TypedArena<_>, FunctionContext);
+    block_arena = TypedArena::new();
+    fcx = new_fn_ctxt(ccx,
+                      llfn,
+                      ast::DUMMY_NODE_ID,
+                      false,
+                      sig.output,
+                      &empty_substs,
+                      None,
+                      &block_arena);
     let mut bcx = init_function(&fcx, false, sig.output);
 
     // the first argument (`self`) will be ptr to the the fn pointer
@@ -356,7 +358,7 @@ pub fn trans_fn_pointer_shim<'a, 'tcx>(
                            ArgVals(&llargs[]),
                            dest).bcx;
 
-    finish_fn(&fcx, bcx, sig.output);
+    finish_fn(&fcx, bcx, sig.output, DebugLoc::None);
 
     ccx.fn_pointer_shims().borrow_mut().insert(bare_fn_ty, llfn);
 
@@ -456,10 +458,8 @@ pub fn trans_fn_ref_with_substs<'a, 'tcx>(
         }
     };
 
-    // If this is an unboxed closure, redirect to it.
-    match closure::get_or_create_declaration_if_unboxed_closure(ccx,
-                                                                def_id,
-                                                                &substs) {
+    // If this is a closure, redirect to it.
+    match closure::get_or_create_declaration_if_closure(ccx, def_id, &substs) {
         None => {}
         Some(llfn) => return llfn,
     }
@@ -646,7 +646,7 @@ pub fn trans_lang_call<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
 /// For non-lang items, `dest` is always Some, and hence the result is written into memory
 /// somewhere. Nonetheless we return the actual return value of the function.
 pub fn trans_call_inner<'a, 'blk, 'tcx, F>(bcx: Block<'blk, 'tcx>,
-                                           call_info: Option<NodeInfo>,
+                                           call_info: Option<NodeIdAndSpan>,
                                            callee_ty: Ty<'tcx>,
                                            get_callee: F,
                                            args: CallArgs<'a, 'tcx>,
@@ -703,7 +703,7 @@ pub fn trans_call_inner<'a, 'blk, 'tcx, F>(bcx: Block<'blk, 'tcx>,
                                                        disr,
                                                        args,
                                                        dest.unwrap(),
-                                                       call_info);
+                                                       call_info.debug_loc());
         }
     };
 
@@ -781,7 +781,7 @@ pub fn trans_call_inner<'a, 'blk, 'tcx, F>(bcx: Block<'blk, 'tcx>,
                                       llfn,
                                       &llargs[],
                                       callee_ty,
-                                      call_info);
+                                      call_info.debug_loc());
         bcx = b;
         llresult = llret;
 
@@ -828,7 +828,10 @@ pub fn trans_call_inner<'a, 'blk, 'tcx, F>(bcx: Block<'blk, 'tcx>,
     match (dest, opt_llretslot, ret_ty) {
         (Some(expr::Ignore), Some(llretslot), ty::FnConverging(ret_ty)) => {
             // drop the value if it is not being saved.
-            bcx = glue::drop_ty(bcx, llretslot, ret_ty, call_info);
+            bcx = glue::drop_ty(bcx,
+                                llretslot,
+                                ret_ty,
+                                call_info.debug_loc());
             call_lifetime_end(bcx, llretslot);
         }
         _ => {}

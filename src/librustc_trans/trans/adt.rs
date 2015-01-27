@@ -51,7 +51,7 @@ use std::rc::Rc;
 use llvm::{ValueRef, True, IntEQ, IntNE};
 use back::abi::FAT_PTR_ADDR;
 use middle::subst;
-use middle::ty::{self, Ty, UnboxedClosureTyper};
+use middle::ty::{self, Ty, ClosureTyper};
 use middle::ty::Disr;
 use syntax::ast;
 use syntax::attr;
@@ -62,6 +62,7 @@ use trans::cleanup;
 use trans::cleanup::CleanupMethods;
 use trans::common::*;
 use trans::datum;
+use trans::debuginfo::DebugLoc;
 use trans::machine;
 use trans::monomorphize;
 use trans::type_::Type;
@@ -168,9 +169,9 @@ fn represent_type_uncached<'a, 'tcx>(cx: &CrateContext<'a, 'tcx>,
 
             Univariant(mk_struct(cx, &ftys[], packed, t), dtor)
         }
-        ty::ty_unboxed_closure(def_id, _, substs) => {
-            let typer = NormalizingUnboxedClosureTyper::new(cx.tcx());
-            let upvars = typer.unboxed_closure_upvars(def_id, substs).unwrap();
+        ty::ty_closure(def_id, _, substs) => {
+            let typer = NormalizingClosureTyper::new(cx.tcx());
+            let upvars = typer.closure_upvars(def_id, substs).unwrap();
             let upvar_types = upvars.iter().map(|u| u.ty).collect::<Vec<_>>();
             Univariant(mk_struct(cx, &upvar_types[], false, t), false)
         }
@@ -979,7 +980,7 @@ pub fn fold_variants<'blk, 'tcx, F>(bcx: Block<'blk, 'tcx>,
                 let variant_value = PointerCast(variant_cx, value, real_ty.ptr_to());
 
                 variant_cx = f(variant_cx, case, variant_value);
-                Br(variant_cx, bcx_next.llbb);
+                Br(variant_cx, bcx_next.llbb, DebugLoc::None);
             }
 
             bcx_next

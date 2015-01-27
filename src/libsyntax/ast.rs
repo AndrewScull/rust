@@ -13,7 +13,7 @@
 pub use self::AsmDialect::*;
 pub use self::AttrStyle::*;
 pub use self::BindingMode::*;
-pub use self::BinOp::*;
+pub use self::BinOp_::*;
 pub use self::BlockCheckMode::*;
 pub use self::CaptureClause::*;
 pub use self::Decl_::*;
@@ -35,7 +35,6 @@ pub use self::MacStmtStyle::*;
 pub use self::MetaItem_::*;
 pub use self::Method_::*;
 pub use self::Mutability::*;
-pub use self::Onceness::*;
 pub use self::Pat_::*;
 pub use self::PathListItem_::*;
 pub use self::PatWildKind::*;
@@ -49,11 +48,10 @@ pub use self::TraitItem::*;
 pub use self::Ty_::*;
 pub use self::TyParamBound::*;
 pub use self::UintTy::*;
-pub use self::UnboxedClosureKind::*;
+pub use self::ClosureKind::*;
 pub use self::UnOp::*;
 pub use self::UnsafeSource::*;
 pub use self::VariantKind::*;
-pub use self::ViewItem_::*;
 pub use self::ViewPath_::*;
 pub use self::Visibility::*;
 pub use self::PathParameters::*;
@@ -95,33 +93,33 @@ impl Ident {
 
     pub fn encode_with_hygiene(&self) -> String {
         format!("\x00name_{},ctxt_{}\x00",
-                self.name.uint(),
+                self.name.usize(),
                 self.ctxt)
     }
 }
 
-impl fmt::Show for Ident {
+impl fmt::Debug for Ident {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}#{}", self.name, self.ctxt)
     }
 }
 
-impl fmt::String for Ident {
+impl fmt::Display for Ident {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::String::fmt(&self.name, f)
+        fmt::Display::fmt(&self.name, f)
     }
 }
 
-impl fmt::Show for Name {
+impl fmt::Debug for Name {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Name(nm) = *self;
         write!(f, "{:?}({})", token::get_name(*self).get(), nm)
     }
 }
 
-impl fmt::String for Name {
+impl fmt::Display for Name {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::String::fmt(token::get_name(*self).get(), f)
+        fmt::Display::fmt(token::get_name(*self).get(), f)
     }
 }
 
@@ -152,7 +150,7 @@ impl PartialEq for Ident {
 
 /// A SyntaxContext represents a chain of macro-expandings
 /// and renamings. Each macro expansion corresponds to
-/// a fresh uint
+/// a fresh usize
 
 // I'm representing this syntax context as an index into
 // a table, in order to work around a compiler bug
@@ -181,9 +179,9 @@ impl Name {
         }
     }
 
-    pub fn uint(&self) -> uint {
+    pub fn usize(&self) -> usize {
         let Name(nm) = *self;
-        nm as uint
+        nm as usize
     }
 
     pub fn ident(&self) -> Ident {
@@ -511,7 +509,6 @@ impl PartialEq for MetaItem_ {
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]
 pub struct Block {
-    pub view_items: Vec<ViewItem>,
     pub stmts: Vec<P<Stmt>>,
     pub expr: Option<P<Expr>>,
     pub id: NodeId,
@@ -584,7 +581,7 @@ pub enum Mutability {
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show, Copy)]
-pub enum BinOp {
+pub enum BinOp_ {
     BiAdd,
     BiSub,
     BiMul,
@@ -604,6 +601,8 @@ pub enum BinOp {
     BiGe,
     BiGt,
 }
+
+pub type BinOp = Spanned<BinOp_>;
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show, Copy)]
 pub enum UnOp {
@@ -734,13 +733,13 @@ pub enum Expr_ {
     // FIXME #6993: change to Option<Name> ... or not, if these are hygienic.
     ExprLoop(P<Block>, Option<Ident>),
     ExprMatch(P<Expr>, Vec<Arm>, MatchSource),
-    ExprClosure(CaptureClause, Option<UnboxedClosureKind>, P<FnDecl>, P<Block>),
+    ExprClosure(CaptureClause, Option<ClosureKind>, P<FnDecl>, P<Block>),
     ExprBlock(P<Block>),
 
     ExprAssign(P<Expr>, P<Expr>),
     ExprAssignOp(BinOp, P<Expr>, P<Expr>),
     ExprField(P<Expr>, SpannedIdent),
-    ExprTupField(P<Expr>, Spanned<uint>),
+    ExprTupField(P<Expr>, Spanned<usize>),
     ExprIndex(P<Expr>, P<Expr>),
     ExprRange(Option<P<Expr>>, Option<P<Expr>>),
 
@@ -839,7 +838,7 @@ pub struct SequenceRepetition {
     /// Whether the sequence can be repeated zero (*), or one or more times (+)
     pub op: KleeneOp,
     /// The number of `MatchNt`s that appear in the sequence (and subsequences)
-    pub num_captures: uint,
+    pub num_captures: usize,
 }
 
 /// A Kleene-style [repetition operator](http://en.wikipedia.org/wiki/Kleene_star)
@@ -878,7 +877,7 @@ pub enum TokenTree {
 }
 
 impl TokenTree {
-    pub fn len(&self) -> uint {
+    pub fn len(&self) -> usize {
         match *self {
             TtToken(_, token::DocComment(_)) => 2,
             TtToken(_, token::SpecialVarNt(..)) => 2,
@@ -893,7 +892,7 @@ impl TokenTree {
         }
     }
 
-    pub fn get_tt(&self, index: uint) -> TokenTree {
+    pub fn get_tt(&self, index: usize) -> TokenTree {
         match (self, index) {
             (&TtToken(sp, token::DocComment(_)), 0) => {
                 TtToken(sp, token::Pound)
@@ -963,7 +962,7 @@ pub enum Mac_ {
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show, Copy)]
 pub enum StrStyle {
     CookedStr,
-    RawStr(uint)
+    RawStr(usize)
 }
 
 pub type Lit = Spanned<Lit_>;
@@ -992,7 +991,7 @@ pub enum LitIntType {
 }
 
 impl LitIntType {
-    pub fn suffix_len(&self) -> uint {
+    pub fn suffix_len(&self) -> usize {
         match *self {
             UnsuffixedIntLit(_) => 0,
             SignedIntLit(s, _) => s.suffix_len(),
@@ -1100,20 +1099,20 @@ impl PartialEq for IntTy {
     }
 }
 
-impl fmt::Show for IntTy {
+impl fmt::Debug for IntTy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::String::fmt(self, f)
+        fmt::Display::fmt(self, f)
     }
 }
 
-impl fmt::String for IntTy {
+impl fmt::Display for IntTy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", ast_util::int_ty_to_string(*self, None))
     }
 }
 
 impl IntTy {
-    pub fn suffix_len(&self) -> uint {
+    pub fn suffix_len(&self) -> usize {
         match *self {
             TyIs(true) /* i */ => 1,
             TyIs(false) /* is */ | TyI8 => 2,
@@ -1146,7 +1145,7 @@ impl PartialEq for UintTy {
 }
 
 impl UintTy {
-    pub fn suffix_len(&self) -> uint {
+    pub fn suffix_len(&self) -> usize {
         match *self {
             TyUs(true) /* u */ => 1,
             TyUs(false) /* us */ | TyU8 => 2,
@@ -1155,13 +1154,13 @@ impl UintTy {
     }
 }
 
-impl fmt::Show for UintTy {
+impl fmt::Debug for UintTy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::String::fmt(self, f)
+        fmt::Display::fmt(self, f)
     }
 }
 
-impl fmt::String for UintTy {
+impl fmt::Display for UintTy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", ast_util::uint_ty_to_string(*self, None))
     }
@@ -1173,20 +1172,20 @@ pub enum FloatTy {
     TyF64,
 }
 
-impl fmt::Show for FloatTy {
+impl fmt::Debug for FloatTy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::String::fmt(self, f)
+        fmt::Display::fmt(self, f)
     }
 }
 
-impl fmt::String for FloatTy {
+impl fmt::Display for FloatTy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", ast_util::float_ty_to_string(*self))
     }
 }
 
 impl FloatTy {
-    pub fn suffix_len(&self) -> uint {
+    pub fn suffix_len(&self) -> usize {
         match *self {
             TyF32 | TyF64 => 3, // add F128 handling here
         }
@@ -1222,40 +1221,6 @@ pub enum PrimTy {
     TyChar
 }
 
-#[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Copy)]
-pub enum Onceness {
-    Once,
-    Many
-}
-
-impl fmt::Show for Onceness {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::String::fmt(match *self {
-            Once => "once",
-            Many => "many",
-        }, f)
-    }
-}
-
-impl fmt::String for Onceness {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::String::fmt(match *self {
-            Once => "once",
-            Many => "many",
-        }, f)
-    }
-}
-
-/// Represents the type of a closure
-#[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]
-pub struct ClosureTy {
-    pub lifetimes: Vec<LifetimeDef>,
-    pub unsafety: Unsafety,
-    pub onceness: Onceness,
-    pub decl: P<FnDecl>,
-    pub bounds: TyParamBounds,
-}
-
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]
 pub struct BareFnTy {
     pub unsafety: Unsafety,
@@ -1274,7 +1239,7 @@ pub enum Ty_ {
     TyPtr(MutTy),
     /// A reference (`&'a T` or `&'a mut T`)
     TyRptr(Option<Lifetime>, MutTy),
-    /// A bare function (e.g. `fn(uint) -> bool`)
+    /// A bare function (e.g. `fn(usize) -> bool`)
     TyBareFn(P<BareFnTy>),
     /// A tuple (`(A, B, C, D,...)`)
     TyTup(Vec<P<Ty>> ),
@@ -1358,9 +1323,9 @@ pub enum Unsafety {
     Normal,
 }
 
-impl fmt::String for Unsafety {
+impl fmt::Display for Unsafety {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::String::fmt(match *self {
+        fmt::Display::fmt(match *self {
             Unsafety::Normal => "normal",
             Unsafety::Unsafe => "unsafe",
         }, f)
@@ -1375,7 +1340,7 @@ pub enum ImplPolarity {
     Negative,
 }
 
-impl fmt::Show for ImplPolarity {
+impl fmt::Debug for ImplPolarity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ImplPolarity::Positive => "positive".fmt(f),
@@ -1452,14 +1417,12 @@ pub struct Mod {
     /// For `mod foo;`, the inner span ranges from the first token
     /// to the last token in the external file.
     pub inner: Span,
-    pub view_items: Vec<ViewItem>,
     pub items: Vec<P<Item>>,
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]
 pub struct ForeignMod {
     pub abi: Abi,
-    pub view_items: Vec<ViewItem>,
     pub items: Vec<P<ForeignItem>>,
 }
 
@@ -1518,44 +1481,13 @@ pub enum ViewPath_ {
     /// or just
     ///
     /// `foo::bar::baz` (with `as baz` implicitly on the right)
-    ViewPathSimple(Ident, Path, NodeId),
+    ViewPathSimple(Ident, Path),
 
     /// `foo::bar::*`
-    ViewPathGlob(Path, NodeId),
+    ViewPathGlob(Path),
 
     /// `foo::bar::{a,b,c}`
-    ViewPathList(Path, Vec<PathListItem> , NodeId)
-}
-
-#[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]
-pub struct ViewItem {
-    pub node: ViewItem_,
-    pub attrs: Vec<Attribute>,
-    pub vis: Visibility,
-    pub span: Span,
-}
-
-impl ViewItem {
-    pub fn id(&self) -> NodeId {
-        match self.node {
-            ViewItemExternCrate(_, _, id) => id,
-            ViewItemUse(ref vp) => match vp.node {
-                ViewPathSimple(_, _, id) => id,
-                ViewPathGlob(_, id) => id,
-                ViewPathList(_, _, id) => id,
-            }
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]
-pub enum ViewItem_ {
-    /// Ident: name used to refer to this crate in the code
-    /// optional (InternedString,StrStyle): if present, this is a location
-    /// (containing arbitrary characters) from which to fetch the crate sources
-    /// For example, extern crate whatever = "github.com/rust-lang/rust"
-    ViewItemExternCrate(Ident, Option<(InternedString,StrStyle)>, NodeId),
-    ViewItemUse(P<ViewPath>),
+    ViewPathList(Path, Vec<PathListItem>)
 }
 
 /// Meta-data associated with an item
@@ -1571,7 +1503,7 @@ pub enum AttrStyle {
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show, Copy)]
-pub struct AttrId(pub uint);
+pub struct AttrId(pub usize);
 
 /// Doc-comments are promoted to attributes that have is_sugared_doc = true
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]
@@ -1677,6 +1609,12 @@ pub struct Item {
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show)]
 pub enum Item_ {
+    // Optional location (containing arbitrary characters) from which
+    // to fetch the crate sources.
+    // For example, extern crate whatever = "github.com/rust-lang/rust".
+    ItemExternCrate(Option<(InternedString, StrStyle)>),
+    ItemUse(P<ViewPath>),
+
     ItemStatic(P<Ty>, Mutability, P<Expr>),
     ItemConst(P<Ty>, P<Expr>),
     ItemFn(P<FnDecl>, Unsafety, Abi, Generics, P<Block>),
@@ -1703,6 +1641,8 @@ pub enum Item_ {
 impl Item_ {
     pub fn descriptive_variant(&self) -> &str {
         match *self {
+            ItemExternCrate(..) => "extern crate",
+            ItemUse(..) => "use",
             ItemStatic(..) => "static item",
             ItemConst(..) => "constant item",
             ItemFn(..) => "function",
@@ -1744,10 +1684,10 @@ impl ForeignItem_ {
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Show, Copy)]
-pub enum UnboxedClosureKind {
-    FnUnboxedClosureKind,
-    FnMutUnboxedClosureKind,
-    FnOnceUnboxedClosureKind,
+pub enum ClosureKind {
+    FnClosureKind,
+    FnMutClosureKind,
+    FnOnceClosureKind,
 }
 
 /// The data we save and restore about an inlined item or method.  This is not

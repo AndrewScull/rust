@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::io;
+use std::old_io;
 
 use core;
 use getopts;
@@ -28,10 +28,10 @@ fn extract_leading_metadata<'a>(s: &'a str) -> (Vec<&'a str>, &'a str) {
     for line in s.lines() {
         if line.starts_with("%") {
             // remove %<whitespace>
-            metadata.push(line.slice_from(1).trim_left())
+            metadata.push(line[1..].trim_left())
         } else {
             let line_start_byte = s.subslice_offset(line);
-            return (metadata, s.slice_from(line_start_byte));
+            return (metadata, &s[line_start_byte..]);
         }
     }
     // if we're here, then all lines were metadata % lines.
@@ -59,9 +59,9 @@ pub fn render(input: &str, mut output: Path, matches: &getopts::Matches,
     }
     let playground = playground.unwrap_or("".to_string());
 
-    let mut out = match io::File::create(&output) {
+    let mut out = match old_io::File::create(&output) {
         Err(e) => {
-            let _ = writeln!(&mut io::stderr(),
+            let _ = writeln!(&mut old_io::stderr(),
                              "error opening `{}` for writing: {}",
                              output.display(), e);
             return 4;
@@ -71,7 +71,7 @@ pub fn render(input: &str, mut output: Path, matches: &getopts::Matches,
 
     let (metadata, text) = extract_leading_metadata(input_str.as_slice());
     if metadata.len() == 0 {
-        let _ = writeln!(&mut io::stderr(),
+        let _ = writeln!(&mut old_io::stderr(),
                          "invalid markdown file: expecting initial line with `% ...TITLE...`");
         return 5;
     }
@@ -126,7 +126,7 @@ pub fn render(input: &str, mut output: Path, matches: &getopts::Matches,
 
     match err {
         Err(e) => {
-            let _ = writeln!(&mut io::stderr(),
+            let _ = writeln!(&mut old_io::stderr(),
                              "error writing to `{}`: {}",
                              output.display(), e);
             6

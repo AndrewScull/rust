@@ -15,8 +15,8 @@ use collections::HashMap;
 use collections::hash_map::Hasher;
 use ffi::CString;
 use hash::Hash;
-use io::process::{ProcessExit, ExitStatus, ExitSignal};
-use io::{self, IoResult, IoError, EndOfFile};
+use old_io::process::{ProcessExit, ExitStatus, ExitSignal};
+use old_io::{self, IoResult, IoError, EndOfFile};
 use libc::{self, pid_t, c_void, c_int};
 use mem;
 use os;
@@ -125,9 +125,9 @@ impl Process {
                     let mut bytes = [0; 8];
                     return match input.read(&mut bytes) {
                         Ok(8) => {
-                            assert!(combine(CLOEXEC_MSG_FOOTER) == combine(bytes.slice(4, 8)),
+                            assert!(combine(CLOEXEC_MSG_FOOTER) == combine(&bytes[4.. 8]),
                                 "Validation on the CLOEXEC pipe failed: {:?}", bytes);
-                            let errno = combine(bytes.slice(0, 4));
+                            let errno = combine(&bytes[0.. 4]);
                             assert!(p.wait(0).is_ok(), "wait(0) should either return Ok or panic");
                             Err(super::decode_error(errno))
                         }
@@ -251,7 +251,7 @@ impl Process {
                             fn setgroups(ngroups: libc::c_int,
                                          ptr: *const libc::c_void) -> libc::c_int;
                         }
-                        let _ = setgroups(0, 0 as *const libc::c_void);
+                        let _ = setgroups(0, ptr::null());
 
                         if libc::setuid(u as libc::uid_t) != 0 {
                             fail(&mut output);

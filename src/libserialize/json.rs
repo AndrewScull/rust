@@ -201,7 +201,7 @@ use self::InternalStackElement::*;
 
 use std;
 use std::collections::{HashMap, BTreeMap};
-use std::{char, f64, fmt, io, num, str};
+use std::{char, f64, fmt, old_io, num, str};
 use std::mem::{swap};
 use std::num::{Float, Int};
 use std::num::FpCategory as Fp;
@@ -235,7 +235,7 @@ pub struct AsJson<'a, T: 'a> { inner: &'a T }
 pub struct AsPrettyJson<'a, T: 'a> { inner: &'a T, indent: Option<uint> }
 
 /// The errors that can arise while parsing a JSON stream.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Show)]
 pub enum ErrorCode {
     InvalidSyntax,
     InvalidNumber,
@@ -260,7 +260,7 @@ pub enum ErrorCode {
 pub enum ParserError {
     /// msg, line, col
     SyntaxError(ErrorCode, uint, uint),
-    IoError(io::IoErrorKind, &'static str),
+    IoError(old_io::IoErrorKind, &'static str),
 }
 
 // Builder and Parser have the same errors.
@@ -325,24 +325,43 @@ pub fn encode<T: ::Encodable>(object: &T) -> string::String {
     s
 }
 
-impl fmt::Show for ErrorCode {
+impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         error_str(*self).fmt(f)
     }
 }
 
-fn io_error_to_error(io: io::IoError) -> ParserError {
+fn io_error_to_error(io: old_io::IoError) -> ParserError {
     IoError(io.kind, io.desc)
+}
+
+impl fmt::Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // FIXME this should be a nicer error
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+impl fmt::Display for DecoderError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // FIXME this should be a nicer error
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 impl std::error::Error for DecoderError {
     fn description(&self) -> &str { "decoder error" }
-    fn detail(&self) -> Option<std::string::String> { Some(format!("{:?}", self)) }
+}
+
+impl fmt::Display for EncoderError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // FIXME this should be a nicer error
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 impl std::error::Error for EncoderError {
     fn description(&self) -> &str { "encoder error" }
-    fn detail(&self) -> Option<std::string::String> { Some(format!("{:?}", self)) }
 }
 
 impl std::error::FromError<fmt::Error> for EncoderError {
@@ -1298,7 +1317,7 @@ impl Stack {
             InternalIndex(i) => StackElement::Index(i),
             InternalKey(start, size) => {
                 StackElement::Key(str::from_utf8(
-                    &self.str_buffer[(start as uint) .. (start as uint + size as uint)])
+                    &self.str_buffer[start as uint .. start as uint + size as uint])
                         .unwrap())
             }
         }
@@ -1341,7 +1360,7 @@ impl Stack {
             Some(&InternalIndex(i)) => Some(StackElement::Index(i)),
             Some(&InternalKey(start, size)) => {
                 Some(StackElement::Key(str::from_utf8(
-                    &self.str_buffer[(start as uint) .. (start+size) as uint]
+                    &self.str_buffer[start as uint .. (start+size) as uint]
                 ).unwrap()))
             }
         }
@@ -2038,8 +2057,8 @@ impl<T: Iterator<Item=char>> Builder<T> {
     }
 }
 
-/// Decodes a json value from an `&mut io::Reader`
-pub fn from_reader(rdr: &mut io::Reader) -> Result<Json, BuilderError> {
+/// Decodes a json value from an `&mut old_io::Reader`
+pub fn from_reader(rdr: &mut old_io::Reader) -> Result<Json, BuilderError> {
     let contents = match rdr.read_to_end() {
         Ok(c)  => c,
         Err(e) => return Err(io_error_to_error(e))
@@ -2519,7 +2538,7 @@ impl<'a, 'b> fmt::Writer for FormatShim<'a, 'b> {
     }
 }
 
-impl fmt::String for Json {
+impl fmt::Display for Json {
     /// Encodes a json value into a string
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut shim = FormatShim { inner: f };
@@ -2531,7 +2550,7 @@ impl fmt::String for Json {
     }
 }
 
-impl<'a> fmt::String for PrettyJson<'a> {
+impl<'a> fmt::Display for PrettyJson<'a> {
     /// Encodes a json value into a string
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut shim = FormatShim { inner: f };
@@ -2543,7 +2562,7 @@ impl<'a> fmt::String for PrettyJson<'a> {
     }
 }
 
-impl<'a, T: Encodable> fmt::String for AsJson<'a, T> {
+impl<'a, T: Encodable> fmt::Display for AsJson<'a, T> {
     /// Encodes a json value into a string
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut shim = FormatShim { inner: f };
@@ -2563,7 +2582,7 @@ impl<'a, T> AsPrettyJson<'a, T> {
     }
 }
 
-impl<'a, T: Encodable> fmt::String for AsPrettyJson<'a, T> {
+impl<'a, T: Encodable> fmt::Display for AsPrettyJson<'a, T> {
     /// Encodes a json value into a string
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut shim = FormatShim { inner: f };
@@ -2599,7 +2618,7 @@ mod tests {
     use super::JsonEvent::*;
     use super::{Json, from_str, DecodeResult, DecoderError, JsonEvent, Parser,
                 StackElement, Stack, Decoder, Encoder, EncoderError};
-    use std::{i64, u64, f32, f64, io};
+    use std::{i64, u64, f32, f64, old_io};
     use std::collections::BTreeMap;
     use std::num::Float;
     use std::string;
@@ -3437,7 +3456,7 @@ mod tests {
     #[test]
     fn test_encode_hashmap_with_numeric_key() {
         use std::str::from_utf8;
-        use std::io::Writer;
+        use std::old_io::Writer;
         use std::collections::HashMap;
         let mut hm: HashMap<uint, bool> = HashMap::new();
         hm.insert(1, true);
@@ -3453,7 +3472,7 @@ mod tests {
     #[test]
     fn test_prettyencode_hashmap_with_numeric_key() {
         use std::str::from_utf8;
-        use std::io::Writer;
+        use std::old_io::Writer;
         use std::collections::HashMap;
         let mut hm: HashMap<uint, bool> = HashMap::new();
         hm.insert(1, true);
@@ -3910,7 +3929,7 @@ mod tests {
     #[test]
     fn test_encode_hashmap_with_arbitrary_key() {
         use std::str::from_utf8;
-        use std::io::Writer;
+        use std::old_io::Writer;
         use std::collections::HashMap;
         use std::fmt;
         #[derive(PartialEq, Eq, Hash, RustcEncodable)]
@@ -3920,7 +3939,7 @@ mod tests {
         let mut mem_buf = Vec::new();
         let mut encoder = Encoder::new(&mut mem_buf as &mut fmt::Writer);
         let result = hm.encode(&mut encoder);
-        match result.unwrap_err() {
+        match result.err().unwrap() {
             EncoderError::BadHashmapKey => (),
             _ => panic!("expected bad hash map key")
         }

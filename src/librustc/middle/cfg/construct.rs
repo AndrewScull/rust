@@ -372,7 +372,7 @@ impl<'a, 'tcx> CFGBuilder<'a, 'tcx> {
                 expr_exit
             }
 
-            ast::ExprBinary(op, ref l, ref r) if ast_util::lazy_binop(op) => {
+            ast::ExprBinary(op, ref l, ref r) if ast_util::lazy_binop(op.node) => {
                 //
                 //     [pred]
                 //       |
@@ -424,7 +424,7 @@ impl<'a, 'tcx> CFGBuilder<'a, 'tcx> {
             }
 
             ast::ExprMethodCall(_, _, ref args) => {
-                self.call(expr, pred, &*args[0], args.slice_from(1).iter().map(|e| &**e))
+                self.call(expr, pred, &*args[0], args[1..].iter().map(|e| &**e))
             }
 
             ast::ExprIndex(ref l, ref r) |

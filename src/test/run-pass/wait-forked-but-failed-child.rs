@@ -10,7 +10,7 @@
 
 extern crate libc;
 
-use std::io::process::Command;
+use std::old_io::process::Command;
 
 use libc::funcs::posix88::unistd;
 
@@ -58,7 +58,7 @@ fn main() {
     let _failures = range(0, 100).map(|_| {
         let cmd = Command::new(too_long.as_slice());
         let failed = cmd.spawn();
-        assert!(failed.is_err(), "Make sure the command fails to spawn(): {}", cmd);
+        assert!(failed.is_err(), "Make sure the command fails to spawn(): {:?}", cmd);
         failed
     }).collect::<Vec<_>>();
 

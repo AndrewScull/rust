@@ -231,8 +231,8 @@ use rustc_back::target::Target;
 use std::ffi::CString;
 use std::cmp;
 use std::collections::HashMap;
-use std::io::fs::PathExtensions;
-use std::io;
+use std::old_io::fs::PathExtensions;
+use std::old_io;
 use std::ptr;
 use std::slice;
 use std::time::Duration;
@@ -392,11 +392,11 @@ impl<'a> Context<'a> {
             };
             let (hash, rlib) = if file.starts_with(&rlib_prefix[]) &&
                     file.ends_with(".rlib") {
-                (file.slice(rlib_prefix.len(), file.len() - ".rlib".len()),
+                (&file[(rlib_prefix.len()) .. (file.len() - ".rlib".len())],
                  true)
             } else if file.starts_with(dylib_prefix.as_slice()) &&
                       file.ends_with(dypair.1.as_slice()) {
-                (file.slice(dylib_prefix.len(), file.len() - dypair.1.len()),
+                (&file[(dylib_prefix.len()) .. (file.len() - dypair.1.len())],
                  false)
             } else {
                 return FileDoesntMatch
@@ -796,7 +796,7 @@ pub fn read_meta_section_name(is_osx: bool) -> &'static str {
 
 // A diagnostic function for dumping crate metadata to an output stream
 pub fn list_file_metadata(is_osx: bool, path: &Path,
-                          out: &mut io::Writer) -> io::IoResult<()> {
+                          out: &mut old_io::Writer) -> old_io::IoResult<()> {
     match get_metadata_section(is_osx, path) {
         Ok(bytes) => decoder::list_crate_metadata(bytes.as_slice(), out),
         Err(msg) => {

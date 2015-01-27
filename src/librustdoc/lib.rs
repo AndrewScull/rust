@@ -38,8 +38,8 @@ extern crate "serialize" as rustc_serialize; // used by deriving
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::File;
-use std::io;
+use std::old_io::File;
+use std::old_io;
 use std::rc::Rc;
 use externalfiles::ExternalHtml;
 use serialize::Decodable;
@@ -111,7 +111,7 @@ pub fn main() {
     let res = std::thread::Builder::new().stack_size(STACK_SIZE).scoped(move || {
         main_args(std::os::args().as_slice())
     }).join();
-    std::os::set_exit_status(res.map_err(|_| ()).unwrap());
+    std::os::set_exit_status(res.ok().unwrap());
 }
 
 pub fn opts() -> Vec<getopts::OptGroup> {
@@ -351,8 +351,10 @@ fn rust_input(cratefile: &str, externs: core::Externs, matches: &getopts::Matche
     info!("starting to run rustc");
 
     let (mut krate, analysis) = std::thread::Thread::scoped(move |:| {
+        use rustc::session::config::Input;
+
         let cr = cr;
-        core::run_core(paths, cfgs, externs, &cr, triple)
+        core::run_core(paths, cfgs, externs, Input::File(cr), triple)
     }).join().map_err(|_| "rustc failed").unwrap();
     info!("finished with rustc");
     let mut analysis = Some(analysis);
@@ -474,7 +476,7 @@ fn json_input(input: &str) -> Result<Output, String> {
 /// Outputs the crate/plugin json as a giant json blob at the specified
 /// destination.
 fn json_output(krate: clean::Crate, res: Vec<plugins::PluginJson> ,
-               dst: Path) -> io::IoResult<()> {
+               dst: Path) -> old_io::IoResult<()> {
     // {
     //   "schema": version,
     //   "crate": { parsed crate ... },

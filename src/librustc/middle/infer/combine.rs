@@ -52,7 +52,7 @@ use middle::ty_fold::{TypeFoldable};
 use util::ppaux::Repr;
 
 use std::rc::Rc;
-use syntax::ast::{Onceness, Unsafety};
+use syntax::ast::Unsafety;
 use syntax::ast;
 use syntax::abi;
 use syntax::codemap::Span;
@@ -202,39 +202,6 @@ pub trait Combine<'tcx> : Sized {
                          sig: sig})
     }
 
-    fn closure_tys(&self, a: &ty::ClosureTy<'tcx>,
-                   b: &ty::ClosureTy<'tcx>) -> cres<'tcx, ty::ClosureTy<'tcx>> {
-
-        let store = match (a.store, b.store) {
-            (ty::RegionTraitStore(a_r, a_m),
-             ty::RegionTraitStore(b_r, b_m)) if a_m == b_m => {
-                let r = try!(self.contraregions(a_r, b_r));
-                ty::RegionTraitStore(r, a_m)
-            }
-
-            _ if a.store == b.store => {
-                a.store
-            }
-
-            _ => {
-                return Err(ty::terr_sigil_mismatch(expected_found(self, a.store, b.store)))
-            }
-        };
-        let unsafety = try!(self.unsafeties(a.unsafety, b.unsafety));
-        let onceness = try!(self.oncenesses(a.onceness, b.onceness));
-        let bounds = try!(self.existential_bounds(&a.bounds, &b.bounds));
-        let sig = try!(self.binders(&a.sig, &b.sig));
-        let abi = try!(self.abi(a.abi, b.abi));
-        Ok(ty::ClosureTy {
-            unsafety: unsafety,
-            onceness: onceness,
-            store: store,
-            bounds: bounds,
-            sig: sig,
-            abi: abi,
-        })
-    }
-
     fn fn_sigs(&self, a: &ty::FnSig<'tcx>, b: &ty::FnSig<'tcx>) -> cres<'tcx, ty::FnSig<'tcx>> {
         if a.variadic != b.variadic {
             return Err(ty::terr_variadic_mismatch(expected_found(self, a.variadic, b.variadic)));
@@ -286,8 +253,6 @@ pub trait Combine<'tcx> : Sized {
             Err(ty::terr_abi_mismatch(expected_found(self, a, b)))
         }
     }
-
-    fn oncenesses(&self, a: Onceness, b: Onceness) -> cres<'tcx, Onceness>;
 
     fn projection_tys(&self,
                       a: &ty::ProjectionTy<'tcx>,
@@ -355,31 +320,6 @@ pub trait Combine<'tcx> : Sized {
                   -> cres<'tcx, ty::Region>;
 
     fn regions(&self, a: ty::Region, b: ty::Region) -> cres<'tcx, ty::Region>;
-
-    fn trait_stores(&self,
-                    vk: ty::terr_vstore_kind,
-                    a: ty::TraitStore,
-                    b: ty::TraitStore)
-                    -> cres<'tcx, ty::TraitStore> {
-        debug!("{}.trait_stores(a={:?}, b={:?})", self.tag(), a, b);
-
-        match (a, b) {
-            (ty::RegionTraitStore(a_r, a_m),
-             ty::RegionTraitStore(b_r, b_m)) if a_m == b_m => {
-                self.contraregions(a_r, b_r).and_then(|r| {
-                    Ok(ty::RegionTraitStore(r, a_m))
-                })
-            }
-
-            _ if a == b => {
-                Ok(a)
-            }
-
-            _ => {
-                Err(ty::terr_trait_stores_differ(vk, expected_found(self, a, b)))
-            }
-        }
-    }
 
     fn trait_refs(&self,
                   a: &ty::TraitRef<'tcx>,
@@ -572,15 +512,15 @@ pub fn super_tys<'tcx, C: Combine<'tcx>>(this: &C,
             Ok(ty::mk_struct(tcx, a_id, tcx.mk_substs(substs)))
       }
 
-      (&ty::ty_unboxed_closure(a_id, a_region, a_substs),
-       &ty::ty_unboxed_closure(b_id, b_region, b_substs))
+      (&ty::ty_closure(a_id, a_region, a_substs),
+       &ty::ty_closure(b_id, b_region, b_substs))
       if a_id == b_id => {
-          // All ty_unboxed_closure types with the same id represent
+          // All ty_closure types with the same id represent
           // the (anonymous) type of the same closure expression. So
           // all of their regions should be equated.
           let region = try!(this.equate().regions(*a_region, *b_region));
           let substs = try!(this.substs_variances(None, a_substs, b_substs));
-          Ok(ty::mk_unboxed_closure(tcx, a_id, tcx.mk_region(region), tcx.mk_substs(substs)))
+          Ok(ty::mk_closure(tcx, a_id, tcx.mk_region(region), tcx.mk_substs(substs)))
       }
 
       (&ty::ty_uniq(a_inner), &ty::ty_uniq(b_inner)) => {

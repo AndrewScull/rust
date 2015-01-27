@@ -28,8 +28,8 @@ need_ok() {
 
 need_cmd() {
     if command -v $1 >/dev/null 2>&1
-    then msg "found $1"
-    else err "need $1"
+    then msg "found program $1"
+    else err "need program $1"
     fi
 }
 
@@ -340,6 +340,7 @@ need_cmd date
 need_cmd tr
 need_cmd sed
 need_cmd file
+need_cmd make
 
 msg "inspecting environment"
 
@@ -509,7 +510,6 @@ opt optimize-tests 1 "build tests with optimizations"
 opt libcpp 1 "build with llvm with libc++ instead of libstdc++ when using clang"
 opt llvm-assertions 1 "build LLVM with assertions"
 opt debug 1 "build with extra debug fun"
-opt ratchet-bench 0 "ratchet benchmarks"
 opt fast-make 0 "use .gitmodules as timestamp for submodule deps"
 opt ccache 0 "invoke gcc/clang via ccache to reuse object files between builds"
 opt local-rust 0 "use an installed rustc rather than downloading a snapshot"
@@ -617,7 +617,6 @@ putvar CFG_BOOTSTRAP_KEY
 
 step_msg "looking for build programs"
 
-probe_need CFG_PERL        perl
 probe_need CFG_CURLORWGET  curl wget
 probe_need CFG_PYTHON      python2.7 python2.6 python2 python
 
@@ -647,6 +646,8 @@ probe CFG_ISCC             iscc
 probe CFG_JAVAC            javac
 probe CFG_ANTLR4           antlr4
 probe CFG_GRUN             grun
+probe CFG_FLEX             flex
+probe CFG_BISON            bison
 probe CFG_PANDOC           pandoc
 probe CFG_PDFLATEX         pdflatex
 probe CFG_XELATEX          xelatex
@@ -1375,7 +1376,7 @@ do
 done
 
 # Munge any paths that appear in config.mk back to posix-y
-perl -i.bak -p -e 's@ ([a-zA-Z]):[/\\]@ /\1/@go;' config.tmp
+sed -i.bak -e 's@ \([a-zA-Z]\):[/\\]@ /\1/@g;' config.tmp
 rm -f config.tmp.bak
 
 msg

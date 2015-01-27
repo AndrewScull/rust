@@ -37,7 +37,6 @@ extern crate fmt_macros;
 extern crate getopts;
 extern crate graphviz;
 extern crate libc;
-extern crate regex;
 extern crate rustc_llvm;
 extern crate rustc_back;
 extern crate serialize;
@@ -54,7 +53,9 @@ extern crate test;
 
 pub use rustc_llvm as llvm;
 
-mod diagnostics;
+// NB: This module needs to be declared first so diagnostics are
+// registered before they are used.
+pub mod diagnostics;
 
 pub mod back {
     pub use rustc_back::abi;
@@ -131,8 +132,6 @@ pub mod util {
 pub mod lib {
     pub use llvm;
 }
-
-__build_diagnostic_array! { DIAGNOSTICS }
 
 // A private module so that macro-expanded idents like
 // `::rustc::lint::Lint` will also work in `rustc` itself.

@@ -20,7 +20,7 @@ use print::pprust;
 use ptr::P;
 use util::small_vector::SmallVector;
 
-use std::io::File;
+use std::old_io::File;
 use std::rc::Rc;
 
 // These macros all relate to the file system; they either return
@@ -35,7 +35,7 @@ pub fn expand_line(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
     let topmost = cx.original_span_in_file();
     let loc = cx.codemap().lookup_char_pos(topmost.lo);
 
-    base::MacExpr::new(cx.expr_uint(topmost, loc.line))
+    base::MacExpr::new(cx.expr_usize(topmost, loc.line))
 }
 
 /* column!(): expands to the current column number */
@@ -45,7 +45,7 @@ pub fn expand_column(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
 
     let topmost = cx.original_span_in_file();
     let loc = cx.codemap().lookup_char_pos(topmost.lo);
-    base::MacExpr::new(cx.expr_uint(topmost, loc.col.to_uint()))
+    base::MacExpr::new(cx.expr_usize(topmost, loc.col.to_usize()))
 }
 
 /// file!(): expands to the current filename */
@@ -135,7 +135,7 @@ pub fn expand_include_str(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
     let bytes = match File::open(&file).read_to_end() {
         Err(e) => {
             cx.span_err(sp,
-                        &format!("couldn't read {:?}: {}",
+                        &format!("couldn't read {}: {}",
                                 file.display(),
                                 e)[]);
             return DummyResult::expr(sp);
@@ -146,7 +146,7 @@ pub fn expand_include_str(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
         Ok(src) => {
             // Add this input file to the code map to make it available as
             // dependency information
-            let filename = format!("{:?}", file.display());
+            let filename = format!("{}", file.display());
             let interned = token::intern_and_get_ident(&src[]);
             cx.codemap().new_filemap(filename, src);
 
@@ -154,7 +154,7 @@ pub fn expand_include_str(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
         }
         Err(_) => {
             cx.span_err(sp,
-                        &format!("{:?} wasn't a utf-8 file",
+                        &format!("{} wasn't a utf-8 file",
                                 file.display())[]);
             return DummyResult::expr(sp);
         }
@@ -171,7 +171,7 @@ pub fn expand_include_bytes(cx: &mut ExtCtxt, sp: Span, tts: &[ast::TokenTree])
     match File::open(&file).read_to_end() {
         Err(e) => {
             cx.span_err(sp,
-                        &format!("couldn't read {:?}: {}", file.display(), e)[]);
+                        &format!("couldn't read {}: {}", file.display(), e)[]);
             return DummyResult::expr(sp);
         }
         Ok(bytes) => {

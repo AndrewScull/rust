@@ -158,7 +158,7 @@ use sync::{Mutex, Condvar, Arc};
 use str::Str;
 use string::String;
 use rt::{self, unwind};
-use io::{Writer, stdio};
+use old_io::{Writer, stdio};
 use thunk::Thunk;
 
 use sys::thread as imp;
@@ -382,7 +382,7 @@ impl Thread {
         unsafe { imp::yield_now() }
     }
 
-    /// Determines whether the current thread is panicking.
+    /// Determines whether the current thread is unwinding because of panic.
     #[inline]
     #[stable]
     pub fn panicking() -> bool {
@@ -508,7 +508,7 @@ mod test {
     use sync::mpsc::{channel, Sender};
     use boxed::BoxAny;
     use result;
-    use std::io::{ChanReader, ChanWriter};
+    use std::old_io::{ChanReader, ChanWriter};
     use super::{Thread, Builder};
     use thunk::Thunk;
 
@@ -519,14 +519,14 @@ mod test {
     fn test_unnamed_thread() {
         Thread::scoped(move|| {
             assert!(Thread::current().name().is_none());
-        }).join().map_err(|_| ()).unwrap();
+        }).join().ok().unwrap();
     }
 
     #[test]
     fn test_named_thread() {
         Builder::new().name("ada lovelace".to_string()).scoped(move|| {
             assert!(Thread::current().name().unwrap() == "ada lovelace".to_string());
-        }).join().map_err(|_| ()).unwrap();
+        }).join().ok().unwrap();
     }
 
     #[test]
@@ -662,7 +662,7 @@ mod test {
             Err(e) => {
                 type T = &'static str;
                 assert!(e.is::<T>());
-                assert_eq!(*e.downcast::<T>().unwrap(), "static string");
+                assert_eq!(*e.downcast::<T>().ok().unwrap(), "static string");
             }
             Ok(()) => panic!()
         }
@@ -676,7 +676,7 @@ mod test {
             Err(e) => {
                 type T = String;
                 assert!(e.is::<T>());
-                assert_eq!(*e.downcast::<T>().unwrap(), "owned string".to_string());
+                assert_eq!(*e.downcast::<T>().ok().unwrap(), "owned string".to_string());
             }
             Ok(()) => panic!()
         }
@@ -690,9 +690,9 @@ mod test {
             Err(e) => {
                 type T = Box<Any + Send>;
                 assert!(e.is::<T>());
-                let any = e.downcast::<T>().unwrap();
+                let any = e.downcast::<T>().ok().unwrap();
                 assert!(any.is::<u16>());
-                assert_eq!(*any.downcast::<u16>().unwrap(), 413u16);
+                assert_eq!(*any.downcast::<u16>().ok().unwrap(), 413u16);
             }
             Ok(()) => panic!()
         }

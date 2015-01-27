@@ -19,14 +19,14 @@ use diagnostics;
 
 use std::cell::{RefCell, Cell};
 use std::fmt;
-use std::io;
+use std::old_io;
 use std::iter::range;
 use std::string::String;
 use term::WriterWrapper;
 use term;
 
 /// maximum number of lines we will print for each error; arbitrary.
-static MAX_LINES: uint = 6u;
+static MAX_LINES: usize = 6us;
 
 #[derive(Clone, Copy)]
 pub enum RenderSpan {
@@ -92,6 +92,10 @@ impl SpanHandler {
         self.handler.emit(Some((&self.cm, sp)), msg, Fatal);
         panic!(FatalError);
     }
+    pub fn span_fatal_with_code(&self, sp: Span, msg: &str, code: &str) -> ! {
+        self.handler.emit_with_code(Some((&self.cm, sp)), msg, code, Fatal);
+        panic!(FatalError);
+    }
     pub fn span_err(&self, sp: Span, msg: &str) {
         self.handler.emit(Some((&self.cm, sp)), msg, Error);
         self.handler.bump_err_count();
@@ -137,7 +141,7 @@ impl SpanHandler {
 /// (fatal, bug, unimpl) may cause immediate exit,
 /// others log errors for later reporting.
 pub struct Handler {
-    err_count: Cell<uint>,
+    err_count: Cell<usize>,
     emit: RefCell<Box<Emitter + Send>>,
 }
 
@@ -151,20 +155,20 @@ impl Handler {
         self.bump_err_count();
     }
     pub fn bump_err_count(&self) {
-        self.err_count.set(self.err_count.get() + 1u);
+        self.err_count.set(self.err_count.get() + 1us);
     }
-    pub fn err_count(&self) -> uint {
+    pub fn err_count(&self) -> usize {
         self.err_count.get()
     }
     pub fn has_errors(&self) -> bool {
-        self.err_count.get()> 0u
+        self.err_count.get() > 0us
     }
     pub fn abort_if_errors(&self) {
         let s;
         match self.err_count.get() {
-          0u => return,
-          1u => s = "aborting due to previous error".to_string(),
-          _  => {
+          0us => return,
+          1us => s = "aborting due to previous error".to_string(),
+          _   => {
             s = format!("aborting due to {} previous errors",
                         self.err_count.get());
           }
@@ -235,9 +239,9 @@ pub enum Level {
     Help,
 }
 
-impl fmt::String for Level {
+impl fmt::Display for Level {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use std::fmt::String;
+        use std::fmt::Display;
 
         match *self {
             Bug => "error: internal compiler error".fmt(f),
@@ -262,7 +266,7 @@ impl Level {
 
 fn print_maybe_styled(w: &mut EmitterWriter,
                       msg: &str,
-                      color: term::attr::Attr) -> io::IoResult<()> {
+                      color: term::attr::Attr) -> old_io::IoResult<()> {
     match w.dst {
         Terminal(ref mut t) => {
             try!(t.attr(color));
@@ -280,7 +284,7 @@ fn print_maybe_styled(w: &mut EmitterWriter,
             // to be miscolored. We assume this is rare enough that we don't
             // have to worry about it.
             if msg.ends_with("\n") {
-                try!(t.write_str(&msg[..(msg.len()-1)]));
+                try!(t.write_str(&msg[..msg.len()-1]));
                 try!(t.reset());
                 try!(t.write_str("\n"));
             } else {
@@ -296,7 +300,7 @@ fn print_maybe_styled(w: &mut EmitterWriter,
 }
 
 fn print_diagnostic(dst: &mut EmitterWriter, topic: &str, lvl: Level,
-                    msg: &str, code: Option<&str>) -> io::IoResult<()> {
+                    msg: &str, code: Option<&str>) -> old_io::IoResult<()> {
     if !topic.is_empty() {
         try!(write!(&mut dst.dst, "{} ", topic));
     }
@@ -332,7 +336,7 @@ enum Destination {
 impl EmitterWriter {
     pub fn stderr(color_config: ColorConfig,
                   registry: Option<diagnostics::registry::Registry>) -> EmitterWriter {
-        let stderr = io::stderr();
+        let stderr = old_io::stderr();
 
         let use_color = match color_config {
             Always => true,
@@ -358,10 +362,10 @@ impl EmitterWriter {
 }
 
 impl Writer for Destination {
-    fn write(&mut self, bytes: &[u8]) -> io::IoResult<()> {
+    fn write_all(&mut self, bytes: &[u8]) -> old_io::IoResult<()> {
         match *self {
-            Terminal(ref mut t) => t.write(bytes),
-            Raw(ref mut w) => w.write(bytes),
+            Terminal(ref mut t) => t.write_all(bytes),
+            Raw(ref mut w) => w.write_all(bytes),
         }
     }
 }
@@ -394,7 +398,7 @@ impl Emitter for EmitterWriter {
 }
 
 fn emit(dst: &mut EmitterWriter, cm: &codemap::CodeMap, rsp: RenderSpan,
-        msg: &str, code: Option<&str>, lvl: Level, custom: bool) -> io::IoResult<()> {
+        msg: &str, code: Option<&str>, lvl: Level, custom: bool) -> old_io::IoResult<()> {
     let sp = rsp.span();
 
     // We cannot check equality directly with COMMAND_LINE_SP
@@ -442,13 +446,13 @@ fn highlight_lines(err: &mut EmitterWriter,
                    cm: &codemap::CodeMap,
                    sp: Span,
                    lvl: Level,
-                   lines: codemap::FileLines) -> io::IoResult<()> {
+                   lines: codemap::FileLines) -> old_io::IoResult<()> {
     let fm = &*lines.file;
 
     let mut elided = false;
     let mut display_lines = &lines.lines[];
     if display_lines.len() > MAX_LINES {
-        display_lines = &display_lines[0u..MAX_LINES];
+        display_lines = &display_lines[0us..MAX_LINES];
         elided = true;
     }
     // Print the offending lines
@@ -459,32 +463,32 @@ fn highlight_lines(err: &mut EmitterWriter,
         }
     }
     if elided {
-        let last_line = display_lines[display_lines.len() - 1u];
-        let s = format!("{}:{} ", fm.name, last_line + 1u);
+        let last_line = display_lines[display_lines.len() - 1us];
+        let s = format!("{}:{} ", fm.name, last_line + 1us);
         try!(write!(&mut err.dst, "{0:1$}...\n", "", s.len()));
     }
 
     // FIXME (#3260)
     // If there's one line at fault we can easily point to the problem
-    if lines.lines.len() == 1u {
+    if lines.lines.len() == 1us {
         let lo = cm.lookup_char_pos(sp.lo);
-        let mut digits = 0u;
-        let mut num = (lines.lines[0] + 1u) / 10u;
+        let mut digits = 0us;
+        let mut num = (lines.lines[0] + 1us) / 10us;
 
         // how many digits must be indent past?
-        while num > 0u { num /= 10u; digits += 1u; }
+        while num > 0us { num /= 10us; digits += 1us; }
 
         // indent past |name:## | and the 0-offset column location
-        let left = fm.name.len() + digits + lo.col.to_uint() + 3u;
+        let left = fm.name.len() + digits + lo.col.to_usize() + 3us;
         let mut s = String::new();
         // Skip is the number of characters we need to skip because they are
         // part of the 'filename:line ' part of the previous line.
-        let skip = fm.name.len() + digits + 3u;
+        let skip = fm.name.len() + digits + 3us;
         for _ in range(0, skip) {
             s.push(' ');
         }
         if let Some(orig) = fm.get_line(lines.lines[0]) {
-            for pos in range(0u, left - skip) {
+            for pos in range(0us, left - skip) {
                 let cur_char = orig.as_bytes()[pos] as char;
                 // Whenever a tab occurs on the previous line, we insert one on
                 // the error-point-squiggly-line as well (instead of a space).
@@ -502,7 +506,7 @@ fn highlight_lines(err: &mut EmitterWriter,
         let hi = cm.lookup_char_pos(sp.hi);
         if hi.col != lo.col {
             // the ^ already takes up one space
-            let num_squigglies = hi.col.to_uint() - lo.col.to_uint() - 1u;
+            let num_squigglies = hi.col.to_usize() - lo.col.to_usize() - 1us;
             for _ in range(0, num_squigglies) {
                 s.push('~');
             }
@@ -525,7 +529,7 @@ fn custom_highlight_lines(w: &mut EmitterWriter,
                           sp: Span,
                           lvl: Level,
                           lines: codemap::FileLines)
-                          -> io::IoResult<()> {
+                          -> old_io::IoResult<()> {
     let fm = &*lines.file;
 
     let lines = &lines.lines[];
@@ -551,7 +555,7 @@ fn custom_highlight_lines(w: &mut EmitterWriter,
     let last_line_start = format!("{}:{} ", fm.name, lines[lines.len()-1]+1);
     let hi = cm.lookup_char_pos(sp.hi);
     // Span seems to use half-opened interval, so subtract 1
-    let skip = last_line_start.len() + hi.col.to_uint() - 1;
+    let skip = last_line_start.len() + hi.col.to_usize() - 1;
     let mut s = String::new();
     for _ in range(0, skip) {
         s.push(' ');
@@ -566,7 +570,7 @@ fn custom_highlight_lines(w: &mut EmitterWriter,
 fn print_macro_backtrace(w: &mut EmitterWriter,
                          cm: &codemap::CodeMap,
                          sp: Span)
-                         -> io::IoResult<()> {
+                         -> old_io::IoResult<()> {
     let cs = try!(cm.with_expn_info(sp.expn_id, |expn_info| match expn_info {
         Some(ei) => {
             let ss = ei.callee.span.map_or(String::new(), |span| cm.span_to_string(span));

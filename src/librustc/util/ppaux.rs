@@ -10,6 +10,7 @@
 
 
 use middle::def;
+use middle::region;
 use middle::subst::{VecPerParamSpace,Subst};
 use middle::subst;
 use middle::ty::{BoundRegion, BrAnon, BrNamed};
@@ -20,7 +21,7 @@ use middle::ty::{mt, Ty, ParamTy};
 use middle::ty::{ty_bool, ty_char, ty_struct, ty_enum};
 use middle::ty::{ty_err, ty_str, ty_vec, ty_float, ty_bare_fn};
 use middle::ty::{ty_param, ty_ptr, ty_rptr, ty_tup, ty_open};
-use middle::ty::{ty_unboxed_closure};
+use middle::ty::{ty_closure};
 use middle::ty::{ty_uniq, ty_trait, ty_int, ty_uint, ty_infer};
 use middle::ty;
 use middle::ty_fold::TypeFoldable;
@@ -84,37 +85,41 @@ pub fn explain_region_and_span(cx: &ctxt, region: ty::Region)
                             -> (String, Option<Span>) {
     return match region {
       ReScope(scope) => {
-        match cx.map.find(scope.node_id()) {
-          Some(ast_map::NodeBlock(ref blk)) => {
-            explain_span(cx, "block", blk.span)
-          }
-          Some(ast_map::NodeExpr(expr)) => {
-            match expr.node {
-              ast::ExprCall(..) => explain_span(cx, "call", expr.span),
-              ast::ExprMethodCall(..) => {
-                explain_span(cx, "method call", expr.span)
-              },
-              ast::ExprMatch(_, _, ast::MatchSource::IfLetDesugar { .. }) =>
-                  explain_span(cx, "if let", expr.span),
-              ast::ExprMatch(_, _, ast::MatchSource::WhileLetDesugar) => {
-                  explain_span(cx, "while let", expr.span)
-              },
-              ast::ExprMatch(..) => explain_span(cx, "match", expr.span),
-              _ => explain_span(cx, "expression", expr.span)
-            }
-          }
-          Some(ast_map::NodeStmt(stmt)) => {
-              explain_span(cx, "statement", stmt.span)
-          }
-          Some(ast_map::NodeItem(it)) => {
-              let tag = item_scope_tag(&*it);
-              explain_span(cx, tag, it.span)
-          }
+        let new_string;
+        let on_unknown_scope = |&:| {
+          (format!("unknown scope: {:?}.  Please report a bug.", scope), None)
+        };
+        let span = match scope.span(&cx.map) {
+          Some(s) => s,
+          None => return on_unknown_scope(),
+        };
+        let tag = match cx.map.find(scope.node_id()) {
+          Some(ast_map::NodeBlock(_)) => "block",
+          Some(ast_map::NodeExpr(expr)) => match expr.node {
+              ast::ExprCall(..) => "call",
+              ast::ExprMethodCall(..) => "method call",
+              ast::ExprMatch(_, _, ast::MatchSource::IfLetDesugar { .. }) => "if let",
+              ast::ExprMatch(_, _, ast::MatchSource::WhileLetDesugar) =>  "while let",
+              ast::ExprMatch(..) => "match",
+              _ => "expression",
+          },
+          Some(ast_map::NodeStmt(_)) => "statement",
+          Some(ast_map::NodeItem(it)) => item_scope_tag(&*it),
           Some(_) | None => {
             // this really should not happen
-            (format!("unknown scope: {:?}.  Please report a bug.", scope), None)
+            return on_unknown_scope();
           }
-        }
+        };
+        let scope_decorated_tag = match scope {
+            region::CodeExtent::Misc(_) => tag,
+            region::CodeExtent::Remainder(r) => {
+                new_string = format!("block suffix following statement {}",
+                                     r.first_statement_index);
+                new_string.as_slice()
+            }
+        };
+        explain_span(cx, scope_decorated_tag, span)
+
       }
 
       ReFree(ref fr) => {
@@ -164,7 +169,7 @@ pub fn explain_region_and_span(cx: &ctxt, region: ty::Region)
     fn explain_span(cx: &ctxt, heading: &str, span: Span)
                     -> (String, Option<Span>) {
         let lo = cx.sess.codemap().lookup_char_pos_adj(span.lo);
-        (format!("the {} at {}:{}", heading, lo.line, lo.col.to_uint()),
+        (format!("the {} at {}:{}", heading, lo.line, lo.col.to_usize()),
          Some(span))
     }
 }
@@ -237,15 +242,6 @@ pub fn mt_to_string<'tcx>(cx: &ctxt<'tcx>, m: &mt<'tcx>) -> String {
         ty_to_string(cx, m.ty))
 }
 
-pub fn trait_store_to_string(cx: &ctxt, s: ty::TraitStore) -> String {
-    match s {
-        ty::UniqTraitStore => "Box ".to_string(),
-        ty::RegionTraitStore(r, m) => {
-            format!("{}{}", region_ptr_to_string(cx, r), mutability_to_string(m))
-        }
-    }
-}
-
 pub fn vec_map_to_string<T, F>(ts: &[T], f: F) -> String where
     F: FnMut(&T) -> String,
 {
@@ -285,7 +281,7 @@ pub fn ty_to_string<'tcx>(cx: &ctxt<'tcx>, typ: &ty::TyS<'tcx>) -> String {
             _ => { }
         }
 
-        push_sig_to_string(cx, &mut s, '(', ')', sig, "");
+        push_sig_to_string(cx, &mut s, '(', ')', sig);
 
         match opt_def_id {
             Some(def_id) => {
@@ -303,13 +299,6 @@ pub fn ty_to_string<'tcx>(cx: &ctxt<'tcx>, typ: &ty::TyS<'tcx>) -> String {
     fn closure_to_string<'tcx>(cx: &ctxt<'tcx>, cty: &ty::ClosureTy<'tcx>) -> String {
         let mut s = String::new();
 
-        match cty.store {
-            ty::UniqTraitStore => {}
-            ty::RegionTraitStore(region, _) => {
-                s.push_str(&region_to_string(cx, "", true, region)[]);
-            }
-        }
-
         match cty.unsafety {
             ast::Unsafety::Normal => {}
             ast::Unsafety::Unsafe => {
@@ -318,24 +307,7 @@ pub fn ty_to_string<'tcx>(cx: &ctxt<'tcx>, typ: &ty::TyS<'tcx>) -> String {
             }
         };
 
-        let bounds_str = cty.bounds.user_string(cx);
-
-        match cty.store {
-            ty::UniqTraitStore => {
-                assert_eq!(cty.onceness, ast::Once);
-                s.push_str("proc");
-                push_sig_to_string(cx, &mut s, '(', ')', &cty.sig,
-                                   &bounds_str[]);
-            }
-            ty::RegionTraitStore(..) => {
-                match cty.onceness {
-                    ast::Many => {}
-                    ast::Once => s.push_str("once ")
-                }
-                push_sig_to_string(cx, &mut s, '|', '|', &cty.sig,
-                                   &bounds_str[]);
-            }
-        }
+        push_sig_to_string(cx, &mut s, '|', '|', &cty.sig);
 
         s
     }
@@ -344,8 +316,7 @@ pub fn ty_to_string<'tcx>(cx: &ctxt<'tcx>, typ: &ty::TyS<'tcx>) -> String {
                                 s: &mut String,
                                 bra: char,
                                 ket: char,
-                                sig: &ty::PolyFnSig<'tcx>,
-                                bounds: &str) {
+                                sig: &ty::PolyFnSig<'tcx>) {
         s.push(bra);
         let strs = sig.0.inputs
             .iter()
@@ -356,11 +327,6 @@ pub fn ty_to_string<'tcx>(cx: &ctxt<'tcx>, typ: &ty::TyS<'tcx>) -> String {
             s.push_str(", ...");
         }
         s.push(ket);
-
-        if !bounds.is_empty() {
-            s.push_str(":");
-            s.push_str(bounds);
-        }
 
         match sig.0.output {
             ty::FnConverging(t) => {
@@ -453,9 +419,8 @@ pub fn ty_to_string<'tcx>(cx: &ctxt<'tcx>, typ: &ty::TyS<'tcx>) -> String {
                     data.item_name.user_string(cx))
         }
         ty_str => "str".to_string(),
-        ty_unboxed_closure(ref did, _, substs) => {
-            let unboxed_closures = cx.unboxed_closures.borrow();
-            unboxed_closures.get(did).map(|cl| {
+        ty_closure(ref did, _, substs) => {
+            cx.closures.borrow().get(did).map(|cl| {
                 closure_to_string(cx, &cl.closure_type.subst(cx, substs))
             }).unwrap_or_else(|| {
                 if did.krate == ast::LOCAL_CRATE {
@@ -542,7 +507,7 @@ pub fn parameterized<'tcx>(cx: &ctxt<'tcx>,
         0
     };
 
-    for t in tps[..(tps.len() - num_defaults)].iter() {
+    for t in tps[..tps.len() - num_defaults].iter() {
         strs.push(ty_to_string(cx, *t))
     }
 
@@ -550,9 +515,9 @@ pub fn parameterized<'tcx>(cx: &ctxt<'tcx>,
         format!("{}({}){}",
                 base,
                 if strs[0].starts_with("(") && strs[0].ends_with(",)") {
-                    &strs[0][1 .. (strs[0].len() - 2)] // Remove '(' and ',)'
+                    &strs[0][1 .. strs[0].len() - 2] // Remove '(' and ',)'
                 } else if strs[0].starts_with("(") && strs[0].ends_with(")") {
-                    &strs[0][1 .. (strs[0].len() - 1)] // Remove '(' and ')'
+                    &strs[0][1 .. strs[0].len() - 1] // Remove '(' and ')'
                 } else {
                     &strs[0][]
                 },
@@ -583,7 +548,7 @@ impl<'tcx, T:Repr<'tcx>> Repr<'tcx> for Option<T> {
 
 impl<'tcx, T:Repr<'tcx>> Repr<'tcx> for P<T> {
     fn repr(&self, tcx: &ctxt<'tcx>) -> String {
-        (*self).repr(tcx)
+        (**self).repr(tcx)
     }
 }
 
@@ -907,6 +872,17 @@ impl<'tcx> Repr<'tcx> for ty::FreeRegion {
     }
 }
 
+impl<'tcx> Repr<'tcx> for region::CodeExtent {
+    fn repr(&self, _tcx: &ctxt) -> String {
+        match *self {
+            region::CodeExtent::Misc(node_id) =>
+                format!("Misc({})", node_id),
+            region::CodeExtent::Remainder(rem) =>
+                format!("Remainder({}, {})", rem.block, rem.first_statement_index),
+        }
+    }
+}
+
 impl<'tcx> Repr<'tcx> for ast::DefId {
     fn repr(&self, tcx: &ctxt) -> String {
         // Unfortunately, there seems to be no way to attempt to print
@@ -1060,8 +1036,8 @@ impl<'tcx> Repr<'tcx> for ty::MethodOrigin<'tcx> {
             &ty::MethodStatic(def_id) => {
                 format!("MethodStatic({})", def_id.repr(tcx))
             }
-            &ty::MethodStaticUnboxedClosure(def_id) => {
-                format!("MethodStaticUnboxedClosure({})", def_id.repr(tcx))
+            &ty::MethodStaticClosure(def_id) => {
+                format!("MethodStaticClosure({})", def_id.repr(tcx))
             }
             &ty::MethodTypeParam(ref p) => {
                 p.repr(tcx)
@@ -1087,12 +1063,6 @@ impl<'tcx> Repr<'tcx> for ty::MethodObject<'tcx> {
                 self.trait_ref.repr(tcx),
                 self.method_num,
                 self.real_index)
-    }
-}
-
-impl<'tcx> Repr<'tcx> for ty::TraitStore {
-    fn repr(&self, tcx: &ctxt) -> String {
-        trait_store_to_string(tcx, *self)
     }
 }
 

@@ -84,6 +84,7 @@ pub struct FulfillmentContext<'tcx> {
     region_obligations: NodeMap<Vec<RegionObligation<'tcx>>>,
 }
 
+#[derive(Clone)]
 pub struct RegionObligation<'tcx> {
     pub sub_region: ty::Region,
     pub sup_type: Ty<'tcx>,
@@ -109,7 +110,7 @@ impl<'tcx> FulfillmentContext<'tcx> {
     /// `projection_ty` again.
     pub fn normalize_projection_type<'a>(&mut self,
                                          infcx: &InferCtxt<'a,'tcx>,
-                                         typer: &ty::UnboxedClosureTyper<'tcx>,
+                                         typer: &ty::ClosureTyper<'tcx>,
                                          projection_ty: ty::ProjectionTy<'tcx>,
                                          cause: ObligationCause<'tcx>)
                                          -> Ty<'tcx>
@@ -185,7 +186,7 @@ impl<'tcx> FulfillmentContext<'tcx> {
 
     pub fn select_all_or_error<'a>(&mut self,
                                    infcx: &InferCtxt<'a,'tcx>,
-                                   typer: &ty::UnboxedClosureTyper<'tcx>)
+                                   typer: &ty::ClosureTyper<'tcx>)
                                    -> Result<(),Vec<FulfillmentError<'tcx>>>
     {
         try!(self.select_where_possible(infcx, typer));
@@ -210,7 +211,7 @@ impl<'tcx> FulfillmentContext<'tcx> {
     /// results in `O(n^2)` performance (#18208).
     pub fn select_new_obligations<'a>(&mut self,
                                       infcx: &InferCtxt<'a,'tcx>,
-                                      typer: &ty::UnboxedClosureTyper<'tcx>)
+                                      typer: &ty::ClosureTyper<'tcx>)
                                       -> Result<(),Vec<FulfillmentError<'tcx>>>
     {
         let mut selcx = SelectionContext::new(infcx, typer);
@@ -219,7 +220,7 @@ impl<'tcx> FulfillmentContext<'tcx> {
 
     pub fn select_where_possible<'a>(&mut self,
                                      infcx: &InferCtxt<'a,'tcx>,
-                                     typer: &ty::UnboxedClosureTyper<'tcx>)
+                                     typer: &ty::ClosureTyper<'tcx>)
                                      -> Result<(),Vec<FulfillmentError<'tcx>>>
     {
         let mut selcx = SelectionContext::new(infcx, typer);

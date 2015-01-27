@@ -57,8 +57,8 @@ pub enum DefIdSource {
     // Identifies a region parameter (`fn foo<'X>() { ... }`).
     RegionParameter,
 
-    // Identifies an unboxed closure
-    UnboxedClosureSource
+    // Identifies a closure
+    ClosureSource
 }
 
 // type conv_did = impl FnMut(DefIdSource, ast::DefId) -> ast::DefId;
@@ -243,19 +243,6 @@ fn parse_size(st: &mut PState) -> Option<uint> {
     }
 }
 
-fn parse_trait_store_<F>(st: &mut PState, conv: &mut F) -> ty::TraitStore where
-    F: FnMut(DefIdSource, ast::DefId) -> ast::DefId,
-{
-    match next(st) {
-        '~' => ty::UniqTraitStore,
-        '&' => ty::RegionTraitStore(parse_region_(st, conv), parse_mutability(st)),
-        c => {
-            st.tcx.sess.bug(&format!("parse_trait_store(): bad input '{}'",
-                                    c)[])
-        }
-    }
-}
-
 fn parse_vec_per_param_space<'a, 'tcx, T, F>(st: &mut PState<'a, 'tcx>,
                                              mut f: F)
                                              -> VecPerParamSpace<T> where
@@ -389,6 +376,14 @@ fn parse_scope(st: &mut PState) -> region::CodeExtent {
         'M' => {
             let node_id = parse_uint(st) as ast::NodeId;
             region::CodeExtent::Misc(node_id)
+        }
+        'B' => {
+            let node_id = parse_uint(st) as ast::NodeId;
+            let first_stmt_index = parse_uint(st);
+            let block_remainder = region::BlockRemainder {
+                block: node_id, first_statement_index: first_stmt_index,
+            };
+            region::CodeExtent::Remainder(block_remainder)
         }
         _ => panic!("parse_scope: bad input")
     }
@@ -550,11 +545,11 @@ fn parse_ty_<'a, 'tcx, F>(st: &mut PState<'a, 'tcx>, conv: &mut F) -> Ty<'tcx> w
       }
       'k' => {
           assert_eq!(next(st), '[');
-          let did = parse_def_(st, UnboxedClosureSource, conv);
+          let did = parse_def_(st, ClosureSource, conv);
           let region = parse_region_(st, conv);
           let substs = parse_substs_(st, conv);
           assert_eq!(next(st), ']');
-          return ty::mk_unboxed_closure(st.tcx, did,
+          return ty::mk_closure(st.tcx, did,
                   st.tcx.mk_region(region), st.tcx.mk_substs(substs));
       }
       'P' => {
@@ -641,14 +636,6 @@ fn parse_abi_set(st: &mut PState) -> abi::Abi {
     })
 }
 
-fn parse_onceness(c: char) -> ast::Onceness {
-    match c {
-        'o' => ast::Once,
-        'm' => ast::Many,
-        _ => panic!("parse_onceness: bad onceness")
-    }
-}
-
 fn parse_closure_ty<'a, 'tcx, F>(st: &mut PState<'a, 'tcx>,
                                  mut conv: F) -> ty::ClosureTy<'tcx> where
     F: FnMut(DefIdSource, ast::DefId) -> ast::DefId,
@@ -661,16 +648,10 @@ fn parse_closure_ty_<'a, 'tcx, F>(st: &mut PState<'a, 'tcx>,
     F: FnMut(DefIdSource, ast::DefId) -> ast::DefId,
 {
     let unsafety = parse_unsafety(next(st));
-    let onceness = parse_onceness(next(st));
-    let store = parse_trait_store_(st, conv);
-    let bounds = parse_existential_bounds_(st, conv);
     let sig = parse_sig_(st, conv);
     let abi = parse_abi_set(st);
     ty::ClosureTy {
         unsafety: unsafety,
-        onceness: onceness,
-        store: store,
-        bounds: bounds,
         sig: sig,
         abi: abi,
     }
@@ -734,7 +715,7 @@ pub fn parse_def_id(buf: &[u8]) -> ast::DefId {
     }
 
     let crate_part = &buf[0u..colon_idx];
-    let def_part = &buf[(colon_idx + 1u)..len];
+    let def_part = &buf[colon_idx + 1u..len];
 
     let crate_num = match str::from_utf8(crate_part).ok().and_then(|s| s.parse::<uint>()) {
        Some(cn) => cn as ast::CrateNum,

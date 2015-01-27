@@ -113,11 +113,11 @@ impl LanguageItems {
         }
     }
 
-    pub fn fn_trait_kind(&self, id: ast::DefId) -> Option<ty::UnboxedClosureKind> {
+    pub fn fn_trait_kind(&self, id: ast::DefId) -> Option<ty::ClosureKind> {
         let def_id_kinds = [
-            (self.fn_trait(), ty::FnUnboxedClosureKind),
-            (self.fn_mut_trait(), ty::FnMutUnboxedClosureKind),
-            (self.fn_once_trait(), ty::FnOnceUnboxedClosureKind),
+            (self.fn_trait(), ty::FnClosureKind),
+            (self.fn_mut_trait(), ty::FnMutClosureKind),
+            (self.fn_once_trait(), ty::FnOnceClosureKind),
             ];
 
         for &(opt_def_id, kind) in def_id_kinds.iter() {
@@ -320,9 +320,7 @@ lets_do_this! {
     ContravariantLifetimeItem,       "contravariant_lifetime",  contravariant_lifetime;
     InvariantLifetimeItem,           "invariant_lifetime",      invariant_lifetime;
 
-    NoSendItem,                      "no_send_bound",           no_send_bound;
     NoCopyItem,                      "no_copy_bound",           no_copy_bound;
-    NoSyncItem,                      "no_sync_bound",           no_sync_bound;
     ManagedItem,                     "managed_bound",           managed_bound;
 
     NonZeroItem,                     "non_zero",                non_zero;
@@ -330,4 +328,6 @@ lets_do_this! {
     IteratorItem,                    "iterator",                iterator;
 
     StackExhaustedLangItem,          "stack_exhausted",         stack_exhausted;
+
+    DebugTraitLangItem,              "debug_trait",             debug_trait;
 }

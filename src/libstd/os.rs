@@ -10,17 +10,19 @@
 
 //! Higher-level interfaces to libc::* functions and operating system services.
 //!
-//! In general these take and return rust types, use rust idioms (enums, closures, vectors) rather
-//! than C idioms, and do more extensive safety checks.
+//! In general these take and return rust types, use rust idioms (enums,
+//! closures, vectors) rather than C idioms, and do more extensive safety
+//! checks.
 //!
-//! This module is not meant to only contain 1:1 mappings to libc entries; any os-interface code
-//! that is reasonably useful and broadly applicable can go here. Including utility routines that
-//! merely build on other os code.
+//! This module is not meant to only contain 1:1 mappings to libc entries; any
+//! os-interface code that is reasonably useful and broadly applicable can go
+//! here. Including utility routines that merely build on other os code.
 //!
-//! We assume the general case is that users do not care, and do not want to be made to care, which
-//! operating system they are on. While they may want to special case various special cases -- and
-//! so we will not _hide_ the facts of which OS the user is on -- they should be given the
-//! opportunity to write OS-ignorant code by default.
+//! We assume the general case is that users do not care, and do not want to be
+//! made to care, which operating system they are on. While they may want to
+//! special case various special cases -- and so we will not _hide_ the facts of
+//! which OS the user is on -- they should be given the opportunity to write
+//! OS-ignorant code by default.
 
 #![unstable]
 
@@ -35,7 +37,7 @@ use self::MapError::*;
 use clone::Clone;
 use error::{FromError, Error};
 use fmt;
-use io::{IoResult, IoError};
+use old_io::{IoResult, IoError};
 use iter::{Iterator, IteratorExt};
 use marker::{Copy, Send};
 use libc::{c_void, c_int, c_char};
@@ -376,7 +378,7 @@ pub struct Pipe {
 /// This function is also unsafe as there is no destructor associated with the
 /// `Pipe` structure will return. If it is not arranged for the returned file
 /// descriptors to be closed, the file descriptors will leak. For safe handling
-/// of this scenario, use `std::io::PipeStream` instead.
+/// of this scenario, use `std::old_io::PipeStream` instead.
 pub unsafe fn pipe() -> IoResult<Pipe> {
     let (reader, writer) = try!(sys::os::pipe());
     Ok(Pipe {
@@ -866,7 +868,7 @@ pub enum MapOption {
 impl Copy for MapOption {}
 
 /// Possible errors when creating a map.
-#[derive(Copy)]
+#[derive(Copy, Show)]
 pub enum MapError {
     /// # The following are POSIX-specific
     ///
@@ -911,7 +913,8 @@ pub enum MapError {
     ErrMapViewOfFile(uint)
 }
 
-impl fmt::Show for MapError {
+#[stable]
+impl fmt::Display for MapError {
     fn fmt(&self, out: &mut fmt::Formatter) -> fmt::Result {
         let str = match *self {
             ErrFdNotAvail => "fd not available for reading or writing",
@@ -945,13 +948,6 @@ impl fmt::Show for MapError {
 
 impl Error for MapError {
     fn description(&self) -> &str { "memory map error" }
-    fn detail(&self) -> Option<String> { Some(format!("{:?}", self)) }
-}
-
-impl FromError<MapError> for Box<Error + Send> {
-    fn from_error(err: MapError) -> Box<Error + Send> {
-        box err
-    }
 }
 
 // Round up `from` to be divisible by `to`
@@ -1672,10 +1668,10 @@ mod tests {
     fn memory_map_file() {
         use libc;
         use os::*;
-        use io::fs::{File, unlink};
-        use io::SeekStyle::SeekSet;
-        use io::FileMode::Open;
-        use io::FileAccess::ReadWrite;
+        use old_io::fs::{File, unlink};
+        use old_io::SeekStyle::SeekSet;
+        use old_io::FileMode::Open;
+        use old_io::FileAccess::ReadWrite;
 
         #[cfg(not(windows))]
         fn get_fd(file: &File) -> libc::c_int {

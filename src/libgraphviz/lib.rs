@@ -96,7 +96,7 @@
 //! ```no_run
 //! # pub fn render_to<W:Writer>(output: &mut W) { unimplemented!() }
 //! pub fn main() {
-//!     use std::io::File;
+//!     use std::old_io::File;
 //!     let mut f = File::create(&Path::new("example1.dot"));
 //!     render_to(&mut f)
 //! }
@@ -188,7 +188,7 @@
 //! ```no_run
 //! # pub fn render_to<W:Writer>(output: &mut W) { unimplemented!() }
 //! pub fn main() {
-//!     use std::io::File;
+//!     use std::old_io::File;
 //!     let mut f = File::create(&Path::new("example2.dot"));
 //!     render_to(&mut f)
 //! }
@@ -252,7 +252,7 @@
 //! ```no_run
 //! # pub fn render_to<W:Writer>(output: &mut W) { unimplemented!() }
 //! pub fn main() {
-//!     use std::io::File;
+//!     use std::old_io::File;
 //!     let mut f = File::create(&Path::new("example3.dot"));
 //!     render_to(&mut f)
 //! }
@@ -279,7 +279,7 @@
 use self::LabelText::*;
 
 use std::borrow::IntoCow;
-use std::io;
+use std::old_io;
 use std::string::CowString;
 use std::vec::CowVec;
 
@@ -358,19 +358,19 @@ impl<'a> Id<'a> {
     ///
     /// Passing an invalid string (containing spaces, brackets,
     /// quotes, ...) will return an empty `Err` value.
-    pub fn new<Name: IntoCow<'a, String, str>>(name: Name) -> Result<Id<'a>, ()> {
+    pub fn new<Name: IntoCow<'a, String, str>>(name: Name) -> Option<Id<'a>> {
         let name = name.into_cow();
         {
             let mut chars = name.chars();
             match chars.next() {
                 Some(c) if is_letter_or_underscore(c) => { ; },
-                _ => return Err(())
+                _ => return None
             }
             if !chars.all(is_constituent) {
-                return Err(());
+                return None
             }
         }
-        return Ok(Id{ name: name });
+        return Some(Id{ name: name });
 
         fn is_letter_or_underscore(c: char) -> bool {
             in_range('a', c, 'z') || in_range('A', c, 'Z') || c == '_'
@@ -532,7 +532,7 @@ pub fn default_options() -> Vec<RenderOption> { vec![] }
 /// (Simple wrapper around `render_opts` that passes a default set of options.)
 pub fn render<'a, N:Clone+'a, E:Clone+'a, G:Labeller<'a,N,E>+GraphWalk<'a,N,E>, W:Writer>(
               g: &'a G,
-              w: &mut W) -> io::IoResult<()> {
+              w: &mut W) -> old_io::IoResult<()> {
     render_opts(g, w, &[])
 }
 
@@ -541,14 +541,14 @@ pub fn render<'a, N:Clone+'a, E:Clone+'a, G:Labeller<'a,N,E>+GraphWalk<'a,N,E>, 
 pub fn render_opts<'a, N:Clone+'a, E:Clone+'a, G:Labeller<'a,N,E>+GraphWalk<'a,N,E>, W:Writer>(
               g: &'a G,
               w: &mut W,
-              options: &[RenderOption]) -> io::IoResult<()>
+              options: &[RenderOption]) -> old_io::IoResult<()>
 {
-    fn writeln<W:Writer>(w: &mut W, arg: &[&str]) -> io::IoResult<()> {
+    fn writeln<W:Writer>(w: &mut W, arg: &[&str]) -> old_io::IoResult<()> {
         for &s in arg.iter() { try!(w.write_str(s)); }
         w.write_char('\n')
     }
 
-    fn indent<W:Writer>(w: &mut W) -> io::IoResult<()> {
+    fn indent<W:Writer>(w: &mut W) -> old_io::IoResult<()> {
         w.write_str("    ")
     }
 
@@ -590,7 +590,7 @@ mod tests {
     use self::NodeLabels::*;
     use super::{Id, Labeller, Nodes, Edges, GraphWalk, render};
     use super::LabelText::{self, LabelStr, EscStr};
-    use std::io::IoResult;
+    use std::old_io::IoResult;
     use std::borrow::IntoCow;
     use std::iter::repeat;
 
@@ -874,8 +874,8 @@ r#"digraph syntax_tree {
     fn simple_id_construction() {
         let id1 = Id::new("hello");
         match id1 {
-            Ok(_) => {;},
-            Err(_) => panic!("'hello' is not a valid value for id anymore")
+            Some(_) => {;},
+            None => panic!("'hello' is not a valid value for id anymore")
         }
     }
 
@@ -883,8 +883,8 @@ r#"digraph syntax_tree {
     fn badly_formatted_id() {
         let id2 = Id::new("Weird { struct : ure } !!!");
         match id2 {
-            Ok(_) => panic!("graphviz id suddenly allows spaces, brackets and stuff"),
-            Err(_) => {;}
+            Some(_) => panic!("graphviz id suddenly allows spaces, brackets and stuff"),
+            None => {;}
         }
     }
 }

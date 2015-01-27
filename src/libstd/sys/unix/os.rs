@@ -15,7 +15,7 @@ use prelude::v1::*;
 use error::{FromError, Error};
 use ffi::{self, CString};
 use fmt;
-use io::{IoError, IoResult};
+use old_io::{IoError, IoResult};
 use libc::{self, c_int, c_char, c_void};
 use os::TMPBUF_SZ;
 use os;
@@ -143,7 +143,7 @@ pub unsafe fn get_env_pairs() -> Vec<Vec<u8>> {
                os::last_os_error());
     }
     let mut result = Vec::new();
-    while *environ != 0 as *const _ {
+    while *environ != ptr::null() {
         let env_pair = ffi::c_str_to_bytes(&*environ).to_vec();
         result.push(env_pair);
         environ = environ.offset(1);
@@ -198,7 +198,7 @@ pub fn load_self() -> Option<Vec<u8>> {
 pub fn load_self() -> Option<Vec<u8>> {
     use std::io;
 
-    match io::fs::readlink(&Path::new("/proc/curproc/file")) {
+    match old_io::fs::readlink(&Path::new("/proc/curproc/file")) {
         Ok(path) => Some(path.into_vec()),
         Err(..) => None
     }
@@ -206,9 +206,9 @@ pub fn load_self() -> Option<Vec<u8>> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn load_self() -> Option<Vec<u8>> {
-    use std::io;
+    use old_io;
 
-    match io::fs::readlink(&Path::new("/proc/self/exe")) {
+    match old_io::fs::readlink(&Path::new("/proc/self/exe")) {
         Ok(path) => Some(path.into_vec()),
         Err(..) => None
     }

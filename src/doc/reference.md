@@ -739,6 +739,15 @@ Rust syntax is restricted in two ways:
 * `concat!` : concatenates a comma-separated list of literals
 * `concat_idents!` : create a new identifier by concatenating the arguments
 
+The following attributes are used for quasiquoting in procedural macros:
+
+* `quote_expr!`
+* `quote_item!`
+* `quote_pat!`
+* `quote_stmt!`
+* `quote_tokens!`
+* `quote_ty!`
+
 # Crates and source files
 
 Rust is a *compiled* language. Its semantics obey a *phase distinction*
@@ -803,8 +812,9 @@ Crates contain [items](#items), each of which may have some number of
 ## Items
 
 ```{.ebnf .gram}
-item : mod_item | fn_item | type_item | struct_item | enum_item
-     | static_item | trait_item | impl_item | extern_block ;
+item : extern_crate_decl | use_decl | mod_item | fn_item | type_item
+     | struct_item | enum_item | static_item | trait_item | impl_item
+     | extern_block ;
 ```
 
 An _item_ is a component of a crate; some module items can be defined in crate
@@ -818,6 +828,8 @@ execution, and may reside in read-only memory.
 
 There are several kinds of item:
 
+* [`extern crate` declarations](#extern-crate-declarations)
+* [`use` declarations](#use-declarations)
 * [modules](#modules)
 * [functions](#functions)
 * [type definitions](#type-definitions)
@@ -854,13 +866,10 @@ no notion of type abstraction: there are no first-class "forall" types.
 
 ```{.ebnf .gram}
 mod_item : "mod" ident ( ';' | '{' mod '}' );
-mod : [ view_item | item ] * ;
+mod : item * ;
 ```
 
-A module is a container for zero or more [view items](#view-items) and zero or
-more [items](#items). The view items manage the visibility of the items defined
-within the module, as well as the visibility of names from outside the module
-when referenced from inside the module.
+A module is a container for zero or more [items](#items).
 
 A _module item_ is a module, surrounded in braces, named, and prefixed with the
 keyword `mod`. A module item introduces a new, named module into the tree of
@@ -917,19 +926,6 @@ mod thread {
     mod local_data;
 }
 ```
-
-#### View items
-
-```{.ebnf .gram}
-view_item : extern_crate_decl | use_decl ;
-```
-
-A view item manages the namespace of a module. View items do not define new
-items, but rather, simply change other items' visibility. There are two
-kinds of view items:
-
-* [`extern crate` declarations](#extern-crate-declarations)
-* [`use` declarations](#use-declarations)
 
 ##### Extern crate declarations
 
@@ -2041,6 +2037,9 @@ type int8_t = i8;
   item](#language-items) for more details.
 - `test` - indicates that this function is a test function, to only be compiled
   in case of `--test`.
+- `should_fail` - indicates that this test function should panic, inverting the success condition.
+- `cold` - The function is unlikely to be executed, so optimize it (and calls
+  to it) differently.
 
 ### Static-only attributes
 
@@ -2292,140 +2291,7 @@ The name `str_eq` has a special meaning to the Rust compiler, and the presence
 of this definition means that it will use this definition when generating calls
 to the string equality function.
 
-A complete list of the built-in language items follows:
-
-#### Built-in Traits
-
-* `copy`
-  : Types that do not move ownership when used by-value.
-* `drop`
-  : Have destructors.
-* `send`
-  : Able to be sent across thread boundaries.
-* `sized`
-  : Has a size known at compile time.
-* `sync`
-  : Able to be safely shared between threads when aliased.
-
-#### Operators
-
-These language items are traits:
-
-* `add`
-  : Elements can be added (for example, integers and floats).
-* `sub`
-  : Elements can be subtracted.
-* `mul`
-  : Elements can be multiplied.
-* `div`
-  : Elements have a division operation.
-* `rem`
-  : Elements have a remainder operation.
-* `neg`
-  : Elements can be negated arithmetically.
-* `not`
-  : Elements can be negated logically.
-* `bitxor`
-  : Elements have an exclusive-or operation.
-* `bitand`
-  : Elements have a bitwise `and` operation.
-* `bitor`
-  : Elements have a bitwise `or` operation.
-* `shl`
-  : Elements have a left shift operation.
-* `shr`
-  : Elements have a right shift operation.
-* `index`
-  : Elements can be indexed.
-* `index_mut`
-  : ___Needs filling in___
-* `eq`
-  : Elements can be compared for equality.
-* `ord`
-  : Elements have a partial ordering.
-* `deref`
-  : `*` can be applied, yielding a reference to another type.
-* `deref_mut`
-  : `*` can be applied, yielding a mutable reference to another type.
-
-These are functions:
-
-* `fn`
-  : ___Needs filling in___
-* `fn_mut`
-  : ___Needs filling in___
-* `fn_once`
-  : ___Needs filling in___
-* `str_eq`
-  : Compare two strings (`&str`) for equality.
-* `strdup_uniq`
-  : Return a new unique string
-    containing a copy of the contents of a unique string.
-
-#### Types
-
-* `type_id`
-  : The type returned by the `type_id` intrinsic.
-* `unsafe`
-  : A type whose contents can be mutated through an immutable reference.
-
-#### Marker types
-
-These types help drive the compiler's analysis
-
-* `begin_unwind`
-  : ___Needs filling in___
-* `no_copy_bound`
-  : This type does not implement "copy", even if eligible.
-* `no_send_bound`
-  : This type does not implement "send", even if eligible.
-* `no_sync_bound`
-  : This type does not implement "sync", even if eligible.
-* `eh_personality`
-  : ___Needs filling in___
-* `exchange_free`
-  : Free memory that was allocated on the exchange heap.
-* `exchange_malloc`
-  : Allocate memory on the exchange heap.
-* `closure_exchange_malloc`
-  : ___Needs filling in___
-* `panic`
-  : Abort the program with an error.
-* `fail_bounds_check`
-  : Abort the program with a bounds check error.
-* `free`
-  : Free memory that was allocated on the managed heap.
-* `gc`
-  : ___Needs filling in___
-* `exchange_heap`
-  : ___Needs filling in___
-* `iterator`
-  : ___Needs filling in___
-* `contravariant_lifetime`
-  : The lifetime parameter should be considered contravariant.
-* `covariant_lifetime`
-  : The lifetime parameter should be considered covariant.
-* `invariant_lifetime`
-  : The lifetime parameter should be considered invariant.
-* `malloc`
-  : Allocate memory on the managed heap.
-* `owned_box`
-  : ___Needs filling in___
-* `stack_exhausted`
-  : ___Needs filling in___
-* `start`
-  : ___Needs filling in___
-* `contravariant_type`
-  : The type parameter should be considered contravariant.
-* `covariant_type`
-  : The type parameter should be considered covariant.
-* `invariant_type`
-  : The type parameter should be considered invariant.
-* `ty_desc`
-  : ___Needs filling in___
-
-> **Note:** This list is likely to become out of date. We should auto-generate
-> it from `librustc/middle/lang_items.rs`.
+A complete list of the built-in language items will be added in the future.
 
 ### Inline attributes
 
@@ -2623,10 +2489,6 @@ The currently implemented features of the reference compiler are:
                        for now until the specification of identifiers is fully
                        fleshed out.
 
-* `once_fns` - Onceness guarantees a closure is only executed once. Defining a
-               closure as `once` is unlikely to be supported going forward. So
-               they are hidden behind this feature until they are to be removed.
-
 * `plugin` - Usage of [compiler plugins][plugin] for custom lints or syntax extensions.
              These depend on compiler internals and are subject to change.
 
@@ -2657,9 +2519,7 @@ The currently implemented features of the reference compiler are:
                    declare a `static` as being unique per-thread leveraging
                    LLVM's implementation which works in concert with the kernel
                    loader and dynamic linker. This is not necessarily available
-                   on all platforms, and usage of it is discouraged (rust
-                   focuses more on thread-local data instead of thread-local
-                   data).
+                   on all platforms, and usage of it is discouraged.
 
 * `trace_macros` - Allows use of the `trace_macros` macro, which is a nasty
                    hack that will certainly be removed.
@@ -2891,13 +2751,12 @@ Point3d {y: 0, z: 10, .. base};
 ### Block expressions
 
 ```{.ebnf .gram}
-block_expr : '{' [ view_item ] *
-                 [ stmt ';' | item ] *
+block_expr : '{' [ stmt ';' | item ] *
                  [ expr ] '}' ;
 ```
 
 A _block expression_ is similar to a module in terms of the declarations that
-are possible. Each block conceptually introduces a new namespace scope. View
+are possible. Each block conceptually introduces a new namespace scope. Use
 items can bring new names into scopes and declared items are in scope for only
 the block itself.
 
@@ -3153,18 +3012,17 @@ The precedence of Rust binary operators is ordered as follows, going from
 strong to weak:
 
 ```{.text .precedence}
-* / %
 as
+* / %
 + -
 << >>
 &
 ^
 |
-< > <= >=
-== !=
+== != < > <= >=
 &&
 ||
-=
+= ..
 ```
 
 Operators at the same precedence level are evaluated left-to-right. [Unary

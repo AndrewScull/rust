@@ -90,7 +90,15 @@ pub type LockResult<Guard> = Result<Guard, PoisonError<Guard>>;
 #[stable]
 pub type TryLockResult<Guard> = Result<Guard, TryLockError<Guard>>;
 
-impl<T> fmt::Show for PoisonError<T> {
+#[stable]
+impl<T> fmt::Debug for PoisonError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        "PoisonError { inner: .. }".fmt(f)
+    }
+}
+
+#[stable]
+impl<T> fmt::Display for PoisonError<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.description().fmt(f)
     }
@@ -130,7 +138,18 @@ impl<T> FromError<PoisonError<T>> for TryLockError<T> {
     }
 }
 
-impl<T> fmt::Show for TryLockError<T> {
+#[stable]
+impl<T> fmt::Debug for TryLockError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TryLockError::Poisoned(..) => "Poisoned(..)".fmt(f),
+            TryLockError::WouldBlock => "WouldBlock".fmt(f)
+        }
+    }
+}
+
+#[stable]
+impl<T> fmt::Display for TryLockError<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.description().fmt(f)
     }

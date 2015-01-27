@@ -236,13 +236,13 @@ pub fn fresh_substs_for_impl<'a, 'tcx>(infcx: &InferCtxt<'a, 'tcx>,
     infcx.fresh_substs_for_generics(span, &impl_generics)
 }
 
-impl<'tcx, N> fmt::Show for VtableImplData<'tcx, N> {
+impl<'tcx, N> fmt::Debug for VtableImplData<'tcx, N> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "VtableImpl({:?})", self.impl_def_id)
     }
 }
 
-impl<'tcx> fmt::Show for super::VtableObjectData<'tcx> {
+impl<'tcx> fmt::Debug for super::VtableObjectData<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "VtableObject(...)")
     }
@@ -367,8 +367,8 @@ impl<'tcx, N:Repr<'tcx>> Repr<'tcx> for super::Vtable<'tcx, N> {
             super::VtableImpl(ref v) =>
                 v.repr(tcx),
 
-            super::VtableUnboxedClosure(ref d, ref s) =>
-                format!("VtableUnboxedClosure({},{})",
+            super::VtableClosure(ref d, ref s) =>
+                format!("VtableClosure({},{})",
                         d.repr(tcx),
                         s.repr(tcx)),
 
@@ -449,7 +449,7 @@ impl<'tcx> Repr<'tcx> for super::FulfillmentErrorCode<'tcx> {
     }
 }
 
-impl<'tcx> fmt::Show for super::FulfillmentErrorCode<'tcx> {
+impl<'tcx> fmt::Debug for super::FulfillmentErrorCode<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             super::CodeSelectionError(ref e) => write!(f, "{:?}", e),
@@ -465,7 +465,7 @@ impl<'tcx> Repr<'tcx> for super::MismatchedProjectionTypes<'tcx> {
     }
 }
 
-impl<'tcx> fmt::Show for super::MismatchedProjectionTypes<'tcx> {
+impl<'tcx> fmt::Debug for super::MismatchedProjectionTypes<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "MismatchedProjectionTypes(..)")
     }

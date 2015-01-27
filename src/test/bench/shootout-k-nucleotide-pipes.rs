@@ -101,11 +101,11 @@ fn windows_with_carry<F>(bb: &[u8], nn: uint, mut it: F) -> Vec<u8> where
 
    let len = bb.len();
    while ii < len - (nn - 1u) {
-      it(&bb[ii..(ii+nn)]);
+      it(&bb[ii..ii+nn]);
       ii += 1u;
    }
 
-   return bb[(len - (nn - 1u))..len].to_vec();
+   return bb[len - (nn - 1u)..len].to_vec();
 }
 
 fn make_sequence_processor(sz: uint,
@@ -146,7 +146,7 @@ fn make_sequence_processor(sz: uint,
 
 // given a FASTA file on stdin, process sequence THREE
 fn main() {
-    use std::io::{stdio, MemReader, BufferedReader};
+    use std::old_io::{stdio, MemReader, BufferedReader};
 
     let rdr = if os::getenv("RUST_BENCH").is_some() {
         let foo = include_bytes!("shootout-k-nucleotide.data");

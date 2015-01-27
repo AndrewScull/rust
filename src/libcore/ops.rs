@@ -13,11 +13,19 @@
 //! Implementing these traits allows you to get an effect similar to
 //! overloading operators.
 //!
-//! The values for the right hand side of an operator are automatically
-//! borrowed, so `a + b` is sugar for `a.add(&b)`.
-//!
-//! All of these traits are imported by the prelude, so they are available in
+//! Some of these traits are imported by the prelude, so they are available in
 //! every Rust program.
+//!
+//! Many of the operators take their operands by value. In non-generic
+//! contexts involving built-in types, this is usually not a problem.
+//! However, using these operators in generic code, requires some
+//! attention if values have to be reused as opposed to letting the operators
+//! consume them. One option is to occasionally use `clone()`.
+//! Another option is to rely on the types involved providing additional
+//! operator implementations for references. For example, for a user-defined
+//! type `T` which is supposed to support addition, it is probably a good
+//! idea to have both `T` and `&T` implement the traits `Add<T>` and `Add<&T>`
+//! so that generic code can be written without unnecessary cloning.
 //!
 //! # Example
 //!
@@ -25,8 +33,6 @@
 //! demonstrates adding and subtracting two `Point`s.
 //!
 //! ```rust
-//! #![feature(associated_types)]
-//!
 //! use std::ops::{Add, Sub};
 //!
 //! #[derive(Show)]
@@ -61,10 +67,7 @@
 
 #![stable]
 
-use clone::Clone;
-use iter::{Step, Iterator,DoubleEndedIterator,ExactSizeIterator};
 use marker::Sized;
-use option::Option::{self, Some, None};
 use fmt;
 
 /// The `Drop` trait is used to run some code when a value goes out of scope. This
@@ -96,6 +99,58 @@ pub trait Drop {
     fn drop(&mut self);
 }
 
+// implements the unary operator "op &T"
+// based on "op T" where T is expected to be `Copy`able
+macro_rules! forward_ref_unop {
+    (impl $imp:ident, $method:ident for $t:ty) => {
+        #[unstable = "recently added, waiting for dust to settle"]
+        impl<'a> $imp for &'a $t {
+            type Output = <$t as $imp>::Output;
+
+            #[inline]
+            fn $method(self) -> <$t as $imp>::Output {
+                $imp::$method(*self)
+            }
+        }
+    }
+}
+
+// implements binary operators "&T op U", "T op &U", "&T op &U"
+// based on "T op U" where T and U are expected to be `Copy`able
+macro_rules! forward_ref_binop {
+    (impl $imp:ident, $method:ident for $t:ty, $u:ty) => {
+        #[unstable = "recently added, waiting for dust to settle"]
+        impl<'a> $imp<$u> for &'a $t {
+            type Output = <$t as $imp<$u>>::Output;
+
+            #[inline]
+            fn $method(self, other: $u) -> <$t as $imp<$u>>::Output {
+                $imp::$method(*self, other)
+            }
+        }
+
+        #[unstable = "recently added, waiting for dust to settle"]
+        impl<'a> $imp<&'a $u> for $t {
+            type Output = <$t as $imp<$u>>::Output;
+
+            #[inline]
+            fn $method(self, other: &'a $u) -> <$t as $imp<$u>>::Output {
+                $imp::$method(self, *other)
+            }
+        }
+
+        #[unstable = "recently added, waiting for dust to settle"]
+        impl<'a, 'b> $imp<&'a $u> for &'b $t {
+            type Output = <$t as $imp<$u>>::Output;
+
+            #[inline]
+            fn $method(self, other: &'a $u) -> <$t as $imp<$u>>::Output {
+                $imp::$method(*self, *other)
+            }
+        }
+    }
+}
+
 /// The `Add` trait is used to specify the functionality of `+`.
 ///
 /// # Example
@@ -104,8 +159,6 @@ pub trait Drop {
 /// calling `add`, and therefore, `main` prints `Adding!`.
 ///
 /// ```rust
-/// #![feature(associated_types)]
-///
 /// use std::ops::Add;
 ///
 /// #[derive(Copy)]
@@ -144,6 +197,8 @@ macro_rules! add_impl {
             #[inline]
             fn add(self, other: $t) -> $t { self + other }
         }
+
+        forward_ref_binop! { impl Add, add for $t, $t }
     )*)
 }
 
@@ -157,8 +212,6 @@ add_impl! { uint u8 u16 u32 u64 int i8 i16 i32 i64 f32 f64 }
 /// calling `sub`, and therefore, `main` prints `Subtracting!`.
 ///
 /// ```rust
-/// #![feature(associated_types)]
-///
 /// use std::ops::Sub;
 ///
 /// #[derive(Copy)]
@@ -197,6 +250,8 @@ macro_rules! sub_impl {
             #[inline]
             fn sub(self, other: $t) -> $t { self - other }
         }
+
+        forward_ref_binop! { impl Sub, sub for $t, $t }
     )*)
 }
 
@@ -210,8 +265,6 @@ sub_impl! { uint u8 u16 u32 u64 int i8 i16 i32 i64 f32 f64 }
 /// calling `mul`, and therefore, `main` prints `Multiplying!`.
 ///
 /// ```rust
-/// #![feature(associated_types)]
-///
 /// use std::ops::Mul;
 ///
 /// #[derive(Copy)]
@@ -250,6 +303,8 @@ macro_rules! mul_impl {
             #[inline]
             fn mul(self, other: $t) -> $t { self * other }
         }
+
+        forward_ref_binop! { impl Mul, mul for $t, $t }
     )*)
 }
 
@@ -263,8 +318,6 @@ mul_impl! { uint u8 u16 u32 u64 int i8 i16 i32 i64 f32 f64 }
 /// calling `div`, and therefore, `main` prints `Dividing!`.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::Div;
 ///
 /// #[derive(Copy)]
@@ -303,6 +356,8 @@ macro_rules! div_impl {
             #[inline]
             fn div(self, other: $t) -> $t { self / other }
         }
+
+        forward_ref_binop! { impl Div, div for $t, $t }
     )*)
 }
 
@@ -316,8 +371,6 @@ div_impl! { uint u8 u16 u32 u64 int i8 i16 i32 i64 f32 f64 }
 /// calling `rem`, and therefore, `main` prints `Remainder-ing!`.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::Rem;
 ///
 /// #[derive(Copy)]
@@ -356,6 +409,8 @@ macro_rules! rem_impl {
             #[inline]
             fn rem(self, other: $t) -> $t { self % other }
         }
+
+        forward_ref_binop! { impl Rem, rem for $t, $t }
     )*)
 }
 
@@ -371,6 +426,8 @@ macro_rules! rem_float_impl {
                 unsafe { $fmod(self, other) }
             }
         }
+
+        forward_ref_binop! { impl Rem, rem for $t, $t }
     }
 }
 
@@ -386,8 +443,6 @@ rem_float_impl! { f64, fmod }
 /// `neg`, and therefore, `main` prints `Negating!`.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::Neg;
 ///
 /// struct Foo;
@@ -429,6 +484,8 @@ macro_rules! neg_impl {
             #[stable]
             fn neg(self) -> $t { -self }
         }
+
+        forward_ref_unop! { impl Neg, neg for $t }
     )*)
 }
 
@@ -441,6 +498,8 @@ macro_rules! neg_uint_impl {
             #[inline]
             fn neg(self) -> $t { -(self as $t_signed) as $t }
         }
+
+        forward_ref_unop! { impl Neg, neg for $t }
     }
 }
 
@@ -461,8 +520,6 @@ neg_uint_impl! { u64, i64 }
 /// `not`, and therefore, `main` prints `Not-ing!`.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::Not;
 ///
 /// struct Foo;
@@ -502,6 +559,8 @@ macro_rules! not_impl {
             #[inline]
             fn not(self) -> $t { !self }
         }
+
+        forward_ref_unop! { impl Not, not for $t }
     )*)
 }
 
@@ -515,8 +574,6 @@ not_impl! { bool uint u8 u16 u32 u64 int i8 i16 i32 i64 }
 /// calling `bitand`, and therefore, `main` prints `Bitwise And-ing!`.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::BitAnd;
 ///
 /// #[derive(Copy)]
@@ -555,6 +612,8 @@ macro_rules! bitand_impl {
             #[inline]
             fn bitand(self, rhs: $t) -> $t { self & rhs }
         }
+
+        forward_ref_binop! { impl BitAnd, bitand for $t, $t }
     )*)
 }
 
@@ -568,8 +627,6 @@ bitand_impl! { bool uint u8 u16 u32 u64 int i8 i16 i32 i64 }
 /// calling `bitor`, and therefore, `main` prints `Bitwise Or-ing!`.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::BitOr;
 ///
 /// #[derive(Copy)]
@@ -608,6 +665,8 @@ macro_rules! bitor_impl {
             #[inline]
             fn bitor(self, rhs: $t) -> $t { self | rhs }
         }
+
+        forward_ref_binop! { impl BitOr, bitor for $t, $t }
     )*)
 }
 
@@ -621,8 +680,6 @@ bitor_impl! { bool uint u8 u16 u32 u64 int i8 i16 i32 i64 }
 /// calling `bitxor`, and therefore, `main` prints `Bitwise Xor-ing!`.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::BitXor;
 ///
 /// #[derive(Copy)]
@@ -661,6 +718,8 @@ macro_rules! bitxor_impl {
             #[inline]
             fn bitxor(self, other: $t) -> $t { self ^ other }
         }
+
+        forward_ref_binop! { impl BitXor, bitxor for $t, $t }
     )*)
 }
 
@@ -674,8 +733,6 @@ bitxor_impl! { bool uint u8 u16 u32 u64 int i8 i16 i32 i64 }
 /// calling `shl`, and therefore, `main` prints `Shifting left!`.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::Shl;
 ///
 /// #[derive(Copy)]
@@ -716,6 +773,8 @@ macro_rules! shl_impl {
                 self << other
             }
         }
+
+        forward_ref_binop! { impl Shl, shl for $t, $f }
     )
 }
 
@@ -745,8 +804,6 @@ shl_impl_all! { u8 u16 u32 u64 usize i8 i16 i32 i64 isize }
 /// calling `shr`, and therefore, `main` prints `Shifting right!`.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::Shr;
 ///
 /// #[derive(Copy)]
@@ -786,6 +843,8 @@ macro_rules! shr_impl {
                 self >> other
             }
         }
+
+        forward_ref_binop! { impl Shr, shr for $t, $f }
     )
 }
 
@@ -836,10 +895,12 @@ shr_impl_all! { u8 u16 u32 u64 usize i8 i16 i32 i64 isize }
 /// }
 /// ```
 #[lang="index"]
+#[stable]
 pub trait Index<Index: ?Sized> {
     type Output: ?Sized;
 
     /// The method for the indexing (`Foo[Bar]`) operation
+    #[stable]
     fn index<'a>(&'a self, index: &Index) -> &'a Self::Output;
 }
 
@@ -872,30 +933,32 @@ pub trait Index<Index: ?Sized> {
 /// }
 /// ```
 #[lang="index_mut"]
+#[stable]
 pub trait IndexMut<Index: ?Sized> {
     type Output: ?Sized;
 
     /// The method for the indexing (`Foo[Bar]`) operation
+    #[stable]
     fn index_mut<'a>(&'a mut self, index: &Index) -> &'a mut Self::Output;
 }
 
 /// An unbounded range.
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[lang="full_range"]
-#[unstable = "API still in development"]
+#[unstable = "may be renamed to RangeFull"]
 pub struct FullRange;
 
-#[unstable = "API still in development"]
-impl fmt::Show for FullRange {
+#[stable]
+impl fmt::Debug for FullRange {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Show::fmt("..", fmt)
+        fmt::Debug::fmt("..", fmt)
     }
 }
 
 /// A (half-open) range which is bounded at both ends.
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[lang="range"]
-#[unstable = "API still in development"]
+#[stable]
 pub struct Range<Idx> {
     /// The lower bound of the range (inclusive).
     pub start: Idx,
@@ -903,49 +966,8 @@ pub struct Range<Idx> {
     pub end: Idx,
 }
 
-#[unstable = "API still in development"]
-impl<Idx: Clone + Step> Iterator for Range<Idx> {
-    type Item = Idx;
-
-    #[inline]
-    fn next(&mut self) -> Option<Idx> {
-        if self.start < self.end {
-            let result = self.start.clone();
-            self.start.step();
-            return Some(result);
-        }
-
-        return None;
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (uint, Option<uint>) {
-        if let Some(hint) = Step::steps_between(&self.start, &self.end) {
-            (hint, Some(hint))
-        } else {
-            (0, None)
-        }
-    }
-}
-
-#[unstable = "API still in development"]
-impl<Idx: Clone + Step> DoubleEndedIterator for Range<Idx> {
-    #[inline]
-    fn next_back(&mut self) -> Option<Idx> {
-        if self.start < self.end {
-            self.end.step_back();
-            return Some(self.end.clone());
-        }
-
-        return None;
-    }
-}
-
-#[unstable = "API still in development"]
-impl<Idx: Clone + Step> ExactSizeIterator for Range<Idx> {}
-
-#[unstable = "API still in development"]
-impl<Idx: fmt::Show> fmt::Show for Range<Idx> {
+#[stable]
+impl<Idx: fmt::Debug> fmt::Debug for Range<Idx> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "{:?}..{:?}", self.start, self.end)
     }
@@ -954,27 +976,16 @@ impl<Idx: fmt::Show> fmt::Show for Range<Idx> {
 /// A range which is only bounded below.
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[lang="range_from"]
-#[unstable = "API still in development"]
+#[stable]
 pub struct RangeFrom<Idx> {
     /// The lower bound of the range (inclusive).
     pub start: Idx,
 }
 
-#[unstable = "API still in development"]
-impl<Idx: Clone + Step> Iterator for RangeFrom<Idx> {
-    type Item = Idx;
 
-    #[inline]
-    fn next(&mut self) -> Option<Idx> {
-        // Deliberately overflow so we loop forever.
-        let result = self.start.clone();
-        self.start.step();
-        return Some(result);
-    }
-}
 
-#[unstable = "API still in development"]
-impl<Idx: fmt::Show> fmt::Show for RangeFrom<Idx> {
+#[stable]
+impl<Idx: fmt::Debug> fmt::Debug for RangeFrom<Idx> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "{:?}..", self.start)
     }
@@ -983,14 +994,14 @@ impl<Idx: fmt::Show> fmt::Show for RangeFrom<Idx> {
 /// A range which is only bounded above.
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[lang="range_to"]
-#[unstable = "API still in development"]
+#[stable]
 pub struct RangeTo<Idx> {
     /// The upper bound of the range (exclusive).
     pub end: Idx,
 }
 
-#[unstable = "API still in development"]
-impl<Idx: fmt::Show> fmt::Show for RangeTo<Idx> {
+#[stable]
+impl<Idx: fmt::Debug> fmt::Debug for RangeTo<Idx> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "..{:?}", self.end)
     }
@@ -1006,8 +1017,6 @@ impl<Idx: fmt::Show> fmt::Show for RangeTo<Idx> {
 /// struct.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::Deref;
 ///
 /// struct DerefExample<T> {
@@ -1061,8 +1070,6 @@ impl<'a, T: ?Sized> Deref for &'a mut T {
 /// struct.
 ///
 /// ```
-/// #![feature(associated_types)]
-///
 /// use std::ops::{Deref, DerefMut};
 ///
 /// struct DerefMutExample<T> {

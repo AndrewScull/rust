@@ -54,7 +54,8 @@ pub fn expand_deriving_hash<F>(cx: &mut ExtCtxt,
                     hash_substructure(a, b, c)
                 })
             }
-        )
+        ),
+        associated_types: Vec::new(),
     };
 
     hash_trait_def.expand(cx, mitem, item, push);
@@ -89,7 +90,7 @@ fn hash_substructure(cx: &mut ExtCtxt, trait_span: Span, substr: &Substructure) 
             // iteration function.
             let discriminant = match variant.node.disr_expr {
                 Some(ref d) => d.clone(),
-                None => cx.expr_uint(trait_span, index)
+                None => cx.expr_usize(trait_span, index)
             };
 
             stmts.push(call_hash(trait_span, discriminant));

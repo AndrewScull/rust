@@ -86,7 +86,7 @@
 use prelude::v1::*;
 
 use ffi;
-use io::IoResult;
+use old_io::IoResult;
 use libc;
 use mem;
 use str;
@@ -136,7 +136,7 @@ pub fn write(w: &mut Writer) -> IoResult<()> {
 #[inline(never)] // if we know this is a function call, we can skip it when
                  // tracing
 pub fn write(w: &mut Writer) -> IoResult<()> {
-    use io::IoError;
+    use old_io::IoError;
 
     struct Context<'a> {
         idx: int,
@@ -353,7 +353,7 @@ fn print(w: &mut Writer, idx: int, addr: *mut libc::c_void) -> IoResult<()> {
     if state.is_null() {
         return output(w, idx, addr, None)
     }
-    let mut data = 0 as *const libc::c_char;
+    let mut data = ptr::null();
     let data_addr = &mut data as *mut *const libc::c_char;
     let ret = unsafe {
         backtrace_syminfo(state, addr as libc::uintptr_t,
@@ -375,7 +375,7 @@ fn output(w: &mut Writer, idx: int, addr: *mut libc::c_void,
         Some(string) => try!(demangle(w, string)),
         None => try!(write!(w, "<unknown>")),
     }
-    w.write(&['\n' as u8])
+    w.write_all(&['\n' as u8])
 }
 
 /// Unwind library interface used for backtraces
@@ -418,7 +418,7 @@ mod uw {
                                  trace_argument: *mut libc::c_void)
                     -> _Unwind_Reason_Code;
 
-        #[cfg(all(not(target_os = "android"),
+        #[cfg(all(not(all(target_os = "android", target_arch = "arm")),
                   not(all(target_os = "linux", target_arch = "arm"))))]
         pub fn _Unwind_GetIP(ctx: *mut _Unwind_Context) -> libc::uintptr_t;
 
@@ -431,7 +431,7 @@ mod uw {
     // On android, the function _Unwind_GetIP is a macro, and this is the
     // expansion of the macro. This is all copy/pasted directly from the
     // header file with the definition of _Unwind_GetIP.
-    #[cfg(any(target_os = "android",
+    #[cfg(any(all(target_os = "android", target_arch = "arm"),
               all(target_os = "linux", target_arch = "arm")))]
     pub unsafe fn _Unwind_GetIP(ctx: *mut _Unwind_Context) -> libc::uintptr_t {
         #[repr(C)]
