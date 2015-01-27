@@ -1,7 +1,7 @@
 use prelude::v1::*;
 
-use io::{FileAccess, FileMode};
-use io::{IoResult, FileStat, SeekStyle};
+use old_io::{FileAccess, FileMode};
+use old_io::{IoResult, FileStat, SeekStyle};
 use sys_common;
 
 pub type fd_t = i32;

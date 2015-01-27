@@ -5,7 +5,7 @@ use prelude::v1::*;
 use libc;
 use mem;
 use ptr;
-use io::{IoError, IoResult, IoUnavailable};
+use old_io::{IoError, IoResult, IoUnavailable};
 use sys_common;
 
 pub struct TTY {

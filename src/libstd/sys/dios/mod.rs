@@ -4,7 +4,7 @@
 
 use prelude::v1::*;
 
-use io::{IoResult, IoError};
+use old_io::{IoResult, IoError};
 use libc;
 use num::{Int, SignedInt};
 use sys_common;
@@ -16,6 +16,7 @@ pub mod fs;
 pub mod helper_signal;
 pub mod mutex;
 pub mod os;
+pub mod os_str;
 pub mod pipe;
 pub mod process;
 pub mod rwlock;

@@ -356,7 +356,7 @@ mod imp {
 
 #[cfg(dios)]
 mod imp {
-    use io::IoResult;
+    use old_io::IoResult;
     use rand::Rng;
     use result::Result::Err;
     use sys_common;

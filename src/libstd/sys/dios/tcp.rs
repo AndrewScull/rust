@@ -2,8 +2,8 @@
 
 use prelude::v1::*;
 
-use io::net::ip;
-use io::IoResult;
+use old_io::net::ip;
+use old_io::IoResult;
 
 use sys_common;
 pub use sys_common::net::TcpStream;

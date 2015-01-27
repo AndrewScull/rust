@@ -4,8 +4,8 @@ use prelude::v1::*;
 
 use collections::hash_map::Hasher;
 use hash::Hash;
-use io::process::ProcessExit;
-use io::IoResult;
+use old_io::process::ProcessExit;
+use old_io::IoResult;
 use libc;
 use path::BytesContainer;
 use sys::fs::FileDesc;

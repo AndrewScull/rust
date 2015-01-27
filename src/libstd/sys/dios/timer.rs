@@ -1,6 +1,6 @@
 use prelude::v1::*;
 
-use io::IoResult;
+use old_io::IoResult;
 use sys_common;
 
 pub trait Callback {
