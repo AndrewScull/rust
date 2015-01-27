@@ -116,14 +116,28 @@ impl Stdio {
         use ptr;
 
         unsafe {
-            // Write both stdout and stderr to the same console
+            // If there are any problems then just give up
+            // Writing stderr to the same console and stdout
             let mut obj_ref: *mut libc::dios_ref_t = mem::uninitialized();
             let mut ref_count: libc::uint64_t = 1;
-            assert_eq!(libc::dios_lookup(1, &libc::STDOUT_NAME, &mut obj_ref, &mut ref_count), 1);
+
+            // Get the stdout reference
+            if libc::dios_lookup(1, &libc::STDOUT_NAME, &mut obj_ref, &mut ref_count) != 0
+            || ref_count == 0 {
+                return;
+            }
+            
+            // Open for writing
             let mut iov: *mut libc::dios_iovec_t = mem::uninitialized();
-            assert_eq!(libc::dios_begin_write(0, obj_ref, data.len() as u64, &mut iov), 0);
+            if libc::dios_begin_write(0, obj_ref, data.len() as u64, &mut iov) != 0 {
+                return;
+            }
+            // Copy in data
             ptr::copy_nonoverlapping_memory((*iov).buf, data.as_ptr() as *const libc::c_void, data.len());
-            assert_eq!(libc::dios_end_write(0, obj_ref, data.len() as u64, iov), 0);
+            // Commit the write
+            if libc::dios_end_write(0, obj_ref, data.len() as u64, iov) != 0 {
+                return;
+            }
         }
     }
 }
