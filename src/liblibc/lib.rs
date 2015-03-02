@@ -102,7 +102,7 @@ pub use consts::os::c95::*;
 #[cfg(not(dios))] pub use consts::os::posix88::*;
 #[cfg(not(dios))] pub use consts::os::posix01::*;
 #[cfg(not(dios))] pub use consts::os::bsd44::*;
-#[cfg(not(dios))] pub use consts::os::extra::*;
+pub use consts::os::extra::*;
 
 pub use funcs::c95::ctype::*;
 pub use funcs::c95::stdio::*;
@@ -137,8 +137,6 @@ pub use funcs::c95::string::*;
 #[cfg(windows)] pub use funcs::extra::winsock::*;
 #[cfg(windows)] pub use funcs::extra::msvcrt::*;
 
-#[cfg(dios)] pub use consts::os::extra::*;
-#[cfg(dios)] pub use types::os::extra::*;
 #[cfg(dios)] pub use funcs::extra::*;
 
 // On NaCl, these libraries are static. Thus it would be a Bad Idea to link them
@@ -2217,88 +2215,90 @@ pub mod types {
                 pub type intmax_t = i64;
                 pub type uintmax_t = u64;
             }
-        }
-        pub mod extra {
-            use types::common::c95::{c_void};
-            use types::common::c99::{uint8_t, uint64_t};
-            use types::os::arch::c95::{time_t, suseconds_t};
-           
-            pub type dios_flags_t = uint64_t;
-           
-            #[repr(C)]
-            #[derive(Copy)] pub enum dios_ref_type_t {
-                D_REF_PRIVMEM,
-                D_REF_SHMEM,
-                D_REF_BLOB,
-                D_REF_HDFS,
-                D_REF_SPECIAL,
-                D_REF_TASK,
-            }
-           
-            #[repr(C)]
-            #[derive(Copy)] pub enum dios_ref_proximity_t {
-                D_REF_LOCAL_TO_CPU,
-                D_REF_LOCAL_MEMORY,
-                D_REF_LOCAL_DISK,
-                D_REF_LOCAL_DEVICE,
-                D_REF_REMOTE_MEMORY_1HOP,
-                D_REF_REMOTE_MEMORY_MULTIHOP,
-                D_REF_REMOTE_MEMORY_DISTANT,
-                D_REF_REMOTE_DISK_1HOP,
-                D_REF_REMOTE_DISK_MULTIHOP,
-                D_REF_REMOTE_DISK_DISTANT,
-            }
-           
-            #[repr(C)]
-            #[derive(Copy)] pub enum dios_ref_consistency_t {
-                D_REF_CONSISTENCY_NONE,
-                D_REF_CONSISTENCY_EVENTUAL,
-                D_REF_CONSISTENCY_MUTEX,
-            }
-           
-            #[repr(C)]
-            #[derive(Copy)] pub struct dios_ref_t {
-                pub id: uint64_t,
-                pub dtype: dios_ref_type_t,
-                pub proximity: dios_ref_proximity_t,
-                pub read_consistency: dios_ref_consistency_t,
-                pub write_consistency: dios_ref_consistency_t,
-                pub io_ready: bool,
-                pub read_buffer_size: uint64_t,
-                pub write_buffer_size: uint64_t,
-            }
-           
-            #[repr(C)]
-            #[derive(Copy)] pub struct dios_name_t {
-                pub raw: [uint8_t; 32],
-            }
-           
-            #[repr(C)]
-            #[derive(Copy)] pub struct dios_task_spec_t {
-                pub input_names: *mut *mut dios_name_t,
-                pub input_count: uint64_t,
-                pub output_names: *mut *mut dios_name_t,
-                pub output_count: uint64_t,
-            }
-           
-            #[repr(C)]
-            #[derive(Copy)] pub struct dios_iovec_t {
-                pub buf: *mut c_void,
-                pub len: uint64_t,
-            }
+            pub mod extra {
+                use types::common::c95::{c_void};
+                use types::common::c99::{uint8_t, uint64_t};
+                use types::os::arch::c95::{c_char, c_int, time_t, suseconds_t};
 
-            // Hacky: Some POSIX emulation
-            pub type pid_t = dios_name_t;
+                pub type dios_flags_t = uint64_t;
 
-            #[repr(C)]
-            #[derive(Copy)] pub struct timeval {
-                pub tv_sec: time_t,
-                pub tv_usec: suseconds_t,
+                #[repr(C)]
+                #[derive(Copy)] pub enum dios_object_type_t {
+                    D_OBJ_CONSOLE,
+                    D_OBJ_SELF,
+                    D_OBJ_PRIVMEM,
+                    D_OBJ_SHMEM,
+                    D_OBJ_BLOB,
+                    D_OBJ_TASK,
+                }
+
+                #[repr(C)]
+                #[derive(Copy)] pub enum dios_ref_proximity_t {
+                    D_REF_LOCAL_TO_CPU,
+                    D_REF_LOCAL_MEMORY,
+                    D_REF_LOCAL_DISK,
+                    D_REF_LOCAL_DEVICE,
+                    D_REF_REMOTE_MEMORY_1HOP,
+                    D_REF_REMOTE_MEMORY_MULTIHOP,
+                    D_REF_REMOTE_MEMORY_DISTANT,
+                    D_REF_REMOTE_DISK_1HOP,
+                    D_REF_REMOTE_DISK_MULTIHOP,
+                    D_REF_REMOTE_DISK_DISTANT,
+                }
+
+                #[repr(C)]
+                #[derive(Copy)] pub enum dios_ref_consistency_t {
+                    D_REF_CONSISTENCY_NONE,
+                    D_REF_CONSISTENCY_EVENTUAL,
+                    D_REF_CONSISTENCY_MUTEX,
+                }
+
+                #[repr(C)]
+                #[derive(Copy)] pub struct dios_ref_t {
+                    pub id: uint64_t,
+                    pub obj_type: dios_object_type_t,
+                    pub proximity: dios_ref_proximity_t,
+                    pub read_consistency: dios_ref_consistency_t,
+                    pub write_consistency: dios_ref_consistency_t,
+                    pub io_ready: bool,
+                    pub read_buffer_size: uint64_t,
+                    pub write_buffer_size: uint64_t,
+                }
+
+                #[repr(C)]
+                #[derive(Copy)] pub struct dios_name_t {
+                    pub raw: [uint8_t; 32],
+                }
+
+                #[repr(C)]
+                #[derive(Copy)] pub struct dios_task_spec_t {
+                    pub input_names: *mut *mut dios_name_t,
+                    pub input_count: uint64_t,
+                    pub output_names: *mut *mut dios_name_t,
+                    pub output_count: uint64_t,
+                    pub argc: c_int,
+                    pub argv: *mut *mut c_char,
+                }
+
+                #[repr(C)]
+                #[derive(Copy)] pub struct dios_iovec_t {
+                    pub buf: *mut c_void,
+                    pub len: uint64_t,
+                }
+
+                // Hacky: Some POSIX emulation
+                pub type pid_t = dios_name_t;
+
+                #[repr(C)]
+                #[derive(Copy)] pub struct timeval {
+                    pub tv_sec: time_t,
+                    pub tv_usec: suseconds_t,
+                }
+
+                pub type socklen_t = u32;
+
+                pub type ssize_t = i64;
             }
-            
-            pub type socklen_t = u32;
-
-            pub type ssize_t = i64;
         }
     }
 }
@@ -4766,8 +4766,8 @@ pub mod consts {
 
         pub mod extra {
             use types::os::arch::c95::c_int;
-            use types::os::extra::dios_name_t;
-            
+            use types::os::arch::extra::dios_name_t;
+
             pub const STDIN_FILENO : c_int = 0;
             pub const STDOUT_FILENO : c_int = 1;
             pub const STDERR_FILENO : c_int = 2;
@@ -5900,22 +5900,26 @@ pub mod funcs {
 
     #[cfg(dios)]
     pub mod extra {
+        use types::common::c95::{c_void};
         use types::common::c99::{uint64_t};
         use types::os::arch::c95::{c_long};
-        use types::os::extra::{dios_flags_t,
-                               dios_ref_t,
-                               dios_name_t,
-                               dios_task_spec_t,
-                               dios_iovec_t};
-       
+        use types::os::arch::extra::{dios_flags_t,
+                                     dios_object_type_t,
+                                     dios_ref_t,
+                                     dios_name_t,
+                                     dios_task_spec_t,
+                                     dios_iovec_t};
+
         extern {
             pub fn dios_create(flags: dios_flags_t,
+                               obj_type: dios_object_type_t,
+                               arg: *mut c_void,
                                name: *mut dios_name_t,
                                dref: *mut *mut dios_ref_t)
                                -> c_long;
             pub fn dios_lookup(flags: dios_flags_t,
                                name: *const  dios_name_t,
-                               drefs: *mut *mut dios_ref_t,
+                               refs: *mut *mut dios_ref_t,
                                refs_count: *mut uint64_t)
                                -> c_long;
             pub fn dios_run(flags: dios_flags_t,
@@ -5924,7 +5928,7 @@ pub mod funcs {
                             new_ref: *mut *mut dios_ref_t)
                             -> c_long;
             pub fn dios_copy(flags: dios_flags_t,
-                             drefs: *mut *mut dios_ref_t,
+                             refs: *mut *mut dios_ref_t,
                              ref_count: uint64_t,
                              target: *mut dios_ref_t)
                              -> c_long;
