@@ -20,7 +20,7 @@
 //!     error!("this is printed by default");
 //!
 //!     if log_enabled!(log::INFO) {
-//!         let x = 3i * 4i; // expensive computation
+//!         let x = 3 * 4; // expensive computation
 //!         info!("the answer was: {:?}", x);
 //!     }
 //! }
@@ -156,7 +156,8 @@
 //! if logging is disabled, none of the components of the log will be executed.
 
 #![crate_name = "log"]
-#![unstable = "use the crates.io `log` library instead"]
+#![unstable(feature = "rustc_private",
+            reason = "use the crates.io `log` library instead")]
 #![staged_api]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
@@ -164,20 +165,23 @@
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/",
        html_playground_url = "http://play.rust-lang.org/")]
-
-#![allow(unknown_features)]
-#![feature(slicing_syntax)]
-#![feature(box_syntax)]
-#![allow(unknown_features)] #![feature(int_uint)]
-#![allow(unstable)]
 #![deny(missing_docs)]
 
+#![feature(alloc)]
+#![feature(staged_api)]
+#![feature(box_syntax)]
+#![feature(int_uint)]
+#![feature(core)]
+#![feature(old_io)]
+#![feature(std_misc)]
+
+use std::boxed;
 use std::cell::RefCell;
 use std::fmt;
 use std::old_io::LineBufferedWriter;
 use std::old_io;
 use std::mem;
-use std::os;
+use std::env;
 use std::ptr;
 use std::rt;
 use std::slice;
@@ -202,11 +206,11 @@ const DEFAULT_LOG_LEVEL: u32 = 1;
 /// logging statement should be run.
 static mut LOG_LEVEL: u32 = MAX_LOG_LEVEL;
 
-static mut DIRECTIVES: *const Vec<directive::LogDirective> =
-    0 as *const Vec<directive::LogDirective>;
+static mut DIRECTIVES: *mut Vec<directive::LogDirective> =
+    0 as *mut Vec<directive::LogDirective>;
 
 /// Optional filter.
-static mut FILTER: *const String = 0 as *const _;
+static mut FILTER: *mut String = 0 as *mut _;
 
 /// Debug log level
 pub const DEBUG: u32 = 4;
@@ -236,7 +240,7 @@ struct DefaultLogger {
 }
 
 /// Wraps the log level with fmt implementations.
-#[derive(Copy, PartialEq, PartialOrd, Show)]
+#[derive(Copy, PartialEq, PartialOrd, Debug)]
 pub struct LogLevel(pub u32);
 
 impl fmt::Display for LogLevel {
@@ -284,7 +288,7 @@ pub fn log(level: u32, loc: &'static LogLocation, args: fmt::Arguments) {
     // Test the literal string from args against the current filter, if there
     // is one.
     match unsafe { FILTER.as_ref() } {
-        Some(filter) if !args.to_string().contains(&filter[]) => return,
+        Some(filter) if !args.to_string().contains(&filter[..]) => return,
         _ => {}
     }
 
@@ -323,7 +327,7 @@ pub fn set_logger(logger: Box<Logger + Send>) -> Option<Box<Logger + Send>> {
 
 /// A LogRecord is created by the logging macros, and passed as the only
 /// argument to Loggers.
-#[derive(Show)]
+#[derive(Debug)]
 pub struct LogRecord<'a> {
 
     /// The module path of where the LogRecord originated.
@@ -339,7 +343,7 @@ pub struct LogRecord<'a> {
     pub file: &'a str,
 
     /// The line number of where the LogRecord originated.
-    pub line: uint,
+    pub line: u32,
 }
 
 #[doc(hidden)]
@@ -347,7 +351,7 @@ pub struct LogRecord<'a> {
 pub struct LogLocation {
     pub module_path: &'static str,
     pub file: &'static str,
-    pub line: uint,
+    pub line: u32,
 }
 
 /// Tests whether a given module's name is enabled for a particular level of
@@ -379,7 +383,7 @@ fn enabled(level: u32,
     // Search for the longest match, the vector is assumed to be pre-sorted.
     for directive in iter.rev() {
         match directive.name {
-            Some(ref name) if !module.starts_with(&name[]) => {},
+            Some(ref name) if !module.starts_with(&name[..]) => {},
             Some(..) | None => {
                 return level <= directive.level
             }
@@ -393,9 +397,9 @@ fn enabled(level: u32,
 /// This is not threadsafe at all, so initialization is performed through a
 /// `Once` primitive (and this function is called from that primitive).
 fn init() {
-    let (mut directives, filter) = match os::getenv("RUST_LOG") {
-        Some(spec) => directive::parse_logging_spec(&spec[]),
-        None => (Vec::new(), None),
+    let (mut directives, filter) = match env::var("RUST_LOG") {
+        Ok(spec) => directive::parse_logging_spec(&spec[..]),
+        Err(..) => (Vec::new(), None),
     };
 
     // Sort the provided directives by length of their name, this allows a
@@ -416,23 +420,23 @@ fn init() {
 
         assert!(FILTER.is_null());
         match filter {
-            Some(f) => FILTER = mem::transmute(box f),
+            Some(f) => FILTER = boxed::into_raw(box f),
             None => {}
         }
 
         assert!(DIRECTIVES.is_null());
-        DIRECTIVES = mem::transmute(box directives);
+        DIRECTIVES = boxed::into_raw(box directives);
 
         // Schedule the cleanup for the globals for when the runtime exits.
-        rt::at_exit(move |:| {
+        rt::at_exit(move || {
             assert!(!DIRECTIVES.is_null());
             let _directives: Box<Vec<directive::LogDirective>> =
-                mem::transmute(DIRECTIVES);
-            DIRECTIVES = ptr::null();
+                Box::from_raw(DIRECTIVES);
+            DIRECTIVES = ptr::null_mut();
 
             if !FILTER.is_null() {
-                let _filter: Box<String> = mem::transmute(FILTER);
-                FILTER = 0 as *const _;
+                let _filter: Box<String> = Box::from_raw(FILTER);
+                FILTER = 0 as *mut _;
             }
         });
     }

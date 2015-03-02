@@ -50,7 +50,7 @@ impl<'a> ParserAnyMacro<'a> {
                                following",
                               token_str);
             let span = parser.span;
-            parser.span_err(span, &msg[]);
+            parser.span_err(span, &msg[..]);
         }
     }
 }
@@ -89,8 +89,7 @@ impl<'a> MacResult for ParserAnyMacro<'a> {
             match parser.token {
                 token::Eof => break,
                 _ => {
-                    let attrs = parser.parse_outer_attributes();
-                    ret.push(parser.parse_method(attrs, ast::Inherited))
+                    ret.push(parser.parse_method_with_outer_attributes());
                 }
             }
         }
@@ -124,8 +123,8 @@ impl TTMacroExpander for MacroRulesMacroExpander {
                           self.name,
                           self.imported_from,
                           arg,
-                          &self.lhses[],
-                          &self.rhses[])
+                          &self.lhses,
+                          &self.rhses)
     }
 }
 
@@ -152,7 +151,7 @@ fn generic_extension<'cx>(cx: &'cx ExtCtxt,
         match **lhs {
           MatchedNonterminal(NtTT(ref lhs_tt)) => {
             let lhs_tt = match **lhs_tt {
-                TtDelimited(_, ref delim) => &delim.tts[],
+                TtDelimited(_, ref delim) => &delim.tts[..],
                 _ => cx.span_fatal(sp, "malformed macro lhs")
             };
             // `None` is because we're not interpolating
@@ -160,7 +159,7 @@ fn generic_extension<'cx>(cx: &'cx ExtCtxt,
                                                       None,
                                                       None,
                                                       arg.iter()
-                                                         .map(|x| (*x).clone())
+                                                         .cloned()
                                                          .collect(),
                                                       true);
             match parse(cx.parse_sess(), cx.cfg(), arg_rdr, lhs_tt) {
@@ -193,13 +192,13 @@ fn generic_extension<'cx>(cx: &'cx ExtCtxt,
                 best_fail_spot = sp;
                 best_fail_msg = (*msg).clone();
               },
-              Error(sp, ref msg) => cx.span_fatal(sp, &msg[])
+              Error(sp, ref msg) => cx.span_fatal(sp, &msg[..])
             }
           }
           _ => cx.bug("non-matcher found in parsed lhses")
         }
     }
-    cx.span_fatal(best_fail_spot, &best_fail_msg[]);
+    cx.span_fatal(best_fail_spot, &best_fail_msg[..]);
 }
 
 // Note that macro-by-example's input is also matched against a token tree:
@@ -259,7 +258,7 @@ pub fn compile<'cx>(cx: &'cx mut ExtCtxt,
         _ => cx.span_bug(def.span, "wrong-structured lhs")
     };
 
-    for lhs in lhses.iter() {
+    for lhs in &lhses {
         check_lhs_nt_follows(cx, &**lhs, def.span);
     }
 
@@ -319,11 +318,11 @@ fn check_matcher<'a, I>(cx: &mut ExtCtxt, matcher: I, follow: &Token)
                     Some(&&TtToken(_, ref tok)) => tok.clone(),
                     Some(&&TtSequence(sp, _)) => {
                         cx.span_err(sp,
-                                    format!("`${0}:{1}` is followed by a \
-                                             sequence repetition, which is not \
-                                             allowed for `{1}` fragments",
-                                            name.as_str(), frag_spec.as_str())
-                                        .as_slice());
+                                    &format!("`${0}:{1}` is followed by a \
+                                              sequence repetition, which is not \
+                                              allowed for `{1}` fragments",
+                                             name.as_str(), frag_spec.as_str())
+                                        );
                         Eof
                     },
                     // die next iteration
@@ -335,19 +334,19 @@ fn check_matcher<'a, I>(cx: &mut ExtCtxt, matcher: I, follow: &Token)
                 let tok = if let TtToken(_, ref tok) = *token { tok } else { unreachable!() };
                 // If T' is in the set FOLLOW(NT), continue. Else, reject.
                 match (&next_token, is_in_follow(cx, &next_token, frag_spec.as_str())) {
+                    (_, Err(msg)) => {
+                        cx.span_err(sp, &msg);
+                        continue
+                    }
                     (&Eof, _) => return Some((sp, tok.clone())),
                     (_, Ok(true)) => continue,
                     (next, Ok(false)) => {
-                        cx.span_err(sp, format!("`${0}:{1}` is followed by `{2}`, which \
-                                                 is not allowed for `{1}` fragments",
+                        cx.span_err(sp, &format!("`${0}:{1}` is followed by `{2}`, which \
+                                                  is not allowed for `{1}` fragments",
                                                  name.as_str(), frag_spec.as_str(),
-                                                 token_to_string(next)).as_slice());
+                                                 token_to_string(next)));
                         continue
                     },
-                    (_, Err(msg)) => {
-                        cx.span_err(sp, msg.as_slice());
-                        continue
-                    }
                 }
             },
             TtSequence(sp, ref seq) => {
@@ -457,7 +456,7 @@ fn is_in_follow(_: &ExtCtxt, tok: &Token, frag: &str) -> Result<bool, String> {
                 // harmless
                 Ok(true)
             },
-            _ => Err(format!("unrecognized builtin nonterminal `{}`", frag))
+            _ => Err(format!("invalid fragment specifier `{}`", frag))
         }
     }
 }

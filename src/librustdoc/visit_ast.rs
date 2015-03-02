@@ -147,7 +147,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
         om.vis = vis;
         om.stab = self.stability(id);
         om.id = id;
-        for i in m.items.iter() {
+        for i in &m.items {
             self.visit_item(&**i, None, &mut om);
         }
         om
@@ -196,7 +196,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
             Some(tcx) => tcx,
             None => return false
         };
-        let def = (*tcx.def_map.borrow())[id].def_id();
+        let def = tcx.def_map.borrow()[id].def_id();
         if !ast_util::is_local(def) { return false }
         let analysis = match self.analysis {
             Some(analysis) => analysis, None => return false
@@ -211,7 +211,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
                 if glob {
                     match it.node {
                         ast::ItemMod(ref m) => {
-                            for i in m.items.iter() {
+                            for i in &m.items {
                                 self.visit_item(&**i, None, om);
                             }
                         }
@@ -237,7 +237,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
             ast::ItemExternCrate(ref p) => {
                 let path = match *p {
                     None => None,
-                    Some((ref x, _)) => Some(x.get().to_string()),
+                    Some((ref x, _)) => Some(x.to_string()),
                 };
                 om.extern_crates.push(ExternCrate {
                     name: name,
@@ -253,7 +253,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
                     let please_inline = item.attrs.iter().any(|item| {
                         match item.meta_item_list() {
                             Some(list) => {
-                                list.iter().any(|i| i.name().get() == "inline")
+                                list.iter().any(|i| &i.name()[..] == "inline")
                             }
                             None => false,
                         }
@@ -333,7 +333,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
                     name: name,
                     items: items.clone(),
                     generics: gen.clone(),
-                    bounds: b.iter().map(|x| (*x).clone()).collect(),
+                    bounds: b.iter().cloned().collect(),
                     id: item.id,
                     attrs: item.attrs.clone(),
                     whence: item.span,
@@ -358,6 +358,14 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
                 };
                 om.impls.push(i);
             },
+            ast::ItemDefaultImpl(unsafety, ref trait_ref) => {
+                let i = DefaultImpl {
+                    unsafety: unsafety,
+                    trait_: trait_ref.clone(),
+                    id: item.id
+                };
+                om.def_traits.push(i);
+            }
             ast::ItemForeignMod(ref fm) => {
                 om.foreigns.push(fm.clone());
             }

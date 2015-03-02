@@ -34,7 +34,6 @@ use sys_common;
 ///
 /// ```rust,no_run
 /// # #![allow(unused_must_use)]
-/// #![feature(slicing_syntax)]
 ///
 /// use std::old_io::net::udp::UdpSocket;
 /// use std::old_io::net::ip::{Ipv4Addr, SocketAddr};
@@ -49,7 +48,7 @@ use sys_common;
 ///     match socket.recv_from(&mut buf) {
 ///         Ok((amt, src)) => {
 ///             // Send a reply to the socket we received data from
-///             let buf = buf.slice_to_mut(amt);
+///             let buf = &mut buf[..amt];
 ///             buf.reverse();
 ///             socket.send_to(buf, src);
 ///         }
@@ -94,13 +93,13 @@ impl UdpSocket {
     }
 
     /// Joins a multicast IP address (becomes a member of it)
-    #[unstable]
+    #[unstable(feature = "io")]
     pub fn join_multicast(&mut self, multi: IpAddr) -> IoResult<()> {
         self.inner.join_multicast(multi)
     }
 
     /// Leaves a multicast IP address (drops membership from it)
-    #[unstable]
+    #[unstable(feature = "io")]
     pub fn leave_multicast(&mut self, multi: IpAddr) -> IoResult<()> {
         self.inner.leave_multicast(multi)
     }
@@ -108,25 +107,25 @@ impl UdpSocket {
     /// Set the multicast loop flag to the specified value
     ///
     /// This lets multicast packets loop back to local sockets (if enabled)
-    #[unstable]
+    #[unstable(feature = "io")]
     pub fn set_multicast_loop(&mut self, on: bool) -> IoResult<()> {
         self.inner.set_multicast_loop(on)
     }
 
     /// Sets the multicast TTL
-    #[unstable]
+    #[unstable(feature = "io")]
     pub fn set_multicast_ttl(&mut self, ttl: int) -> IoResult<()> {
         self.inner.multicast_time_to_live(ttl)
     }
 
     /// Sets this socket's TTL
-    #[unstable]
+    #[unstable(feature = "io")]
     pub fn set_ttl(&mut self, ttl: int) -> IoResult<()> {
         self.inner.time_to_live(ttl)
     }
 
     /// Sets the broadcast flag on or off
-    #[unstable]
+    #[unstable(feature = "io")]
     pub fn set_broadcast(&mut self, broadcast: bool) -> IoResult<()> {
         self.inner.set_broadcast(broadcast)
     }
@@ -134,7 +133,8 @@ impl UdpSocket {
     /// Sets the read/write timeout for this socket.
     ///
     /// For more information, see `TcpStream::set_timeout`
-    #[unstable = "the timeout argument may change in type and value"]
+    #[unstable(feature = "io",
+               reason = "the timeout argument may change in type and value")]
     pub fn set_timeout(&mut self, timeout_ms: Option<u64>) {
         self.inner.set_timeout(timeout_ms)
     }
@@ -142,7 +142,8 @@ impl UdpSocket {
     /// Sets the read timeout for this socket.
     ///
     /// For more information, see `TcpStream::set_timeout`
-    #[unstable = "the timeout argument may change in type and value"]
+    #[unstable(feature = "io",
+               reason = "the timeout argument may change in type and value")]
     pub fn set_read_timeout(&mut self, timeout_ms: Option<u64>) {
         self.inner.set_read_timeout(timeout_ms)
     }
@@ -150,7 +151,8 @@ impl UdpSocket {
     /// Sets the write timeout for this socket.
     ///
     /// For more information, see `TcpStream::set_timeout`
-    #[unstable = "the timeout argument may change in type and value"]
+    #[unstable(feature = "io",
+               reason = "the timeout argument may change in type and value")]
     pub fn set_write_timeout(&mut self, timeout_ms: Option<u64>) {
         self.inner.set_write_timeout(timeout_ms)
     }
@@ -178,7 +180,6 @@ impl sys_common::AsInner<UdpSocketImp> for UdpSocket {
 }
 
 #[cfg(test)]
-#[allow(unstable)]
 mod test {
     use prelude::v1::*;
 
@@ -187,7 +188,7 @@ mod test {
     use old_io::test::*;
     use old_io::{IoError, TimedOut, PermissionDenied, ShortWrite};
     use super::*;
-    use thread::Thread;
+    use thread;
 
     // FIXME #11530 this fails on android because tests are run as root
     #[cfg_attr(any(windows, target_os = "android"), ignore)]
@@ -207,7 +208,7 @@ mod test {
         let (tx1, rx1) = channel();
         let (tx2, rx2) = channel();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             match UdpSocket::bind(client_ip) {
                 Ok(ref mut client) => {
                     rx1.recv().unwrap();
@@ -242,7 +243,7 @@ mod test {
         let client_ip = next_test_ip6();
         let (tx, rx) = channel::<()>();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             match UdpSocket::bind(client_ip) {
                 Ok(ref mut client) => {
                     rx.recv().unwrap();
@@ -299,7 +300,7 @@ mod test {
         let mut sock1 = UdpSocket::bind(addr1).unwrap();
         let sock2 = UdpSocket::bind(addr2).unwrap();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut sock2 = sock2;
             let mut buf = [0, 0];
             assert_eq!(sock2.recv_from(&mut buf), Ok((1, addr1)));
@@ -311,7 +312,7 @@ mod test {
 
         let (tx1, rx1) = channel();
         let (tx2, rx2) = channel();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut sock3 = sock3;
             rx1.recv().unwrap();
             sock3.send_to(&[1], addr2).unwrap();
@@ -332,7 +333,7 @@ mod test {
         let (tx1, rx) = channel();
         let tx2 = tx1.clone();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut sock2 = sock2;
             sock2.send_to(&[1], addr1).unwrap();
             rx.recv().unwrap();
@@ -343,7 +344,7 @@ mod test {
         let sock3 = sock1.clone();
 
         let (done, rx) = channel();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut sock3 = sock3;
             let mut buf = [0, 0];
             sock3.recv_from(&mut buf).unwrap();
@@ -367,7 +368,7 @@ mod test {
         let (tx, rx) = channel();
         let (serv_tx, serv_rx) = channel();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut sock2 = sock2;
             let mut buf = [0, 1];
 
@@ -383,7 +384,7 @@ mod test {
 
         let (done, rx) = channel();
         let tx2 = tx.clone();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut sock3 = sock3;
             match sock3.send_to(&[1], addr2) {
                 Ok(..) => { let _ = tx2.send(()); }
@@ -411,7 +412,7 @@ mod test {
 
         let (tx, rx) = channel();
         let (tx2, rx2) = channel();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut a = a2;
             assert_eq!(a.recv_from(&mut [0]), Ok((1, addr1)));
             assert_eq!(a.send_to(&[0], addr1), Ok(()));
@@ -448,7 +449,7 @@ mod test {
         let _b = UdpSocket::bind(addr2).unwrap();
 
         a.set_write_timeout(Some(1000));
-        for _ in range(0u, 100) {
+        for _ in 0..100 {
             match a.send_to(&[0;4*1024], addr2) {
                 Ok(()) | Err(IoError { kind: ShortWrite(..), .. }) => {},
                 Err(IoError { kind: TimedOut, .. }) => break,

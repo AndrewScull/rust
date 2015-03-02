@@ -33,7 +33,7 @@ use syntax::visit;
 use syntax::visit::Visitor;
 use util::nodemap::NodeMap;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, RustcEncodable, RustcDecodable, Show)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, RustcEncodable, RustcDecodable, Debug)]
 pub enum DefRegion {
     DefStaticRegion,
     DefEarlyBoundRegion(/* space */ subst::ParamSpace,
@@ -41,12 +41,12 @@ pub enum DefRegion {
                         /* lifetime decl */ ast::NodeId),
     DefLateBoundRegion(ty::DebruijnIndex,
                        /* lifetime decl */ ast::NodeId),
-    DefFreeRegion(/* block scope */ region::CodeExtent,
+    DefFreeRegion(/* block scope */ region::DestructionScopeData,
                   /* lifetime decl */ ast::NodeId),
 }
 
-// maps the id of each lifetime reference to the lifetime decl
-// that it corresponds to
+// Maps the id of each lifetime reference to the lifetime decl
+// that it corresponds to.
 pub type NamedRegionMap = NodeMap<DefRegion>;
 
 struct LifetimeContext<'a> {
@@ -54,6 +54,22 @@ struct LifetimeContext<'a> {
     named_region_map: &'a mut NamedRegionMap,
     scope: Scope<'a>,
     def_map: &'a DefMap,
+    // Deep breath. Our representation for poly trait refs contains a single
+    // binder and thus we only allow a single level of quantification. However,
+    // the syntax of Rust permits quantification in two places, e.g., `T: for <'a> Foo<'a>`
+    // and `for <'a, 'b> &'b T: Foo<'a>`. In order to get the de Bruijn indices
+    // correct when representing these constraints, we should only introduce one
+    // scope. However, we want to support both locations for the quantifier and
+    // during lifetime resolution we want precise information (so we can't
+    // desugar in an earlier phase).
+
+    // SO, if we encounter a quantifier at the outer scope, we set
+    // trait_ref_hack to true (and introduce a scope), and then if we encounter
+    // a quantifier at the inner scope, we error. If trait_ref_hack is false,
+    // then we introduce the scope at the inner quantifier.
+
+    // I'm sorry.
+    trait_ref_hack: bool,
 }
 
 enum ScopeChain<'a> {
@@ -65,7 +81,7 @@ enum ScopeChain<'a> {
     LateScope(&'a Vec<ast::LifetimeDef>, Scope<'a>),
     /// lifetimes introduced by items within a code block are scoped
     /// to that block.
-    BlockScope(region::CodeExtent, Scope<'a>),
+    BlockScope(region::DestructionScopeData, Scope<'a>),
     RootScope
 }
 
@@ -80,6 +96,7 @@ pub fn krate(sess: &Session, krate: &ast::Crate, def_map: &DefMap) -> NamedRegio
         named_region_map: &mut named_region_map,
         scope: &ROOT_SCOPE,
         def_map: def_map,
+        trait_ref_hack: false,
     }, krate);
     sess.abort_if_errors();
     named_region_map
@@ -98,6 +115,7 @@ impl<'a, 'v> Visitor<'v> for LifetimeContext<'a> {
                 ast::ItemUse(_) |
                 ast::ItemMod(..) |
                 ast::ItemMac(..) |
+                ast::ItemDefaultImpl(..) |
                 ast::ItemForeignMod(..) |
                 ast::ItemStatic(..) |
                 ast::ItemConst(..) => {
@@ -147,13 +165,13 @@ impl<'a, 'v> Visitor<'v> for LifetimeContext<'a> {
                     visit::walk_ty(this, ty);
                 });
             }
-            ast::TyPath(ref path, id) => {
+            ast::TyPath(None, ref path) => {
                 // if this path references a trait, then this will resolve to
                 // a trait ref, which introduces a binding scope.
-                match self.def_map.borrow().get(&id) {
-                    Some(&def::DefTrait(..)) => {
+                match self.def_map.borrow().get(&ty.id).map(|d| (d.base_def, d.depth)) {
+                    Some((def::DefTrait(..), 0)) => {
                         self.with(LateScope(&Vec::new(), self.scope), |_, this| {
-                            this.visit_path(path, id);
+                            this.visit_path(path, ty.id);
                         });
                     }
                     _ => {
@@ -174,7 +192,8 @@ impl<'a, 'v> Visitor<'v> for LifetimeContext<'a> {
     }
 
     fn visit_block(&mut self, b: &ast::Block) {
-        self.with(BlockScope(region::CodeExtent::from_node_id(b.id), self.scope),
+        self.with(BlockScope(region::DestructionScopeData::new(b.id),
+                             self.scope),
                   |_, this| visit::walk_block(this, b));
     }
 
@@ -187,27 +206,40 @@ impl<'a, 'v> Visitor<'v> for LifetimeContext<'a> {
     }
 
     fn visit_generics(&mut self, generics: &ast::Generics) {
-        for ty_param in generics.ty_params.iter() {
+        for ty_param in &*generics.ty_params {
             visit::walk_ty_param_bounds_helper(self, &ty_param.bounds);
             match ty_param.default {
                 Some(ref ty) => self.visit_ty(&**ty),
                 None => {}
             }
         }
-        for predicate in generics.where_clause.predicates.iter() {
+        for predicate in &generics.where_clause.predicates {
             match predicate {
                 &ast::WherePredicate::BoundPredicate(ast::WhereBoundPredicate{ ref bounded_ty,
                                                                                ref bounds,
+                                                                               ref bound_lifetimes,
                                                                                .. }) => {
-                    self.visit_ty(&**bounded_ty);
-                    visit::walk_ty_param_bounds_helper(self, bounds);
+                    if bound_lifetimes.len() > 0 {
+                        self.trait_ref_hack = true;
+                        let result = self.with(LateScope(bound_lifetimes, self.scope),
+                                               |old_scope, this| {
+                            this.check_lifetime_defs(old_scope, bound_lifetimes);
+                            this.visit_ty(&**bounded_ty);
+                            visit::walk_ty_param_bounds_helper(this, bounds);
+                        });
+                        self.trait_ref_hack = false;
+                        result
+                    } else {
+                        self.visit_ty(&**bounded_ty);
+                        visit::walk_ty_param_bounds_helper(self, bounds);
+                    }
                 }
                 &ast::WherePredicate::RegionPredicate(ast::WhereRegionPredicate{ref lifetime,
                                                                                 ref bounds,
                                                                                 .. }) => {
 
                     self.visit_lifetime_ref(lifetime);
-                    for bound in bounds.iter() {
+                    for bound in bounds {
                         self.visit_lifetime_ref(bound);
                     }
                 }
@@ -222,22 +254,27 @@ impl<'a, 'v> Visitor<'v> for LifetimeContext<'a> {
         }
     }
 
-    fn visit_poly_trait_ref(&mut self, trait_ref:
-                            &ast::PolyTraitRef,
+    fn visit_poly_trait_ref(&mut self,
+                            trait_ref: &ast::PolyTraitRef,
                             _modifier: &ast::TraitBoundModifier) {
         debug!("visit_poly_trait_ref trait_ref={:?}", trait_ref);
 
-        self.with(LateScope(&trait_ref.bound_lifetimes, self.scope), |old_scope, this| {
-            this.check_lifetime_defs(old_scope, &trait_ref.bound_lifetimes);
-            for lifetime in trait_ref.bound_lifetimes.iter() {
-                this.visit_lifetime_def(lifetime);
+        if !self.trait_ref_hack || trait_ref.bound_lifetimes.len() > 0 {
+            if self.trait_ref_hack {
+                println!("{:?}", trait_ref.span);
+                span_err!(self.sess, trait_ref.span, E0316,
+                          "nested quantification of lifetimes");
             }
-            this.visit_trait_ref(&trait_ref.trait_ref)
-        })
-    }
-
-    fn visit_trait_ref(&mut self, trait_ref: &ast::TraitRef) {
-        self.visit_path(&trait_ref.path, trait_ref.ref_id);
+            self.with(LateScope(&trait_ref.bound_lifetimes, self.scope), |old_scope, this| {
+                this.check_lifetime_defs(old_scope, &trait_ref.bound_lifetimes);
+                for lifetime in &trait_ref.bound_lifetimes {
+                    this.visit_lifetime_def(lifetime);
+                }
+                visit::walk_path(this, &trait_ref.trait_ref.path)
+            })
+        } else {
+            self.visit_trait_ref(&trait_ref.trait_ref)
+        }
     }
 }
 
@@ -251,6 +288,7 @@ impl<'a> LifetimeContext<'a> {
             named_region_map: *named_region_map,
             scope: &wrap_scope,
             def_map: self.def_map,
+            trait_ref_hack: self.trait_ref_hack,
         };
         debug!("entering scope {:?}", this.scope);
         f(self.scope, &mut this);
@@ -353,9 +391,13 @@ impl<'a> LifetimeContext<'a> {
     }
 
     fn resolve_free_lifetime_ref(&mut self,
-                                 scope_data: region::CodeExtent,
+                                 scope_data: region::DestructionScopeData,
                                  lifetime_ref: &ast::Lifetime,
                                  scope: Scope) {
+        debug!("resolve_free_lifetime_ref \
+                scope_data: {:?} lifetime_ref: {:?} scope: {:?}",
+               scope_data, lifetime_ref, scope);
+
         // Walk up the scope chain, tracking the outermost free scope,
         // until we encounter a scope that contains the named lifetime
         // or we run out of scopes.
@@ -363,6 +405,9 @@ impl<'a> LifetimeContext<'a> {
         let mut scope = scope;
         let mut search_result = None;
         loop {
+            debug!("resolve_free_lifetime_ref \
+                    scope_data: {:?} scope: {:?} search_result: {:?}",
+                   scope_data, scope, search_result);
             match *scope {
                 BlockScope(blk_scope_data, s) => {
                     scope_data = blk_scope_data;
@@ -404,11 +449,11 @@ impl<'a> LifetimeContext<'a> {
     }
 
     fn check_lifetime_defs(&mut self, old_scope: Scope, lifetimes: &Vec<ast::LifetimeDef>) {
-        for i in range(0, lifetimes.len()) {
+        for i in 0..lifetimes.len() {
             let lifetime_i = &lifetimes[i];
 
             let special_idents = [special_idents::static_lifetime];
-            for lifetime in lifetimes.iter() {
+            for lifetime in lifetimes {
                 if special_idents.iter().any(|&i| i.name == lifetime.lifetime.name) {
                     span_err!(self.sess, lifetime.lifetime.span, E0262,
                         "illegal lifetime parameter name: `{}`",
@@ -417,7 +462,7 @@ impl<'a> LifetimeContext<'a> {
             }
 
             // It is a hard error to shadow a lifetime within the same scope.
-            for j in range(i + 1, lifetimes.len()) {
+            for j in i + 1..lifetimes.len() {
                 let lifetime_j = &lifetimes[j];
 
                 if lifetime_i.lifetime.name == lifetime_j.lifetime.name {
@@ -431,7 +476,7 @@ impl<'a> LifetimeContext<'a> {
             // It is a soft error to shadow a lifetime within a parent scope.
             self.check_lifetime_def_for_shadowing(old_scope, &lifetime_i.lifetime);
 
-            for bound in lifetime_i.bounds.iter() {
+            for bound in &lifetime_i.bounds {
                 self.resolve_lifetime_ref(bound);
             }
         }
@@ -456,13 +501,13 @@ impl<'a> LifetimeContext<'a> {
                     if let Some((_, lifetime_def)) = search_lifetimes(lifetimes, lifetime) {
                         self.sess.span_warn(
                             lifetime.span,
-                            format!("lifetime name `{}` shadows another \
-                                    lifetime name that is already in scope",
-                                    token::get_name(lifetime.name)).as_slice());
+                            &format!("lifetime name `{}` shadows another \
+                                     lifetime name that is already in scope",
+                                     token::get_name(lifetime.name)));
                         self.sess.span_note(
                             lifetime_def.span,
-                            format!("shadowed lifetime `{}` declared here",
-                                    token::get_name(lifetime.name)).as_slice());
+                            &format!("shadowed lifetime `{}` declared here",
+                                     token::get_name(lifetime.name)));
                         self.sess.span_note(
                             lifetime.span,
                             "shadowed lifetimes are deprecated \
@@ -514,7 +559,7 @@ pub fn early_bound_lifetimes<'a>(generics: &'a ast::Generics) -> Vec<ast::Lifeti
 
     generics.lifetimes.iter()
         .filter(|l| referenced_idents.iter().any(|&i| i == l.lifetime.name))
-        .map(|l| (*l).clone())
+        .cloned()
         .collect()
 }
 
@@ -535,10 +580,10 @@ fn early_bound_lifetime_names(generics: &ast::Generics) -> Vec<ast::Name> {
         let mut collector =
             FreeLifetimeCollector { early_bound: &mut early_bound,
                                     late_bound: &mut late_bound };
-        for ty_param in generics.ty_params.iter() {
+        for ty_param in &*generics.ty_params {
             visit::walk_ty_param_bounds_helper(&mut collector, &ty_param.bounds);
         }
-        for predicate in generics.where_clause.predicates.iter() {
+        for predicate in &generics.where_clause.predicates {
             match predicate {
                 &ast::WherePredicate::BoundPredicate(ast::WhereBoundPredicate{ref bounds,
                                                                               ref bounded_ty,
@@ -551,7 +596,7 @@ fn early_bound_lifetime_names(generics: &ast::Generics) -> Vec<ast::Name> {
                                                                                 ..}) => {
                     collector.visit_lifetime_ref(lifetime);
 
-                    for bound in bounds.iter() {
+                    for bound in bounds {
                         collector.visit_lifetime_ref(bound);
                     }
                 }
@@ -562,11 +607,11 @@ fn early_bound_lifetime_names(generics: &ast::Generics) -> Vec<ast::Name> {
 
     // Any lifetime that either has a bound or is referenced by a
     // bound is early.
-    for lifetime_def in generics.lifetimes.iter() {
+    for lifetime_def in &generics.lifetimes {
         if !lifetime_def.bounds.is_empty() {
             shuffle(&mut early_bound, &mut late_bound,
                     lifetime_def.lifetime.name);
-            for bound in lifetime_def.bounds.iter() {
+            for bound in &lifetime_def.bounds {
                 shuffle(&mut early_bound, &mut late_bound,
                         bound.name);
             }

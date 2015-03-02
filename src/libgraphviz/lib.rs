@@ -176,7 +176,7 @@
 //! }
 //!
 //! impl<'a> dot::GraphWalk<'a, Nd, Ed<'a>> for Graph {
-//!     fn nodes(&self) -> dot::Nodes<'a,Nd> { range(0,self.nodes.len()).collect() }
+//!     fn nodes(&self) -> dot::Nodes<'a,Nd> { (0..self.nodes.len()).collect() }
 //!     fn edges(&'a self) -> dot::Edges<'a,Ed<'a>> { self.edges.iter().collect() }
 //!     fn source(&self, e: &Ed) -> Nd { let & &(s,_) = e; s }
 //!     fn target(&self, e: &Ed) -> Nd { let & &(_,t) = e; t }
@@ -265,25 +265,22 @@
 //! * [DOT language](http://www.graphviz.org/doc/info/lang.html)
 
 #![crate_name = "graphviz"]
-#![unstable]
+#![unstable(feature = "rustc_private")]
+#![feature(staged_api)]
 #![staged_api]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
 #![doc(html_logo_url = "http://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png",
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/")]
-#![feature(slicing_syntax)]
-#![allow(unknown_features)] #![feature(int_uint)]
-#![allow(unstable)]
+#![feature(int_uint)]
+#![feature(collections)]
+#![feature(old_io)]
 
 use self::LabelText::*;
 
-use std::borrow::IntoCow;
+use std::borrow::{IntoCow, Cow};
 use std::old_io;
-use std::string::CowString;
-use std::vec::CowVec;
-
-pub mod maybe_owned_vec;
 
 /// The text for a graphviz label on a node or edge.
 pub enum LabelText<'a> {
@@ -291,7 +288,7 @@ pub enum LabelText<'a> {
     ///
     /// Occurrences of backslashes (`\`) are escaped, and thus appear
     /// as backslashes in the rendered label.
-    LabelStr(CowString<'a>),
+    LabelStr(Cow<'a, str>),
 
     /// This kind of label uses the graphviz label escString type:
     /// http://www.graphviz.org/content/attrs#kescString
@@ -303,7 +300,7 @@ pub enum LabelText<'a> {
     /// to break a line (centering the line preceding the `\n`), there
     /// are also the escape sequences `\l` which left-justifies the
     /// preceding line and `\r` which right-justifies it.
-    EscStr(CowString<'a>),
+    EscStr(Cow<'a, str>),
 }
 
 // There is a tension in the design of the labelling API.
@@ -340,7 +337,7 @@ pub enum LabelText<'a> {
 
 /// `Id` is a Graphviz `ID`.
 pub struct Id<'a> {
-    name: CowString<'a>,
+    name: Cow<'a, str>,
 }
 
 impl<'a> Id<'a> {
@@ -358,19 +355,19 @@ impl<'a> Id<'a> {
     ///
     /// Passing an invalid string (containing spaces, brackets,
     /// quotes, ...) will return an empty `Err` value.
-    pub fn new<Name: IntoCow<'a, String, str>>(name: Name) -> Option<Id<'a>> {
+    pub fn new<Name: IntoCow<'a, str>>(name: Name) -> Result<Id<'a>, ()> {
         let name = name.into_cow();
         {
             let mut chars = name.chars();
             match chars.next() {
                 Some(c) if is_letter_or_underscore(c) => { ; },
-                _ => return None
+                _ => return Err(())
             }
             if !chars.all(is_constituent) {
-                return None
+                return Err(())
             }
         }
-        return Some(Id{ name: name });
+        return Ok(Id{ name: name });
 
         fn is_letter_or_underscore(c: char) -> bool {
             in_range('a', c, 'z') || in_range('A', c, 'Z') || c == '_'
@@ -387,7 +384,7 @@ impl<'a> Id<'a> {
         &*self.name
     }
 
-    pub fn name(self) -> CowString<'a> {
+    pub fn name(self) -> Cow<'a, str> {
         self.name
     }
 }
@@ -427,11 +424,11 @@ pub trait Labeller<'a,N,E> {
 }
 
 impl<'a> LabelText<'a> {
-    pub fn label<S:IntoCow<'a, String, str>>(s: S) -> LabelText<'a> {
+    pub fn label<S:IntoCow<'a, str>>(s: S) -> LabelText<'a> {
         LabelStr(s.into_cow())
     }
 
-    pub fn escaped<S:IntoCow<'a, String, str>>(s: S) -> LabelText<'a> {
+    pub fn escaped<S:IntoCow<'a, str>>(s: S) -> LabelText<'a> {
         EscStr(s.into_cow())
     }
 
@@ -455,7 +452,7 @@ impl<'a> LabelText<'a> {
     pub fn escape(&self) -> String {
         match self {
             &LabelStr(ref s) => s.escape_default(),
-            &EscStr(ref s) => LabelText::escape_str(&s[]),
+            &EscStr(ref s) => LabelText::escape_str(&s[..]),
         }
     }
 
@@ -463,10 +460,10 @@ impl<'a> LabelText<'a> {
     /// yields same content as self.  The result obeys the law
     /// render(`lt`) == render(`EscStr(lt.pre_escaped_content())`) for
     /// all `lt: LabelText`.
-    fn pre_escaped_content(self) -> CowString<'a> {
+    fn pre_escaped_content(self) -> Cow<'a, str> {
         match self {
             EscStr(s) => s,
-            LabelStr(s) => if s.contains_char('\\') {
+            LabelStr(s) => if s.contains('\\') {
                 (&*s).escape_default().into_cow()
             } else {
                 s
@@ -484,13 +481,13 @@ impl<'a> LabelText<'a> {
         let mut prefix = self.pre_escaped_content().into_owned();
         let suffix = suffix.pre_escaped_content();
         prefix.push_str(r"\n\n");
-        prefix.push_str(&suffix[]);
+        prefix.push_str(&suffix[..]);
         EscStr(prefix.into_cow())
     }
 }
 
-pub type Nodes<'a,N> = CowVec<'a,N>;
-pub type Edges<'a,E> = CowVec<'a,E>;
+pub type Nodes<'a,N> = Cow<'a,[N]>;
+pub type Edges<'a,E> = Cow<'a,[E]>;
 
 // (The type parameters in GraphWalk should be associated items,
 // when/if Rust supports such.)
@@ -519,7 +516,7 @@ pub trait GraphWalk<'a, N, E> {
     fn target(&'a self, edge: &E) -> N;
 }
 
-#[derive(Copy, PartialEq, Eq, Show)]
+#[derive(Copy, PartialEq, Eq, Debug)]
 pub enum RenderOption {
     NoEdgeLabels,
     NoNodeLabels,
@@ -544,7 +541,7 @@ pub fn render_opts<'a, N:Clone+'a, E:Clone+'a, G:Labeller<'a,N,E>+GraphWalk<'a,N
               options: &[RenderOption]) -> old_io::IoResult<()>
 {
     fn writeln<W:Writer>(w: &mut W, arg: &[&str]) -> old_io::IoResult<()> {
-        for &s in arg.iter() { try!(w.write_str(s)); }
+        for &s in arg { try!(w.write_str(s)); }
         w.write_char('\n')
     }
 
@@ -553,7 +550,7 @@ pub fn render_opts<'a, N:Clone+'a, E:Clone+'a, G:Labeller<'a,N,E>+GraphWalk<'a,N
     }
 
     try!(writeln(w, &["digraph ", g.graph_id().as_slice(), " {"]));
-    for n in g.nodes().iter() {
+    for n in &*g.nodes() {
         try!(indent(w));
         let id = g.node_id(n);
         if options.contains(&RenderOption::NoNodeLabels) {
@@ -561,11 +558,11 @@ pub fn render_opts<'a, N:Clone+'a, E:Clone+'a, G:Labeller<'a,N,E>+GraphWalk<'a,N
         } else {
             let escaped = g.node_label(n).escape();
             try!(writeln(w, &[id.as_slice(),
-                              "[label=\"", escaped.as_slice(), "\"];"]));
+                              "[label=\"", &escaped, "\"];"]));
         }
     }
 
-    for e in g.edges().iter() {
+    for e in &*g.edges() {
         let escaped_label = g.edge_label(e).escape();
         try!(indent(w));
         let source = g.source(e);
@@ -578,7 +575,7 @@ pub fn render_opts<'a, N:Clone+'a, E:Clone+'a, G:Labeller<'a,N,E>+GraphWalk<'a,N
         } else {
             try!(writeln(w, &[source_id.as_slice(),
                               " -> ", target_id.as_slice(),
-                              "[label=\"", escaped_label.as_slice(), "\"];"]));
+                              "[label=\"", &escaped_label, "\"];"]));
         }
     }
 
@@ -678,7 +675,7 @@ mod tests {
 
     impl<'a> Labeller<'a, Node, &'a Edge> for LabelledGraph {
         fn graph_id(&'a self) -> Id<'a> {
-            Id::new(&self.name[]).unwrap()
+            Id::new(&self.name[..]).unwrap()
         }
         fn node_id(&'a self, n: &Node) -> Id<'a> {
             id_name(n)
@@ -711,7 +708,7 @@ mod tests {
 
     impl<'a> GraphWalk<'a, Node, &'a Edge> for LabelledGraph {
         fn nodes(&'a self) -> Nodes<'a,Node> {
-            range(0u, self.node_labels.len()).collect()
+            (0..self.node_labels.len()).collect()
         }
         fn edges(&'a self) -> Edges<'a,&'a Edge> {
             self.edges.iter().collect()
@@ -742,7 +739,7 @@ mod tests {
     fn test_input(g: LabelledGraph) -> IoResult<String> {
         let mut writer = Vec::new();
         render(&g, &mut writer).unwrap();
-        (&mut writer.as_slice()).read_to_string()
+        (&mut &*writer).read_to_string()
     }
 
     // All of the tests use raw-strings as the format for the expected outputs,
@@ -854,7 +851,7 @@ r#"digraph hasse_diagram {
                  edge(1, 3, ";"),    edge(2, 3, ";"   )));
 
         render(&g, &mut writer).unwrap();
-        let r = (&mut writer.as_slice()).read_to_string();
+        let r = (&mut &*writer).read_to_string();
 
         assert_eq!(r.unwrap(),
 r#"digraph syntax_tree {
@@ -874,8 +871,8 @@ r#"digraph syntax_tree {
     fn simple_id_construction() {
         let id1 = Id::new("hello");
         match id1 {
-            Some(_) => {;},
-            None => panic!("'hello' is not a valid value for id anymore")
+            Ok(_) => {;},
+            Err(..) => panic!("'hello' is not a valid value for id anymore")
         }
     }
 
@@ -883,8 +880,8 @@ r#"digraph syntax_tree {
     fn badly_formatted_id() {
         let id2 = Id::new("Weird { struct : ure } !!!");
         match id2 {
-            Some(_) => panic!("graphviz id suddenly allows spaces, brackets and stuff"),
-            None => {;}
+            Ok(_) => panic!("graphviz id suddenly allows spaces, brackets and stuff"),
+            Err(..) => {;}
         }
     }
 }

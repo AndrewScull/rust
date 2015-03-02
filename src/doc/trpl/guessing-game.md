@@ -91,7 +91,7 @@ fn main() {
 ```
 
 You've seen this code before, when we talked about standard input. We
-import the `std::io` module with `use`, and then our `main` function contains
+import the `std::old_io` module with `use`, and then our `main` function contains
 our program's logic. We print a little message announcing the game, ask the
 user to input a guess, get their input, and then print it out.
 
@@ -400,7 +400,7 @@ a function for that:
 let input = old_io::stdin().read_line()
                        .ok()
                        .expect("Failed to read line");
-let input_num: Option<u32> = input.parse();
+let input_num: Result<u32, _> = input.parse();
 ```
 
 The `parse` function takes in a `&str` value and converts it into something.
@@ -423,10 +423,12 @@ tell `random()` what to generate. In a similar fashion, both of these work:
 
 ```{rust,ignore}
 let input_num = "5".parse::<u32>(); // input_num: Option<u32>
-let input_num: Option<u32> = "5".parse(); // input_num: Option<u32>
+let input_num: Result<u32, _> = "5".parse(); // input_num: Result<u32, <u32 as FromStr>::Err>
 ```
 
-Anyway, with us now converting our input to a number, our code looks like this:
+Here we're converting the `Result` returned by `parse` to an `Option` by using
+the `ok` method as well.  Anyway, with us now converting our input to a number,
+our code looks like this:
 
 ```{rust,ignore}
 use std::old_io;
@@ -445,9 +447,9 @@ fn main() {
     let input = old_io::stdin().read_line()
                            .ok()
                            .expect("Failed to read line");
-    let input_num: Option<u32> = input.parse();
+    let input_num: Result<u32, _> = input.parse();
 
-    println!("You guessed: {}", input_num);
+    println!("You guessed: {:?}", input_num);
 
     match cmp(input_num, secret_number) {
         Ordering::Less => println!("Too small!"),
@@ -495,11 +497,11 @@ fn main() {
     let input = old_io::stdin().read_line()
                            .ok()
                            .expect("Failed to read line");
-    let input_num: Option<u32> = input.parse();
+    let input_num: Result<u32, _> = input.parse();
 
     let num = match input_num {
-        Some(num) => num,
-        None => {
+        Ok(num) => num,
+        Err(_) => {
             println!("Please input a number!");
             return;
         }
@@ -562,11 +564,11 @@ fn main() {
     let input = old_io::stdin().read_line()
                            .ok()
                            .expect("Failed to read line");
-    let input_num: Option<u32> = input.trim().parse();
+    let input_num: Result<u32, _> = input.trim().parse();
 
     let num = match input_num {
-        Some(num) => num,
-        None => {
+        Ok(num) => num,
+        Err(_) => {
             println!("Please input a number!");
             return;
         }
@@ -638,11 +640,11 @@ fn main() {
         let input = old_io::stdin().read_line()
                                .ok()
                                .expect("Failed to read line");
-        let input_num: Option<u32> = input.trim().parse();
+        let input_num: Result<u32, _> = input.trim().parse();
 
         let num = match input_num {
-            Some(num) => num,
-            None => {
+            Ok(num) => num,
+            Err(_) => {
                 println!("Please input a number!");
                 return;
             }
@@ -714,11 +716,11 @@ fn main() {
         let input = old_io::stdin().read_line()
                                .ok()
                                .expect("Failed to read line");
-        let input_num: Option<u32> = input.trim().parse();
+        let input_num: Result<u32, _> = input.trim().parse();
 
         let num = match input_num {
-            Some(num) => num,
-            None => {
+            Ok(num) => num,
+            Err(_) => {
                 println!("Please input a number!");
                 return;
             }
@@ -770,11 +772,11 @@ fn main() {
         let input = old_io::stdin().read_line()
                                .ok()
                                .expect("Failed to read line");
-        let input_num: Option<u32> = input.trim().parse();
+        let input_num: Result<u32, _> = input.trim().parse();
 
         let num = match input_num {
-            Some(num) => num,
-            None => {
+            Ok(num) => num,
+            Err(_) => {
                 println!("Please input a number!");
                 continue;
             }
@@ -847,11 +849,11 @@ fn main() {
         let input = old_io::stdin().read_line()
                                .ok()
                                .expect("Failed to read line");
-        let input_num: Option<u32> = input.trim().parse();
+        let input_num: Result<u32, _> = input.trim().parse();
 
         let num = match input_num {
-            Some(num) => num,
-            None => {
+            Ok(num) => num,
+            Err(_) => {
                 println!("Please input a number!");
                 continue;
             }

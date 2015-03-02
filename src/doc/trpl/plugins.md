@@ -30,14 +30,24 @@ information.
 extend the compiler's behavior with new syntax extensions, lint checks, etc.
 
 A plugin is a dynamic library crate with a designated *registrar* function that
-registers extensions with `rustc`. Other crates can use these extensions by
-loading the plugin crate with `#[plugin] extern crate`. See the
+registers extensions with `rustc`. Other crates can load these extensions using
+the crate attribute `#![plugin(...)]`.  See the
 [`rustc::plugin`](../rustc/plugin/index.html) documentation for more about the
 mechanics of defining and loading a plugin.
 
-Arguments passed as `#[plugin=...]` or `#[plugin(...)]` are not interpreted by
-rustc itself.  They are provided to the plugin through the `Registry`'s [`args`
-method](../rustc/plugin/registry/struct.Registry.html#method.args).
+If present, arguments passed as `#![plugin(foo(... args ...))]` are not
+interpreted by rustc itself.  They are provided to the plugin through the
+`Registry`'s [`args` method](../rustc/plugin/registry/struct.Registry.html#method.args).
+
+In the vast majority of cases, a plugin should *only* be used through
+`#![plugin]` and not through an `extern crate` item.  Linking a plugin would
+pull in all of libsyntax and librustc as dependencies of your crate.  This is
+generally unwanted unless you are building another plugin.  The
+`plugin_as_library` lint checks these guidelines.
+
+The usual practice is to put compiler plugins in their own crate, separate from
+any `macro_rules!` macros or ordinary Rust code meant to be used by consumers
+of a library.
 
 # Syntax extensions
 
@@ -61,8 +71,8 @@ extern crate rustc;
 use syntax::codemap::Span;
 use syntax::parse::token;
 use syntax::ast::{TokenTree, TtToken};
-use syntax::ext::base::{ExtCtxt, MacResult, DummyResult, MacExpr};
-use syntax::ext::build::AstBuilder;  // trait for expr_uint
+use syntax::ext::base::{ExtCtxt, MacResult, DummyResult, MacEager};
+use syntax::ext::build::AstBuilder;  // trait for expr_usize
 use rustc::plugin::Registry;
 
 fn expand_rn(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree])
@@ -82,7 +92,7 @@ fn expand_rn(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree])
         }
     };
 
-    let mut text = text.as_slice();
+    let mut text = &text;
     let mut total = 0;
     while !text.is_empty() {
         match NUMERALS.iter().find(|&&(rn, _)| text.starts_with(rn)) {
@@ -97,7 +107,7 @@ fn expand_rn(cx: &mut ExtCtxt, sp: Span, args: &[TokenTree])
         }
     }
 
-    MacExpr::new(cx.expr_uint(sp, total))
+    MacEager::expr(cx.expr_usize(sp, total))
 }
 
 #[plugin_registrar]
@@ -110,8 +120,7 @@ Then we can use `rn!()` like any other macro:
 
 ```ignore
 #![feature(plugin)]
-
-#[plugin] extern crate roman_numerals;
+#![plugin(roman_numerals)]
 
 fn main() {
     assert_eq!(rn!(MMXV), 2015);
@@ -137,14 +146,7 @@ a more involved macro example, see
 
 ## Tips and tricks
 
-To see the results of expanding syntax extensions, run
-`rustc --pretty expanded`. The output represents a whole crate, so you
-can also feed it back in to `rustc`, which will sometimes produce better
-error messages than the original compilation. Note that the
-`--pretty expanded` output may have a different meaning if multiple
-variables of the same name (but different syntax contexts) are in play
-in the same scope. In this case `--pretty expanded,hygiene` will tell
-you about the syntax contexts.
+Some of the [macro debugging tips](macros.html#debugging-macro-code) are applicable.
 
 You can use [`syntax::parse`](../syntax/parse/index.html) to turn token trees into
 higher-level syntax elements like expressions:
@@ -175,8 +177,13 @@ and return
 [`DummyResult`](../syntax/ext/base/struct.DummyResult.html),
 so that the compiler can continue and find further errors.
 
+To print syntax fragments for debugging, you can use
+[`span_note`](../syntax/ext/base/struct.ExtCtxt.html#method.span_note) together
+with
+[`syntax::print::pprust::*_to_string`](http://doc.rust-lang.org/syntax/print/pprust/index.html#functions).
+
 The example above produced an integer literal using
-[`AstBuilder::expr_uint`](../syntax/ext/build/trait.AstBuilder.html#tymethod.expr_uint).
+[`AstBuilder::expr_usize`](../syntax/ext/build/trait.AstBuilder.html#tymethod.expr_usize).
 As an alternative to the `AstBuilder` trait, `libsyntax` provides a set of
 [quasiquote macros](../syntax/ext/quote/index.html).  They are undocumented and
 very rough around the edges.  However, the implementation may be a good
@@ -219,7 +226,7 @@ pub fn plugin_registrar(reg: &mut Registry) {
 Then code like
 
 ```ignore
-#[plugin] extern crate lint_plugin_test;
+#![plugin(lint_plugin_test)]
 
 fn lintme() { }
 ```

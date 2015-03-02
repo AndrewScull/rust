@@ -134,7 +134,7 @@ impl ChanWriter {
     }
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl Clone for ChanWriter {
     fn clone(&self) -> ChanWriter {
         ChanWriter { tx: self.tx.clone() }
@@ -161,12 +161,12 @@ mod test {
     use sync::mpsc::channel;
     use super::*;
     use old_io;
-    use thread::Thread;
+    use thread;
 
     #[test]
     fn test_rx_reader() {
         let (tx, rx) = channel();
-        Thread::spawn(move|| {
+        thread::spawn(move|| {
           tx.send(vec![1u8, 2u8]).unwrap();
           tx.send(vec![]).unwrap();
           tx.send(vec![3u8, 4u8]).unwrap();
@@ -191,14 +191,14 @@ mod test {
         let a: &[u8] = &[7,8,6];
         assert_eq!(a, buf);
 
-        match reader.read(buf.as_mut_slice()) {
+        match reader.read(&mut buf) {
             Ok(..) => panic!(),
             Err(e) => assert_eq!(e.kind, old_io::EndOfFile),
         }
         assert_eq!(a, buf);
 
         // Ensure it continues to panic in the same way.
-        match reader.read(buf.as_mut_slice()) {
+        match reader.read(&mut buf) {
             Ok(..) => panic!(),
             Err(e) => assert_eq!(e.kind, old_io::EndOfFile),
         }
@@ -208,7 +208,7 @@ mod test {
     #[test]
     fn test_rx_buffer() {
         let (tx, rx) = channel();
-        Thread::spawn(move|| {
+        thread::spawn(move|| {
           tx.send(b"he".to_vec()).unwrap();
           tx.send(b"llo wo".to_vec()).unwrap();
           tx.send(b"".to_vec()).unwrap();
@@ -234,10 +234,7 @@ mod test {
         writer.write_be_u32(42).unwrap();
 
         let wanted = vec![0u8, 0u8, 0u8, 42u8];
-        let got = match Thread::scoped(move|| { rx.recv().unwrap() }).join() {
-            Ok(got) => got,
-            Err(_) => panic!(),
-        };
+        let got = thread::scoped(move|| { rx.recv().unwrap() }).join();
         assert_eq!(wanted, got);
 
         match writer.write_u8(1) {

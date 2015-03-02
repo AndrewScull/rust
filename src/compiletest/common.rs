@@ -12,10 +12,10 @@ pub use self::Mode::*;
 use std::fmt;
 use std::str::FromStr;
 
-#[cfg(stage0)] // NOTE: remove impl after snapshot
-#[derive(Clone, PartialEq, Show)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mode {
     CompileFail,
+    ParseFail,
     RunFail,
     RunPass,
     RunPassValgrind,
@@ -24,35 +24,21 @@ pub enum Mode {
     DebugInfoLldb,
     Codegen
 }
-
-#[cfg(not(stage0))] // NOTE: remove cfg after snapshot
-#[derive(Clone, PartialEq, Debug)]
-pub enum Mode {
-    CompileFail,
-    RunFail,
-    RunPass,
-    RunPassValgrind,
-    Pretty,
-    DebugInfoGdb,
-    DebugInfoLldb,
-    Codegen
-}
-
-
-impl Copy for Mode {}
 
 impl FromStr for Mode {
-    fn from_str(s: &str) -> Option<Mode> {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Mode, ()> {
         match s {
-          "compile-fail" => Some(CompileFail),
-          "run-fail" => Some(RunFail),
-          "run-pass" => Some(RunPass),
-          "run-pass-valgrind" => Some(RunPassValgrind),
-          "pretty" => Some(Pretty),
-          "debuginfo-lldb" => Some(DebugInfoLldb),
-          "debuginfo-gdb" => Some(DebugInfoGdb),
-          "codegen" => Some(Codegen),
-          _ => None,
+          "compile-fail" => Ok(CompileFail),
+          "parse-fail" => Ok(ParseFail),
+          "run-fail" => Ok(RunFail),
+          "run-pass" => Ok(RunPass),
+          "run-pass-valgrind" => Ok(RunPassValgrind),
+          "pretty" => Ok(Pretty),
+          "debuginfo-lldb" => Ok(DebugInfoLldb),
+          "debuginfo-gdb" => Ok(DebugInfoGdb),
+          "codegen" => Ok(Codegen),
+          _ => Err(()),
         }
     }
 }
@@ -61,6 +47,7 @@ impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(match *self {
             CompileFail => "compile-fail",
+            ParseFail => "parse-fail",
             RunFail => "run-fail",
             RunPass => "run-pass",
             RunPassValgrind => "run-pass-valgrind",

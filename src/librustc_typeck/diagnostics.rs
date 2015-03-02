@@ -80,6 +80,7 @@ register_diagnostics! {
     E0120,
     E0121,
     E0122,
+    E0123,
     E0124,
     E0127,
     E0128,
@@ -108,7 +109,7 @@ register_diagnostics! {
     E0189, // can only cast a boxed pointer to a boxed object
     E0190, // can only cast a &-pointer to an &-object
     E0191, // value of the associated type must be specified
-    E0192, // negative imples are allowed just fo `Send` and `Sync`
+    E0192, // negative imples are allowed just for `Send` and `Sync`
     E0193, // cannot bound type where clause bounds may only be attached to types
            // involving type parameters
     E0194,
@@ -119,7 +120,7 @@ register_diagnostics! {
     E0199, // implementing trait is not unsafe
     E0200, // trait requires an `unsafe impl` declaration
     E0201, // duplicate method in trait impl
-    E0202, // associated items are not allowed in inherint impls
+    E0202, // associated items are not allowed in inherent impls
     E0203, // type parameter has more than one relaxed default bound,
            // and only one is supported
     E0204, // trait `Copy` may not be implemented for this type; field
@@ -171,7 +172,10 @@ register_diagnostics! {
     E0247, // found module name used as a type
     E0248, // found value name used as a type
     E0249, // expected constant expr for array length
-    E0250  // expected constant expr for array length
+    E0250, // expected constant expr for array length
+    E0318, // can't create default impls for traits outside their crates
+    E0319, // trait impls for defaulted traits allowed just for structs/enums
+    E0320  // recursive overflow during dropck
 }
 
 __build_diagnostic_array! { DIAGNOSTICS }

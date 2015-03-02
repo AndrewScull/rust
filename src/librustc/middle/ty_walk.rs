@@ -28,7 +28,7 @@ impl<'tcx> TypeWalker<'tcx> {
             ty::ty_bool | ty::ty_char | ty::ty_int(_) | ty::ty_uint(_) | ty::ty_float(_) |
             ty::ty_str | ty::ty_infer(_) | ty::ty_param(_) | ty::ty_err => {
             }
-            ty::ty_uniq(ty) | ty::ty_vec(ty, _) | ty::ty_open(ty) => {
+            ty::ty_uniq(ty) | ty::ty_vec(ty, _) => {
                 self.stack.push(ty);
             }
             ty::ty_ptr(ref mt) | ty::ty_rptr(_, ref mt) => {
@@ -39,9 +39,9 @@ impl<'tcx> TypeWalker<'tcx> {
             }
             ty::ty_trait(box ty::TyTrait { ref principal, ref bounds }) => {
                 self.push_reversed(principal.substs().types.as_slice());
-                self.push_reversed(bounds.projection_bounds.iter().map(|pred| {
+                self.push_reversed(&bounds.projection_bounds.iter().map(|pred| {
                     pred.0.ty
-                }).collect::<Vec<_>>().as_slice());
+                }).collect::<Vec<_>>());
             }
             ty::ty_enum(_, ref substs) |
             ty::ty_struct(_, ref substs) |
@@ -49,7 +49,7 @@ impl<'tcx> TypeWalker<'tcx> {
                 self.push_reversed(substs.types.as_slice());
             }
             ty::ty_tup(ref ts) => {
-                self.push_reversed(ts.as_slice());
+                self.push_reversed(ts);
             }
             ty::ty_bare_fn(_, ref ft) => {
                 self.push_sig_subtypes(&ft.sig);
@@ -62,7 +62,7 @@ impl<'tcx> TypeWalker<'tcx> {
             ty::FnConverging(output) => { self.stack.push(output); }
             ty::FnDiverging => { }
         }
-        self.push_reversed(sig.0.inputs.as_slice());
+        self.push_reversed(&sig.0.inputs);
     }
 
     fn push_reversed(&mut self, tys: &[Ty<'tcx>]) {

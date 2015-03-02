@@ -27,7 +27,7 @@ enum square {
     empty
 }
 
-impl fmt::Show for square {
+impl fmt::Debug for square {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", match *self {
           bot => { "R".to_string() }
@@ -66,12 +66,12 @@ fn read_board_grid<rdr:'static + old_io::Reader>(mut input: rdr)
     let mut line = [0; 10];
     input.read(&mut line);
     let mut row = Vec::new();
-    for c in line.iter() {
+    for c in &line {
         row.push(square_from_char(*c as char))
     }
     grid.push(row);
     let width = grid[0].len();
-    for row in grid.iter() { assert!(row.len() == width) }
+    for row in &grid { assert!(row.len() == width) }
     grid
 }
 

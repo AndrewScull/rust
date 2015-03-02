@@ -11,10 +11,12 @@
 // Regression test for issue #21010: Normalize associated types in
 // various special paths in the `type_is_immediate` function.
 
-#![allow(unstable)]
 
 pub trait OffsetState: Sized {}
-pub trait Offset { type State: OffsetState; }
+pub trait Offset {
+    type State: OffsetState;
+    fn dummy(&self) { }
+}
 
 #[derive(Copy)] pub struct X;
 impl Offset for X { type State = Y; }

@@ -30,7 +30,7 @@ pub fn expand_deriving_from_primitive<F>(cx: &mut ExtCtxt,
     let trait_def = TraitDef {
         span: span,
         attributes: Vec::new(),
-        path: Path::new(vec!("std", "num", "FromPrimitive")),
+        path: path_std!(cx, core::num::FromPrimitive),
         additional_bounds: Vec::new(),
         generics: LifetimeBounds::empty(),
         methods: vec!(
@@ -38,11 +38,10 @@ pub fn expand_deriving_from_primitive<F>(cx: &mut ExtCtxt,
                 name: "from_i64",
                 generics: LifetimeBounds::empty(),
                 explicit_self: None,
-                args: vec!(
-                    Literal(Path::new(vec!("i64")))),
-                ret_ty: Literal(Path::new_(vec!("std", "option", "Option"),
+                args: vec!(Literal(path_local!(i64))),
+                ret_ty: Literal(Path::new_(pathvec_std!(cx, core::option::Option),
                                            None,
-                                           vec!(box Self),
+                                           vec!(box Self_),
                                            true)),
                 // #[inline] liable to cause code-bloat
                 attributes: attrs.clone(),
@@ -54,11 +53,10 @@ pub fn expand_deriving_from_primitive<F>(cx: &mut ExtCtxt,
                 name: "from_u64",
                 generics: LifetimeBounds::empty(),
                 explicit_self: None,
-                args: vec!(
-                    Literal(Path::new(vec!("u64")))),
-                ret_ty: Literal(Path::new_(vec!("std", "option", "Option"),
+                args: vec!(Literal(path_local!(u64))),
+                ret_ty: Literal(Path::new_(pathvec_std!(cx, core::option::Option),
                                            None,
-                                           vec!(box Self),
+                                           vec!(box Self_),
                                            true)),
                 // #[inline] liable to cause code-bloat
                 attributes: attrs,
@@ -93,7 +91,7 @@ fn cs_from(name: &str, cx: &mut ExtCtxt, trait_span: Span, substr: &Substructure
 
             let mut arms = Vec::new();
 
-            for variant in enum_def.variants.iter() {
+            for variant in &enum_def.variants {
                 match variant.node.kind {
                     ast::TupleVariantKind(ref args) => {
                         if !args.is_empty() {

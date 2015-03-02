@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::fmt::Show;
+use std::fmt::Debug;
 use std::default::Default;
 
 // Test that two blanket impls conflict (at least without negative
@@ -19,9 +19,9 @@ trait MyTrait {
     fn get(&self) -> usize;
 }
 
-trait Even { }
+trait Even : ::std::marker::MarkerTrait { }
 
-trait Odd { }
+trait Odd : ::std::marker::MarkerTrait { }
 
 impl<T:Even> MyTrait for T { //~ ERROR E0119
     fn get(&self) -> usize { 0 }

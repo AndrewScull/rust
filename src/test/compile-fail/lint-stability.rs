@@ -12,470 +12,481 @@
 // aux-build:inherited_stability.rs
 // aux-build:stability_cfg1.rs
 // aux-build:stability_cfg2.rs
+// ignore-tidy-linelength
 
-#![deny(unstable)]
 #![deny(deprecated)]
-#![deny(unstable)]
 #![allow(dead_code)]
+#![feature(staged_api)]
 #![staged_api]
 
 #[macro_use]
-extern crate lint_stability; //~ ERROR: use of unmarked item
+extern crate lint_stability;
 
 mod cross_crate {
     extern crate stability_cfg1;
-    extern crate stability_cfg2; //~ ERROR: use of unstable item
+    extern crate stability_cfg2; //~ WARNING: use of unstable library feature
 
     use lint_stability::*;
 
     fn test() {
+        type Foo = MethodTester;
         let foo = MethodTester;
 
         deprecated(); //~ ERROR use of deprecated item
         foo.method_deprecated(); //~ ERROR use of deprecated item
+        Foo::method_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo>::method_deprecated(&foo); //~ ERROR use of deprecated item
         foo.trait_deprecated(); //~ ERROR use of deprecated item
+        Trait::trait_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo>::trait_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo as Trait>::trait_deprecated(&foo); //~ ERROR use of deprecated item
 
         deprecated_text(); //~ ERROR use of deprecated item: text
         foo.method_deprecated_text(); //~ ERROR use of deprecated item: text
+        Foo::method_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo>::method_deprecated_text(&foo); //~ ERROR use of deprecated item: text
         foo.trait_deprecated_text(); //~ ERROR use of deprecated item: text
+        Trait::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo>::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo as Trait>::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
 
-        experimental(); //~ ERROR use of unstable item
-        foo.method_experimental(); //~ ERROR use of unstable item
-        foo.trait_experimental(); //~ ERROR use of unstable item
+        deprecated_unstable(); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        foo.method_deprecated_unstable(); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        Foo::method_deprecated_unstable(&foo); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        <Foo>::method_deprecated_unstable(&foo); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        foo.trait_deprecated_unstable(); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        Trait::trait_deprecated_unstable(&foo); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        <Foo>::trait_deprecated_unstable(&foo); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        <Foo as Trait>::trait_deprecated_unstable(&foo); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
 
-        experimental_text(); //~ ERROR use of unstable item: text
-        foo.method_experimental_text(); //~ ERROR use of unstable item: text
-        foo.trait_experimental_text(); //~ ERROR use of unstable item: text
+        deprecated_unstable_text(); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        foo.method_deprecated_unstable_text(); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        Foo::method_deprecated_unstable_text(&foo); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        <Foo>::method_deprecated_unstable_text(&foo); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        foo.trait_deprecated_unstable_text(); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        Trait::trait_deprecated_unstable_text(&foo); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        <Foo>::trait_deprecated_unstable_text(&foo); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        <Foo as Trait>::trait_deprecated_unstable_text(&foo); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
 
-        unstable(); //~ ERROR use of unstable item
-        foo.method_unstable(); //~ ERROR use of unstable item
-        foo.trait_unstable(); //~ ERROR use of unstable item
+        unstable(); //~ WARNING use of unstable library feature
+        foo.method_unstable(); //~ WARNING use of unstable library feature
+        Foo::method_unstable(&foo); //~ WARNING use of unstable library feature
+        <Foo>::method_unstable(&foo); //~ WARNING use of unstable library feature
+        foo.trait_unstable(); //~ WARNING use of unstable library feature
+        Trait::trait_unstable(&foo); //~ WARNING use of unstable library feature
+        <Foo>::trait_unstable(&foo); //~ WARNING use of unstable library feature
+        <Foo as Trait>::trait_unstable(&foo); //~ WARNING use of unstable library feature
 
-        unstable_text(); //~ ERROR use of unstable item: text
-        foo.method_unstable_text(); //~ ERROR use of unstable item: text
-        foo.trait_unstable_text(); //~ ERROR use of unstable item: text
-
-        unmarked(); //~ ERROR use of unmarked item
-        foo.method_unmarked(); //~ ERROR use of unmarked item
-        foo.trait_unmarked(); //~ ERROR use of unmarked item
+        unstable_text();
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        foo.method_unstable_text();
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        Foo::method_unstable_text(&foo);
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        <Foo>::method_unstable_text(&foo);
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        foo.trait_unstable_text();
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        Trait::trait_unstable_text(&foo);
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        <Foo>::trait_unstable_text(&foo);
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        <Foo as Trait>::trait_unstable_text(&foo);
+        //~^ WARNING use of unstable library feature 'test_feature': text
 
         stable();
         foo.method_stable();
+        Foo::method_stable(&foo);
+        <Foo>::method_stable(&foo);
         foo.trait_stable();
+        Trait::trait_stable(&foo);
+        <Foo>::trait_stable(&foo);
+        <Foo as Trait>::trait_stable(&foo);
 
         stable_text();
         foo.method_stable_text();
+        Foo::method_stable_text(&foo);
+        <Foo>::method_stable_text(&foo);
         foo.trait_stable_text();
-
-        frozen();
-        foo.method_frozen();
-        foo.trait_frozen();
-
-        frozen_text();
-        foo.method_frozen_text();
-        foo.trait_frozen_text();
-
-        locked();
-        foo.method_locked();
-        foo.trait_locked();
-
-        locked_text();
-        foo.method_locked_text();
-        foo.trait_locked_text();
+        Trait::trait_stable_text(&foo);
+        <Foo>::trait_stable_text(&foo);
+        <Foo as Trait>::trait_stable_text(&foo);
 
         let _ = DeprecatedStruct { i: 0 }; //~ ERROR use of deprecated item
-        let _ = ExperimentalStruct { i: 0 }; //~ ERROR use of unstable item
-        let _ = UnstableStruct { i: 0 }; //~ ERROR use of unstable item
-        let _ = UnmarkedStruct { i: 0 }; //~ ERROR use of unmarked item
+        let _ = DeprecatedUnstableStruct { i: 0 }; //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        let _ = UnstableStruct { i: 0 }; //~ WARNING use of unstable library feature
         let _ = StableStruct { i: 0 };
-        let _ = FrozenStruct { i: 0 };
-        let _ = LockedStruct { i: 0 };
 
         let _ = DeprecatedUnitStruct; //~ ERROR use of deprecated item
-        let _ = ExperimentalUnitStruct; //~ ERROR use of unstable item
-        let _ = UnstableUnitStruct; //~ ERROR use of unstable item
-        let _ = UnmarkedUnitStruct; //~ ERROR use of unmarked item
+        let _ = DeprecatedUnstableUnitStruct; //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        let _ = UnstableUnitStruct; //~ WARNING use of unstable library feature
         let _ = StableUnitStruct;
-        let _ = FrozenUnitStruct;
-        let _ = LockedUnitStruct;
 
         let _ = Enum::DeprecatedVariant; //~ ERROR use of deprecated item
-        let _ = Enum::ExperimentalVariant; //~ ERROR use of unstable item
-        let _ = Enum::UnstableVariant; //~ ERROR use of unstable item
-        let _ = Enum::UnmarkedVariant; //~ ERROR use of unmarked item
+        let _ = Enum::DeprecatedUnstableVariant; //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        let _ = Enum::UnstableVariant; //~ WARNING use of unstable library feature
         let _ = Enum::StableVariant;
-        let _ = Enum::FrozenVariant;
-        let _ = Enum::LockedVariant;
 
         let _ = DeprecatedTupleStruct (1); //~ ERROR use of deprecated item
-        let _ = ExperimentalTupleStruct (1); //~ ERROR use of unstable item
-        let _ = UnstableTupleStruct (1); //~ ERROR use of unstable item
-        let _ = UnmarkedTupleStruct (1); //~ ERROR use of unmarked item
+        let _ = DeprecatedUnstableTupleStruct (1); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        let _ = UnstableTupleStruct (1); //~ WARNING use of unstable library feature
         let _ = StableTupleStruct (1);
-        let _ = FrozenTupleStruct (1);
-        let _ = LockedTupleStruct (1);
 
         // At the moment, the lint checker only checks stability in
         // in the arguments of macros.
         // Eventually, we will want to lint the contents of the
         // macro in the module *defining* it. Also, stability levels
         // on macros themselves are not yet linted.
-        macro_test!();
         macro_test_arg!(deprecated_text()); //~ ERROR use of deprecated item: text
+        macro_test_arg!(deprecated_unstable_text()); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
         macro_test_arg!(macro_test_arg!(deprecated_text())); //~ ERROR use of deprecated item: text
-        macro_test_arg_nested!(deprecated_text);
     }
 
-    fn test_method_param<F: Trait>(foo: F) {
+    fn test_method_param<Foo: Trait>(foo: Foo) {
         foo.trait_deprecated(); //~ ERROR use of deprecated item
+        Trait::trait_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo>::trait_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo as Trait>::trait_deprecated(&foo); //~ ERROR use of deprecated item
         foo.trait_deprecated_text(); //~ ERROR use of deprecated item: text
-        foo.trait_experimental(); //~ ERROR use of unstable item
-        foo.trait_experimental_text(); //~ ERROR use of unstable item: text
-        foo.trait_unstable(); //~ ERROR use of unstable item
-        foo.trait_unstable_text(); //~ ERROR use of unstable item: text
-        foo.trait_unmarked(); //~ ERROR use of unmarked item
+        Trait::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo>::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo as Trait>::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        foo.trait_deprecated_unstable(); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        Trait::trait_deprecated_unstable(&foo); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        <Foo>::trait_deprecated_unstable(&foo); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        <Foo as Trait>::trait_deprecated_unstable(&foo); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        foo.trait_deprecated_unstable_text(); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        Trait::trait_deprecated_unstable_text(&foo); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        <Foo>::trait_deprecated_unstable_text(&foo); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        <Foo as Trait>::trait_deprecated_unstable_text(&foo); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        foo.trait_unstable(); //~ WARNING use of unstable library feature
+        Trait::trait_unstable(&foo); //~ WARNING use of unstable library feature
+        <Foo>::trait_unstable(&foo); //~ WARNING use of unstable library feature
+        <Foo as Trait>::trait_unstable(&foo); //~ WARNING use of unstable library feature
+        foo.trait_unstable_text();
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        Trait::trait_unstable_text(&foo);
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        <Foo>::trait_unstable_text(&foo);
+        //~^ WARNING use of unstable library feature 'test_feature': text
+        <Foo as Trait>::trait_unstable_text(&foo);
+        //~^ WARNING use of unstable library feature 'test_feature': text
         foo.trait_stable();
+        Trait::trait_stable(&foo);
+        <Foo>::trait_stable(&foo);
+        <Foo as Trait>::trait_stable(&foo);
     }
 
     fn test_method_object(foo: &Trait) {
         foo.trait_deprecated(); //~ ERROR use of deprecated item
         foo.trait_deprecated_text(); //~ ERROR use of deprecated item: text
-        foo.trait_experimental(); //~ ERROR use of unstable item
-        foo.trait_experimental_text(); //~ ERROR use of unstable item: text
-        foo.trait_unstable(); //~ ERROR use of unstable item
-        foo.trait_unstable_text(); //~ ERROR use of unstable item: text
-        foo.trait_unmarked(); //~ ERROR use of unmarked item
+        foo.trait_deprecated_unstable(); //~ ERROR use of deprecated item
+        //~^ WARNING use of unstable library feature
+        foo.trait_deprecated_unstable_text(); //~ ERROR use of deprecated item: text
+        //~^ WARNING use of unstable library feature
+        foo.trait_unstable(); //~ WARNING use of unstable library feature
+        foo.trait_unstable_text();
+        //~^ WARNING use of unstable library feature 'test_feature': text
         foo.trait_stable();
     }
 
     struct S;
 
-    impl ExperimentalTrait for S { } //~ ERROR use of unstable item
+    impl UnstableTrait for S { } //~ WARNING use of unstable library feature
 
-    trait LocalTrait : ExperimentalTrait { } //~ ERROR use of unstable item
+    trait LocalTrait : UnstableTrait { } //~ WARNING use of unstable library feature
+
+    impl Trait for S {
+        fn trait_stable(&self) {}
+        fn trait_unstable(&self) {} //~ WARNING use of unstable library feature
+    }
 }
 
 mod inheritance {
-    extern crate inherited_stability; //~ ERROR: use of unstable item
-    use self::inherited_stability::*;
+    extern crate inherited_stability; //~ WARNING: use of unstable library feature
+    use self::inherited_stability::*; //~ WARNING: use of unstable library feature
 
     fn test_inheritance() {
-        experimental(); //~ ERROR use of unstable item
+        unstable(); //~ WARNING use of unstable library feature
         stable();
 
-        stable_mod::experimental(); //~ ERROR use of unstable item
+        stable_mod::unstable(); //~ WARNING use of unstable library feature
         stable_mod::stable();
 
-        unstable_mod::experimental(); //~ ERROR use of unstable item
-        unstable_mod::unstable(); //~ ERROR use of unstable item
+        unstable_mod::deprecated(); //~ ERROR use of deprecated item
+        unstable_mod::unstable(); //~ WARNING use of unstable library feature
 
-        experimental_mod::experimental(); //~ ERROR use of unstable item
-        experimental_mod::stable();
-
-        let _ = Experimental::ExperimentalVariant; //~ ERROR use of unstable item
-        let _ = Experimental::StableVariant;
+        let _ = Unstable::UnstableVariant; //~ WARNING use of unstable library feature
+        let _ = Unstable::StableVariant;
 
         let x: usize = 0;
-        x.experimental(); //~ ERROR use of unstable item
+        x.unstable(); //~ WARNING use of unstable library feature
         x.stable();
     }
 }
 
 mod this_crate {
-    #[deprecated]
+    #[unstable(feature = "test_feature")]
+    #[deprecated(since = "1.0.0")]
     pub fn deprecated() {}
-    #[deprecated="text"]
+    #[unstable(feature = "test_feature")]
+    #[deprecated(since = "1.0.0", reason = "text")]
     pub fn deprecated_text() {}
 
-    #[unstable]
-    pub fn experimental() {}
-    #[unstable="text"]
-    pub fn experimental_text() {}
-
-    #[unstable]
+    #[unstable(feature = "test_feature")]
     pub fn unstable() {}
-    #[unstable="text"]
+    #[unstable(feature = "test_feature", reason = "text")]
     pub fn unstable_text() {}
 
-    pub fn unmarked() {}
-
-    #[stable]
+    #[stable(feature = "rust1", since = "1.0.0")]
     pub fn stable() {}
-    #[stable="text"]
+    #[stable(feature = "rust1", since = "1.0.0", reason = "text")]
     pub fn stable_text() {}
 
-    #[locked]
-    pub fn locked() {}
-    #[locked="text"]
-    pub fn locked_text() {}
-
-    #[frozen]
-    pub fn frozen() {}
-    #[frozen="text"]
-    pub fn frozen_text() {}
-
-    #[stable]
+    #[stable(feature = "rust1", since = "1.0.0")]
     pub struct MethodTester;
 
     impl MethodTester {
-        #[deprecated]
+        #[unstable(feature = "test_feature")]
+        #[deprecated(since = "1.0.0")]
         pub fn method_deprecated(&self) {}
-        #[deprecated="text"]
+        #[unstable(feature = "test_feature")]
+        #[deprecated(since = "1.0.0", reason = "text")]
         pub fn method_deprecated_text(&self) {}
 
-        #[unstable]
-        pub fn method_experimental(&self) {}
-        #[unstable="text"]
-        pub fn method_experimental_text(&self) {}
-
-        #[unstable]
+        #[unstable(feature = "test_feature")]
         pub fn method_unstable(&self) {}
-        #[unstable="text"]
+        #[unstable(feature = "test_feature", reason = "text")]
         pub fn method_unstable_text(&self) {}
 
-        pub fn method_unmarked(&self) {}
-
-        #[stable]
+        #[stable(feature = "rust1", since = "1.0.0")]
         pub fn method_stable(&self) {}
-        #[stable="text"]
+        #[stable(feature = "rust1", since = "1.0.0", reason = "text")]
         pub fn method_stable_text(&self) {}
-
-        #[locked]
-        pub fn method_locked(&self) {}
-        #[locked="text"]
-        pub fn method_locked_text(&self) {}
-
-        #[frozen]
-        pub fn method_frozen(&self) {}
-        #[frozen="text"]
-        pub fn method_frozen_text(&self) {}
     }
 
     pub trait Trait {
-        #[deprecated]
+        #[unstable(feature = "test_feature")]
+        #[deprecated(since = "1.0.0")]
         fn trait_deprecated(&self) {}
-        #[deprecated="text"]
+        #[unstable(feature = "test_feature")]
+        #[deprecated(since = "1.0.0", reason = "text")]
         fn trait_deprecated_text(&self) {}
 
-        #[unstable]
-        fn trait_experimental(&self) {}
-        #[unstable="text"]
-        fn trait_experimental_text(&self) {}
-
-        #[unstable]
+        #[unstable(feature = "test_feature")]
         fn trait_unstable(&self) {}
-        #[unstable="text"]
+        #[unstable(feature = "test_feature", reason = "text")]
         fn trait_unstable_text(&self) {}
 
-        fn trait_unmarked(&self) {}
-
-        #[stable]
+        #[stable(feature = "rust1", since = "1.0.0")]
         fn trait_stable(&self) {}
-        #[stable="text"]
+        #[stable(feature = "rust1", since = "1.0.0", reason = "text")]
         fn trait_stable_text(&self) {}
-
-        #[locked]
-        fn trait_locked(&self) {}
-        #[locked="text"]
-        fn trait_locked_text(&self) {}
-
-        #[frozen]
-        fn trait_frozen(&self) {}
-        #[frozen="text"]
-        fn trait_frozen_text(&self) {}
     }
 
     impl Trait for MethodTester {}
 
-    #[deprecated]
-    pub struct DeprecatedStruct { i: isize }
-    #[unstable]
-    pub struct ExperimentalStruct { i: isize }
-    #[unstable]
-    pub struct UnstableStruct { i: isize }
-    pub struct UnmarkedStruct { i: isize }
-    #[stable]
-    pub struct StableStruct { i: isize }
-    #[frozen]
-    pub struct FrozenStruct { i: isize }
-    #[locked]
-    pub struct LockedStruct { i: isize }
-
-    #[deprecated]
-    pub struct DeprecatedUnitStruct;
-    #[unstable]
-    pub struct ExperimentalUnitStruct;
-    #[unstable]
-    pub struct UnstableUnitStruct;
-    pub struct UnmarkedUnitStruct;
-    #[stable]
-    pub struct StableUnitStruct;
-    #[frozen]
-    pub struct FrozenUnitStruct;
-    #[locked]
-    pub struct LockedUnitStruct;
-
-    pub enum Enum {
-        #[deprecated]
-        DeprecatedVariant,
-        #[unstable]
-        ExperimentalVariant,
-        #[unstable]
-        UnstableVariant,
-
-        UnmarkedVariant,
-        #[stable]
-        StableVariant,
-        #[frozen]
-        FrozenVariant,
-        #[locked]
-        LockedVariant,
+    #[unstable(feature = "test_feature")]
+    #[deprecated(since = "1.0.0")]
+    pub struct DeprecatedStruct {
+        #[stable(feature = "test_feature", since = "1.0.0")] i: isize
+    }
+    #[unstable(feature = "test_feature")]
+    pub struct UnstableStruct {
+        #[stable(feature = "test_feature", since = "1.0.0")] i: isize
+    }
+    #[stable(feature = "rust1", since = "1.0.0")]
+    pub struct StableStruct {
+        #[stable(feature = "test_feature", since = "1.0.0")] i: isize
     }
 
-    #[deprecated]
+    #[unstable(feature = "test_feature")]
+    #[deprecated(since = "1.0.0")]
+    pub struct DeprecatedUnitStruct;
+    #[unstable(feature = "test_feature")]
+    pub struct UnstableUnitStruct;
+    #[stable(feature = "rust1", since = "1.0.0")]
+    pub struct StableUnitStruct;
+
+    pub enum Enum {
+        #[unstable(feature = "test_feature")]
+        #[deprecated(since = "1.0.0")]
+        DeprecatedVariant,
+        #[unstable(feature = "test_feature")]
+        UnstableVariant,
+
+        #[stable(feature = "rust1", since = "1.0.0")]
+        StableVariant,
+    }
+
+    #[unstable(feature = "test_feature")]
+    #[deprecated(since = "1.0.0")]
     pub struct DeprecatedTupleStruct(isize);
-    #[unstable]
-    pub struct ExperimentalTupleStruct(isize);
-    #[unstable]
+    #[unstable(feature = "test_feature")]
     pub struct UnstableTupleStruct(isize);
-    pub struct UnmarkedTupleStruct(isize);
-    #[stable]
+    #[stable(feature = "rust1", since = "1.0.0")]
     pub struct StableTupleStruct(isize);
-    #[frozen]
-    pub struct FrozenTupleStruct(isize);
-    #[locked]
-    pub struct LockedTupleStruct(isize);
 
     fn test() {
         // Only the deprecated cases of the following should generate
         // errors, because other stability attributes now have meaning
         // only *across* crates, not within a single crate.
 
+        type Foo = MethodTester;
         let foo = MethodTester;
 
         deprecated(); //~ ERROR use of deprecated item
         foo.method_deprecated(); //~ ERROR use of deprecated item
+        Foo::method_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo>::method_deprecated(&foo); //~ ERROR use of deprecated item
         foo.trait_deprecated(); //~ ERROR use of deprecated item
+        Trait::trait_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo>::trait_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo as Trait>::trait_deprecated(&foo); //~ ERROR use of deprecated item
 
         deprecated_text(); //~ ERROR use of deprecated item: text
         foo.method_deprecated_text(); //~ ERROR use of deprecated item: text
+        Foo::method_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo>::method_deprecated_text(&foo); //~ ERROR use of deprecated item: text
         foo.trait_deprecated_text(); //~ ERROR use of deprecated item: text
-
-        experimental();
-        foo.method_experimental();
-        foo.trait_experimental();
-
-        experimental_text();
-        foo.method_experimental_text();
-        foo.trait_experimental_text();
+        Trait::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo>::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo as Trait>::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
 
         unstable();
         foo.method_unstable();
+        Foo::method_unstable(&foo);
+        <Foo>::method_unstable(&foo);
         foo.trait_unstable();
+        Trait::trait_unstable(&foo);
+        <Foo>::trait_unstable(&foo);
+        <Foo as Trait>::trait_unstable(&foo);
 
         unstable_text();
         foo.method_unstable_text();
+        Foo::method_unstable_text(&foo);
+        <Foo>::method_unstable_text(&foo);
         foo.trait_unstable_text();
-
-        unmarked();
-        foo.method_unmarked();
-        foo.trait_unmarked();
+        Trait::trait_unstable_text(&foo);
+        <Foo>::trait_unstable_text(&foo);
+        <Foo as Trait>::trait_unstable_text(&foo);
 
         stable();
         foo.method_stable();
+        Foo::method_stable(&foo);
+        <Foo>::method_stable(&foo);
         foo.trait_stable();
+        Trait::trait_stable(&foo);
+        <Foo>::trait_stable(&foo);
+        <Foo as Trait>::trait_stable(&foo);
 
         stable_text();
         foo.method_stable_text();
+        Foo::method_stable_text(&foo);
+        <Foo>::method_stable_text(&foo);
         foo.trait_stable_text();
-
-        frozen();
-        foo.method_frozen();
-        foo.trait_frozen();
-
-        frozen_text();
-        foo.method_frozen_text();
-        foo.trait_frozen_text();
-
-        locked();
-        foo.method_locked();
-        foo.trait_locked();
-
-        locked_text();
-        foo.method_locked_text();
-        foo.trait_locked_text();
+        Trait::trait_stable_text(&foo);
+        <Foo>::trait_stable_text(&foo);
+        <Foo as Trait>::trait_stable_text(&foo);
 
         let _ = DeprecatedStruct { i: 0 }; //~ ERROR use of deprecated item
-        let _ = ExperimentalStruct { i: 0 };
         let _ = UnstableStruct { i: 0 };
-        let _ = UnmarkedStruct { i: 0 };
         let _ = StableStruct { i: 0 };
-        let _ = FrozenStruct { i: 0 };
-        let _ = LockedStruct { i: 0 };
 
         let _ = DeprecatedUnitStruct; //~ ERROR use of deprecated item
-        let _ = ExperimentalUnitStruct;
         let _ = UnstableUnitStruct;
-        let _ = UnmarkedUnitStruct;
         let _ = StableUnitStruct;
-        let _ = FrozenUnitStruct;
-        let _ = LockedUnitStruct;
 
         let _ = Enum::DeprecatedVariant; //~ ERROR use of deprecated item
-        let _ = Enum::ExperimentalVariant;
         let _ = Enum::UnstableVariant;
-        let _ = Enum::UnmarkedVariant;
         let _ = Enum::StableVariant;
-        let _ = Enum::FrozenVariant;
-        let _ = Enum::LockedVariant;
 
         let _ = DeprecatedTupleStruct (1); //~ ERROR use of deprecated item
-        let _ = ExperimentalTupleStruct (1);
         let _ = UnstableTupleStruct (1);
-        let _ = UnmarkedTupleStruct (1);
         let _ = StableTupleStruct (1);
-        let _ = FrozenTupleStruct (1);
-        let _ = LockedTupleStruct (1);
     }
 
-    fn test_method_param<F: Trait>(foo: F) {
+    fn test_method_param<Foo: Trait>(foo: Foo) {
         foo.trait_deprecated(); //~ ERROR use of deprecated item
+        Trait::trait_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo>::trait_deprecated(&foo); //~ ERROR use of deprecated item
+        <Foo as Trait>::trait_deprecated(&foo); //~ ERROR use of deprecated item
         foo.trait_deprecated_text(); //~ ERROR use of deprecated item: text
-        foo.trait_experimental();
-        foo.trait_experimental_text();
+        Trait::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo>::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
+        <Foo as Trait>::trait_deprecated_text(&foo); //~ ERROR use of deprecated item: text
         foo.trait_unstable();
+        Trait::trait_unstable(&foo);
+        <Foo>::trait_unstable(&foo);
+        <Foo as Trait>::trait_unstable(&foo);
         foo.trait_unstable_text();
-        foo.trait_unmarked();
+        Trait::trait_unstable_text(&foo);
+        <Foo>::trait_unstable_text(&foo);
+        <Foo as Trait>::trait_unstable_text(&foo);
         foo.trait_stable();
+        Trait::trait_stable(&foo);
+        <Foo>::trait_stable(&foo);
+        <Foo as Trait>::trait_stable(&foo);
     }
 
     fn test_method_object(foo: &Trait) {
         foo.trait_deprecated(); //~ ERROR use of deprecated item
         foo.trait_deprecated_text(); //~ ERROR use of deprecated item: text
-        foo.trait_experimental();
-        foo.trait_experimental_text();
         foo.trait_unstable();
         foo.trait_unstable_text();
-        foo.trait_unmarked();
         foo.trait_stable();
     }
 
-    #[deprecated]
+    #[unstable(feature = "test_feature")]
+    #[deprecated(since = "1.0.0")]
     fn test_fn_body() {
         fn fn_in_body() {}
         fn_in_body();
     }
 
     impl MethodTester {
-        #[deprecated]
+        #[unstable(feature = "test_feature")]
+        #[deprecated(since = "1.0.0")]
         fn test_method_body(&self) {
             fn fn_in_body() {}
             fn_in_body();
         }
     }
 
-    #[deprecated]
-    pub trait DeprecatedTrait {}
+    #[unstable(feature = "test_feature")]
+    #[deprecated(since = "1.0.0")]
+    pub trait DeprecatedTrait {
+        fn dummy(&self) { }
+    }
 
     struct S;
 

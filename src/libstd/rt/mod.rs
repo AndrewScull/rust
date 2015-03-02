@@ -16,7 +16,7 @@
 //! and should be considered as private implementation details for the
 //! time being.
 
-#![unstable]
+#![unstable(feature = "std_misc")]
 
 // FIXME: this should not be here.
 #![allow(missing_docs)]
@@ -66,7 +66,7 @@ fn lang_start(main: *const u8, argc: int, argv: *const *const u8) -> int {
     use prelude::v1::*;
 
     use mem;
-    use os;
+    use env;
     use rt;
     use sys_common::thread_info::{self, NewThread};
     use sys_common;
@@ -132,7 +132,7 @@ fn lang_start(main: *const u8, argc: int, argv: *const *const u8) -> int {
     if failed {
         rt::DEFAULT_ERROR_CODE
     } else {
-        os::get_exit_status()
+        env::get_exit_status() as isize
     }
 }
 
@@ -149,7 +149,7 @@ fn lang_start(main: *const u8, argc: int, argv: *const *const u8) -> int {
 ///
 /// It is forbidden for procedures to register more `at_exit` handlers when they
 /// are running, and doing so will lead to a process abort.
-pub fn at_exit<F:FnOnce()+Send>(f: F) {
+pub fn at_exit<F:FnOnce()+Send+'static>(f: F) {
     at_exit_imp::push(Thunk::new(f));
 }
 

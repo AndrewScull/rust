@@ -8,6 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![feature(box_patterns)]
 #![feature(box_syntax)]
 
 enum A { B, C }
@@ -64,7 +65,7 @@ fn main() {
              ('c', 'd'),
              ('e', 'f')];
 
-    for &(x,y) in v.iter() {} // should be OK
+    for &(x,y) in &v {} // should be OK
 
     // Make sure none of the errors above were fatal
     let x: char = true; //~  ERROR mismatched types

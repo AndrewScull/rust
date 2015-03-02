@@ -39,6 +39,7 @@ pub struct Module {
     pub vis: ast::Visibility,
     pub stab: Option<attr::Stability>,
     pub impls: Vec<Impl>,
+    pub def_traits: Vec<DefaultImpl>,
     pub foreigns: Vec<ast::ForeignMod>,
     pub macros: Vec<Macro>,
     pub is_crate: bool,
@@ -65,6 +66,7 @@ impl Module {
             constants  : Vec::new(),
             traits     : Vec::new(),
             impls      : Vec::new(),
+            def_traits : Vec::new(),
             foreigns   : Vec::new(),
             macros     : Vec::new(),
             is_crate   : false,
@@ -72,7 +74,7 @@ impl Module {
     }
 }
 
-#[derive(Show, Clone, RustcEncodable, RustcDecodable, Copy)]
+#[derive(Debug, Clone, RustcEncodable, RustcDecodable, Copy)]
 pub enum StructType {
     /// A normal struct
     Plain,
@@ -145,7 +147,7 @@ pub struct Typedef {
     pub stab: Option<attr::Stability>,
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 pub struct Static {
     pub type_: P<ast::Ty>,
     pub mutability: ast::Mutability,
@@ -193,6 +195,12 @@ pub struct Impl {
     pub whence: Span,
     pub vis: ast::Visibility,
     pub stab: Option<attr::Stability>,
+    pub id: ast::NodeId,
+}
+
+pub struct DefaultImpl {
+    pub unsafety: ast::Unsafety,
+    pub trait_: ast::TraitRef,
     pub id: ast::NodeId,
 }
 

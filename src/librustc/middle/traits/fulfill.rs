@@ -9,7 +9,6 @@
 // except according to those terms.
 
 use middle::infer::{InferCtxt};
-use middle::mem_categorization::Typer;
 use middle::ty::{self, RegionEscape, Ty};
 use std::collections::HashSet;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
@@ -125,7 +124,7 @@ impl<'tcx> FulfillmentContext<'tcx> {
         let mut selcx = SelectionContext::new(infcx, typer);
         let normalized = project::normalize_projection_type(&mut selcx, projection_ty, cause, 0);
 
-        for obligation in normalized.obligations.into_iter() {
+        for obligation in normalized.obligations {
             self.register_predicate_obligation(infcx, obligation);
         }
 
@@ -180,7 +179,7 @@ impl<'tcx> FulfillmentContext<'tcx> {
     {
         match self.region_obligations.get(&body_id) {
             None => Default::default(),
-            Some(vec) => vec.as_slice(),
+            Some(vec) => vec,
         }
     }
 
@@ -228,7 +227,7 @@ impl<'tcx> FulfillmentContext<'tcx> {
     }
 
     pub fn pending_obligations(&self) -> &[PredicateObligation<'tcx>] {
-        &self.predicates[]
+        &self.predicates
     }
 
     /// Attempts to select obligations using `selcx`. If `only_new_obligations` is true, then it
@@ -289,7 +288,7 @@ impl<'tcx> FulfillmentContext<'tcx> {
 
             // Now go through all the successful ones,
             // registering any nested obligations for the future.
-            for new_obligation in new_obligations.into_iter() {
+            for new_obligation in new_obligations {
                 self.register_predicate_obligation(selcx.infcx(), new_obligation);
             }
         }
@@ -394,7 +393,7 @@ fn process_predicate<'a,'tcx>(selcx: &mut SelectionContext<'a,'tcx>,
         ty::Predicate::Projection(ref data) => {
             let project_obligation = obligation.with(data.clone());
             let result = project::poly_project_and_unify_type(selcx, &project_obligation);
-            debug!("poly_project_and_unify_type({}) = {}",
+            debug!("process_predicate: poly_project_and_unify_type({}) returned {}",
                    project_obligation.repr(tcx),
                    result.repr(tcx));
             match result {

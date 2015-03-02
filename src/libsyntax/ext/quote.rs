@@ -161,7 +161,7 @@ pub mod rt {
 
     impl ToSource for ast::Ident {
         fn to_source(&self) -> String {
-            token::get_ident(*self).get().to_string()
+            token::get_ident(*self).to_string()
         }
     }
 
@@ -402,7 +402,7 @@ pub fn expand_quote_tokens<'cx>(cx: &'cx mut ExtCtxt,
                                 -> Box<base::MacResult+'cx> {
     let (cx_expr, expr) = expand_tts(cx, sp, tts);
     let expanded = expand_wrapper(cx, sp, cx_expr, expr);
-    base::MacExpr::new(expanded)
+    base::MacEager::expr(expanded)
 }
 
 pub fn expand_quote_expr<'cx>(cx: &'cx mut ExtCtxt,
@@ -410,7 +410,7 @@ pub fn expand_quote_expr<'cx>(cx: &'cx mut ExtCtxt,
                               tts: &[ast::TokenTree])
                               -> Box<base::MacResult+'cx> {
     let expanded = expand_parse_call(cx, sp, "parse_expr", Vec::new(), tts);
-    base::MacExpr::new(expanded)
+    base::MacEager::expr(expanded)
 }
 
 pub fn expand_quote_item<'cx>(cx: &mut ExtCtxt,
@@ -419,7 +419,7 @@ pub fn expand_quote_item<'cx>(cx: &mut ExtCtxt,
                               -> Box<base::MacResult+'cx> {
     let expanded = expand_parse_call(cx, sp, "parse_item_with_outer_attributes",
                                     vec!(), tts);
-    base::MacExpr::new(expanded)
+    base::MacEager::expr(expanded)
 }
 
 pub fn expand_quote_pat<'cx>(cx: &'cx mut ExtCtxt,
@@ -427,7 +427,7 @@ pub fn expand_quote_pat<'cx>(cx: &'cx mut ExtCtxt,
                              tts: &[ast::TokenTree])
                              -> Box<base::MacResult+'cx> {
     let expanded = expand_parse_call(cx, sp, "parse_pat", vec!(), tts);
-    base::MacExpr::new(expanded)
+    base::MacEager::expr(expanded)
 }
 
 pub fn expand_quote_arm(cx: &mut ExtCtxt,
@@ -435,7 +435,7 @@ pub fn expand_quote_arm(cx: &mut ExtCtxt,
                         tts: &[ast::TokenTree])
                         -> Box<base::MacResult+'static> {
     let expanded = expand_parse_call(cx, sp, "parse_arm", vec!(), tts);
-    base::MacExpr::new(expanded)
+    base::MacEager::expr(expanded)
 }
 
 pub fn expand_quote_ty(cx: &mut ExtCtxt,
@@ -443,7 +443,7 @@ pub fn expand_quote_ty(cx: &mut ExtCtxt,
                        tts: &[ast::TokenTree])
                        -> Box<base::MacResult+'static> {
     let expanded = expand_parse_call(cx, sp, "parse_ty", vec!(), tts);
-    base::MacExpr::new(expanded)
+    base::MacEager::expr(expanded)
 }
 
 pub fn expand_quote_method(cx: &mut ExtCtxt,
@@ -452,7 +452,7 @@ pub fn expand_quote_method(cx: &mut ExtCtxt,
                            -> Box<base::MacResult+'static> {
     let expanded = expand_parse_call(cx, sp, "parse_method_with_outer_attributes",
                                      vec!(), tts);
-    base::MacExpr::new(expanded)
+    base::MacEager::expr(expanded)
 }
 
 pub fn expand_quote_stmt(cx: &mut ExtCtxt,
@@ -462,11 +462,11 @@ pub fn expand_quote_stmt(cx: &mut ExtCtxt,
     let e_attrs = cx.expr_vec_ng(sp);
     let expanded = expand_parse_call(cx, sp, "parse_stmt",
                                     vec!(e_attrs), tts);
-    base::MacExpr::new(expanded)
+    base::MacEager::expr(expanded)
 }
 
 fn ids_ext(strs: Vec<String> ) -> Vec<ast::Ident> {
-    strs.iter().map(|str| str_to_ident(&(*str)[])).collect()
+    strs.iter().map(|str| str_to_ident(&(*str))).collect()
 }
 
 fn id_ext(str: &str) -> ast::Ident {
@@ -665,10 +665,10 @@ fn mk_tt(cx: &ExtCtxt, tt: &ast::TokenTree) -> Vec<P<ast::Stmt>> {
         }
         ref tt @ ast::TtToken(_, MatchNt(..)) => {
             let mut seq = vec![];
-            for i in range(0, tt.len()) {
+            for i in 0..tt.len() {
                 seq.push(tt.get_tt(i));
             }
-            mk_tts(cx, &seq[])
+            mk_tts(cx, &seq[..])
         }
         ast::TtToken(sp, ref tok) => {
             let e_sp = cx.expr_ident(sp, id_ext("_sp"));
@@ -694,7 +694,7 @@ fn mk_tt(cx: &ExtCtxt, tt: &ast::TokenTree) -> Vec<P<ast::Stmt>> {
 
 fn mk_tts(cx: &ExtCtxt, tts: &[ast::TokenTree]) -> Vec<P<ast::Stmt>> {
     let mut ss = Vec::new();
-    for tt in tts.iter() {
+    for tt in tts {
         ss.extend(mk_tt(cx, tt).into_iter());
     }
     ss
@@ -709,7 +709,7 @@ fn expand_tts(cx: &ExtCtxt, sp: Span, tts: &[ast::TokenTree])
     // try removing it when enough of them are gone.
 
     let mut p = cx.new_parser_from_tts(tts);
-    p.quote_depth += 1us;
+    p.quote_depth += 1;
 
     let cx_expr = p.parse_expr();
     if !p.eat(&token::Comma) {
@@ -757,7 +757,7 @@ fn expand_tts(cx: &ExtCtxt, sp: Span, tts: &[ast::TokenTree])
     let stmt_let_tt = cx.stmt_let(sp, true, id_ext("tt"), cx.expr_vec_ng(sp));
 
     let mut vector = vec!(stmt_let_sp, stmt_let_tt);
-    vector.extend(mk_tts(cx, &tts[]).into_iter());
+    vector.extend(mk_tts(cx, &tts[..]).into_iter());
     let block = cx.expr_block(
         cx.block_all(sp,
                      vector,
@@ -791,11 +791,11 @@ fn expand_parse_call(cx: &ExtCtxt,
                      tts: &[ast::TokenTree]) -> P<ast::Expr> {
     let (cx_expr, tts_expr) = expand_tts(cx, sp, tts);
 
-    let cfg_call = |&:| cx.expr_method_call(
+    let cfg_call = || cx.expr_method_call(
         sp, cx.expr_ident(sp, id_ext("ext_cx")),
         id_ext("cfg"), Vec::new());
 
-    let parse_sess_call = |&:| cx.expr_method_call(
+    let parse_sess_call = || cx.expr_method_call(
         sp, cx.expr_ident(sp, id_ext("ext_cx")),
         id_ext("parse_sess"), Vec::new());
 

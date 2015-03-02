@@ -18,6 +18,40 @@ use ext::base::ExtCtxt;
 use codemap::Span;
 use ptr::P;
 
+macro_rules! pathvec {
+    ($($x:ident)::+) => (
+        vec![ $( stringify!($x) ),+ ]
+    )
+}
+
+macro_rules! path {
+    ($($x:tt)*) => (
+        ::ext::deriving::generic::ty::Path::new( pathvec!( $($x)* ) )
+    )
+}
+
+macro_rules! path_local {
+    ($x:ident) => (
+        ::ext::deriving::generic::ty::Path::new_local(stringify!($x))
+    )
+}
+
+macro_rules! pathvec_std {
+    ($cx:expr, $first:ident :: $($rest:ident)::+) => (
+        if $cx.use_std {
+            pathvec!(std :: $($rest)::+)
+        } else {
+            pathvec!($first :: $($rest)::+)
+        }
+    )
+}
+
+macro_rules! path_std {
+    ($($x:tt)*) => (
+        ::ext::deriving::generic::ty::Path::new( pathvec_std!( $($x)* ) )
+    )
+}
+
 pub mod bounds;
 pub mod clone;
 pub mod encodable;
@@ -44,7 +78,7 @@ pub fn expand_deprecated_deriving(cx: &mut ExtCtxt,
                                   span: Span,
                                   _: &MetaItem,
                                   _: &Item,
-                                  _: Box<FnMut(P<Item>)>) {
+                                  _: &mut FnMut(P<Item>)) {
     cx.span_err(span, "`deriving` has been renamed to `derive`");
 }
 
@@ -52,7 +86,7 @@ pub fn expand_meta_derive(cx: &mut ExtCtxt,
                           _span: Span,
                           mitem: &MetaItem,
                           item: &Item,
-                          mut push: Box<FnMut(P<Item>)>) {
+                          push: &mut FnMut(P<Item>)) {
     match mitem.node {
         MetaNameValue(_, ref l) => {
             cx.span_err(l.span, "unexpected value in `derive`");
@@ -74,7 +108,7 @@ pub fn expand_meta_derive(cx: &mut ExtCtxt,
                                                    |i| push(i)))
                         }
 
-                        match tname.get() {
+                        match &tname[..] {
                             "Clone" => expand!(clone::expand_deriving_clone),
 
                             "Hash" => expand!(hash::expand_deriving_hash),
@@ -107,8 +141,14 @@ pub fn expand_meta_derive(cx: &mut ExtCtxt,
 
                             "Rand" => expand!(rand::expand_deriving_rand),
 
-                            // NOTE(stage0): remove "Show"
-                            "Show" => expand!(show::expand_deriving_show),
+                            "Show" => {
+                                cx.span_warn(titem.span,
+                                             "derive(Show) is deprecated \
+                                              in favor of derive(Debug)");
+
+                                expand!(show::expand_deriving_show)
+                            },
+
                             "Debug" => expand!(show::expand_deriving_show),
 
                             "Default" => expand!(default::expand_deriving_default),
@@ -123,7 +163,7 @@ pub fn expand_meta_derive(cx: &mut ExtCtxt,
                                 cx.span_err(titem.span,
                                             &format!("unknown `derive` \
                                                      trait: `{}`",
-                                                    *tname)[]);
+                                                    *tname));
                             }
                         };
                     }

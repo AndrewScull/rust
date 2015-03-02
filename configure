@@ -374,6 +374,14 @@ case $CFG_OSTYPE in
         CFG_OSTYPE=unknown-dragonfly
         ;;
 
+    Bitrig)
+        CFG_OSTYPE=unknown-bitrig
+        ;;
+
+    OpenBSD)
+        CFG_OSTYPE=unknown-openbsd
+       ;;
+
     Darwin)
         CFG_OSTYPE=apple-darwin
         ;;
@@ -521,6 +529,7 @@ opt verify-install 1 "verify installed binaries work"
 opt dist-host-only 0 "only install bins for the host architecture"
 opt inject-std-version 1 "inject the current compiler version of libstd into programs"
 opt jemalloc 1 "build liballoc with jemalloc"
+opt llvm-version-check 1 "don't check if the LLVM version is supported, build anyway"
 
 valopt localstatedir "/var/lib" "local state directory"
 valopt sysconfdir "/etc" "install system configuration files"
@@ -649,9 +658,7 @@ probe CFG_GRUN             grun
 probe CFG_FLEX             flex
 probe CFG_BISON            bison
 probe CFG_PANDOC           pandoc
-probe CFG_PDFLATEX         pdflatex
 probe CFG_XELATEX          xelatex
-probe CFG_LUALATEX         lualatex
 probe CFG_GDB              gdb
 probe CFG_LLDB             lldb
 
@@ -744,6 +751,13 @@ then
     CFG_ENABLE_CLANG=1
 fi
 
+# Force bitrig to build with clang; gcc doesn't like us there
+if [ $CFG_OSTYPE = unknown-bitrig ]
+then
+    step_msg "on Bitrig, forcing use of clang"
+    CFG_ENABLE_CLANG=1
+fi
+
 if [ -z "$CFG_ENABLE_CLANG" -a -z "$CFG_GCC" ]
 then
     err "either clang or gcc is required"
@@ -794,7 +808,7 @@ then
     putvar CFG_ENABLE_CLANG
 fi
 
-if [ ! -z "$CFG_LLVM_ROOT" -a -e "$CFG_LLVM_ROOT/bin/llvm-config" ]
+if [ ! -z "$CFG_LLVM_ROOT" -a -z "$CFG_DISABLE_LLVM_VERSION_CHECK" -a -e "$CFG_LLVM_ROOT/bin/llvm-config" ]
 then
     step_msg "using custom LLVM at $CFG_LLVM_ROOT"
 
@@ -861,7 +875,7 @@ then
             | cut -d ' ' -f 2)
 
         case $CFG_CLANG_VERSION in
-            (3.0svn | 3.0 | 3.1* | 3.2* | 3.3* | 3.4* | 3.5* | 3.6*)
+            (3.2* | 3.3* | 3.4* | 3.5* | 3.6*)
             step_msg "found ok version of CLANG: $CFG_CLANG_VERSION"
             if [ -z "$CC" ]
             then
@@ -1053,6 +1067,7 @@ do
     make_dir $h/test/run-pass-fulldeps
     make_dir $h/test/run-fail
     make_dir $h/test/compile-fail
+    make_dir $h/test/parse-fail
     make_dir $h/test/compile-fail-fulldeps
     make_dir $h/test/bench
     make_dir $h/test/perf
@@ -1376,7 +1391,8 @@ do
 done
 
 # Munge any paths that appear in config.mk back to posix-y
-sed -i.bak -e 's@ \([a-zA-Z]\):[/\\]@ /\1/@g;' config.tmp
+cp config.tmp config.tmp.bak
+sed -e 's@ \([a-zA-Z]\):[/\\]@ /\1/@g;' <config.tmp.bak >config.tmp
 rm -f config.tmp.bak
 
 msg

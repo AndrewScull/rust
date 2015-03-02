@@ -39,7 +39,8 @@
 //! [ti]: https://en.wikipedia.org/wiki/Terminfo
 
 #![crate_name = "term"]
-#![unstable = "use the crates.io `term` library instead"]
+#![unstable(feature = "rustc_private",
+            reason = "use the crates.io `term` library instead")]
 #![staged_api]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
@@ -47,13 +48,19 @@
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/",
        html_playground_url = "http://play.rust-lang.org/")]
-
-#![allow(unknown_features)]
-#![feature(slicing_syntax)]
-#![feature(box_syntax)]
-#![allow(unknown_features)] #![feature(int_uint)]
-#![allow(unstable)]
 #![deny(missing_docs)]
+
+#![feature(box_syntax)]
+#![feature(collections)]
+#![feature(int_uint)]
+#![feature(old_io)]
+#![feature(old_path)]
+#![feature(rustc_private)]
+#![feature(staged_api)]
+#![feature(unicode)]
+#![feature(std_misc)]
+#![feature(os)]
+#![cfg_attr(windows, feature(libc))]
 
 #[macro_use] extern crate log;
 

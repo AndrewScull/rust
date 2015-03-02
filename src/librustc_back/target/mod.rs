@@ -40,7 +40,7 @@
 //! this module defines the format the JSON file should take, though each
 //! underscore in the field names should be replaced with a hyphen (`-`) in the
 //! JSON file. Some fields are required in every target specification, such as
-//! `data-layout`, `llvm-target`, `target-endian`, `target-word-size`, and
+//! `data-layout`, `llvm-target`, `target-endian`, `target-pointer-width`, and
 //! `arch`. In general, options passed to rustc with `-C` override the target's
 //! settings, though `target-feature` and `link-args` will *add* to the list
 //! specified by the target, rather than replace.
@@ -56,6 +56,8 @@ mod apple_base;
 mod apple_ios_base;
 mod freebsd_base;
 mod dragonfly_base;
+mod bitrig_base;
+mod openbsd_base;
 
 mod armv7_apple_ios;
 mod armv7s_apple_ios;
@@ -79,13 +81,15 @@ mod x86_64_apple_ios;
 mod x86_64_pc_windows_gnu;
 mod x86_64_unknown_freebsd;
 mod x86_64_unknown_dragonfly;
+mod x86_64_unknown_bitrig;
 mod x86_64_unknown_linux_gnu;
+mod x86_64_unknown_openbsd;
 mod x86_64_linux_dios;
 
 /// Everything `rustc` knows about how to compile for a specific target.
 ///
 /// Every field here must be specified, and has no default value.
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct Target {
     /// [Data layout](http://llvm.org/docs/LangRef.html#data-layout) to pass to LLVM.
     pub data_layout: String,
@@ -108,7 +112,7 @@ pub struct Target {
 ///
 /// This has an implementation of `Default`, see each field for what the default is. In general,
 /// these try to take "minimal defaults" that don't assume anything about the runtime they run in.
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct TargetOptions {
     /// Linker to invoke. Defaults to "cc".
     pub linker: String,
@@ -159,6 +163,9 @@ pub struct TargetOptions {
     pub is_like_windows: bool,
     /// Whether the target toolchain is like DIOS's. Defaults to false.
     pub is_like_dios: bool,
+    /// Whether the target toolchain is like Android's. Only useful for compiling against Android.
+    /// Defaults to false.
+    pub is_like_android: bool,
     /// Whether the linker support GNU-like arguments such as -O. Defaults to false.
     pub linker_is_gnu: bool,
     /// Whether the linker support rpaths or not. Defaults to false.
@@ -199,6 +206,7 @@ impl Default for TargetOptions {
             is_like_osx: false,
             is_like_windows: false,
             is_like_dios: false,
+            is_like_android: false,
             linker_is_gnu: false,
             has_rpath: false,
             no_compiler_rt: false,
@@ -227,15 +235,15 @@ impl Target {
         // this is 1. ugly, 2. error prone.
 
 
-        let handler = diagnostic::default_handler(diagnostic::Auto, None);
+        let handler = diagnostic::default_handler(diagnostic::Auto, None, true);
 
-        let get_req_field = |&: name: &str| {
+        let get_req_field = |name: &str| {
             match obj.find(name)
                      .map(|s| s.as_string())
                      .and_then(|os| os.map(|s| s.to_string())) {
                 Some(val) => val,
                 None =>
-                    handler.fatal(&format!("Field {} in target specification is required", name)[])
+                    handler.fatal(&format!("Field {} in target specification is required", name))
             }
         };
 
@@ -243,7 +251,7 @@ impl Target {
             data_layout: get_req_field("data-layout"),
             llvm_target: get_req_field("llvm-target"),
             target_endian: get_req_field("target-endian"),
-            target_pointer_width: get_req_field("target-word-size"),
+            target_pointer_width: get_req_field("target-pointer-width"),
             arch: get_req_field("arch"),
             target_os: get_req_field("os"),
             options: Default::default(),
@@ -252,18 +260,18 @@ impl Target {
         macro_rules! key {
             ($key_name:ident) => ( {
                 let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[]).map(|o| o.as_string()
+                obj.find(&name[..]).map(|o| o.as_string()
                                     .map(|s| base.options.$key_name = s.to_string()));
             } );
             ($key_name:ident, bool) => ( {
                 let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[])
+                obj.find(&name[..])
                     .map(|o| o.as_boolean()
                          .map(|s| base.options.$key_name = s));
             } );
             ($key_name:ident, list) => ( {
                 let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[]).map(|o| o.as_array()
+                obj.find(&name[..]).map(|o| o.as_array()
                     .map(|v| base.options.$key_name = v.iter()
                         .map(|a| a.as_string().unwrap().to_string()).collect()
                         )
@@ -306,9 +314,11 @@ impl Target {
     /// The error string could come from any of the APIs called, including filesystem access and
     /// JSON decoding.
     pub fn search(target: &str) -> Result<Target, String> {
+        use std::env;
         use std::os;
+        use std::ffi::OsString;
         use std::old_io::File;
-        use std::path::Path;
+        use std::old_path::Path;
         use serialize::json;
 
         fn load_file(path: &Path) -> Result<Target, String> {
@@ -347,15 +357,20 @@ impl Target {
             mips_unknown_linux_gnu,
             mipsel_unknown_linux_gnu,
             powerpc_unknown_linux_gnu,
-            arm_linux_androideabi,
             arm_unknown_linux_gnueabi,
             arm_unknown_linux_gnueabihf,
             aarch64_unknown_linux_gnu,
+
+            arm_linux_androideabi,
+            aarch64_linux_android,
 
             x86_64_unknown_freebsd,
 
             i686_unknown_dragonfly,
             x86_64_unknown_dragonfly,
+
+            x86_64_unknown_bitrig,
+            x86_64_unknown_openbsd,
 
             x86_64_apple_darwin,
             i686_apple_darwin,
@@ -363,7 +378,6 @@ impl Target {
             i386_apple_ios,
             x86_64_apple_ios,
             aarch64_apple_ios,
-            aarch64_linux_android,
             armv7_apple_ios,
             armv7s_apple_ios,
 
@@ -386,12 +400,11 @@ impl Target {
             Path::new(target)
         };
 
-        let target_path = os::getenv("RUST_TARGET_PATH").unwrap_or(String::new());
+        let target_path = env::var_os("RUST_TARGET_PATH").unwrap_or(OsString::from_str(""));
 
-        let paths = os::split_paths(&target_path[]);
         // FIXME 16351: add a sane default search path?
 
-        for dir in paths.iter() {
+        for dir in os::split_paths(target_path.to_str().unwrap()).iter() {
             let p =  dir.join(path.clone());
             if p.is_file() {
                 return load_file(&p);

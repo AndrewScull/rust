@@ -12,7 +12,7 @@
 
 use std::cmp::Ordering::{self, Less, Greater, Equal};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
-use std::collections::hash_map::{self, Hasher};
+use std::collections::hash_map;
 use std::hash::Hash;
 use std::mem;
 use std::num::{Float, FromPrimitive};
@@ -167,12 +167,12 @@ impl<T: Float + FromPrimitive> Stats<T> for [T] {
     fn sum(&self) -> T {
         let mut partials = vec![];
 
-        for &x in self.iter() {
+        for &x in self {
             let mut x = x;
             let mut j = 0;
             // This inner loop applies `hi`/`lo` summation to each
             // partial so that the list of partial sums remains exact.
-            for i in range(0, partials.len()) {
+            for i in 0..partials.len() {
                 let mut y: T = partials[i];
                 if x.abs() < y.abs() {
                     mem::swap(&mut x, &mut y);
@@ -223,7 +223,7 @@ impl<T: Float + FromPrimitive> Stats<T> for [T] {
         } else {
             let mean = self.mean();
             let mut v: T = Float::zero();
-            for s in self.iter() {
+            for s in self {
                 let x = *s - mean;
                 v = v + x*x;
             }
@@ -260,19 +260,19 @@ impl<T: Float + FromPrimitive> Stats<T> for [T] {
 
     fn percentile(&self, pct: T) -> T {
         let mut tmp = self.to_vec();
-        local_sort(tmp.as_mut_slice());
-        percentile_of_sorted(tmp.as_slice(), pct)
+        local_sort(&mut tmp);
+        percentile_of_sorted(&tmp, pct)
     }
 
     fn quartiles(&self) -> (T,T,T) {
         let mut tmp = self.to_vec();
-        local_sort(tmp.as_mut_slice());
+        local_sort(&mut tmp);
         let first = FromPrimitive::from_uint(25).unwrap();
-        let a = percentile_of_sorted(tmp.as_slice(), first);
+        let a = percentile_of_sorted(&tmp, first);
         let secound = FromPrimitive::from_uint(50).unwrap();
-        let b = percentile_of_sorted(tmp.as_slice(), secound);
+        let b = percentile_of_sorted(&tmp, secound);
         let third = FromPrimitive::from_uint(75).unwrap();
-        let c = percentile_of_sorted(tmp.as_slice(), third);
+        let c = percentile_of_sorted(&tmp, third);
         (a,b,c)
     }
 
@@ -317,11 +317,11 @@ fn percentile_of_sorted<T: Float + FromPrimitive>(sorted_samples: &[T],
 /// See: http://en.wikipedia.org/wiki/Winsorising
 pub fn winsorize<T: Float + FromPrimitive>(samples: &mut [T], pct: T) {
     let mut tmp = samples.to_vec();
-    local_sort(tmp.as_mut_slice());
-    let lo = percentile_of_sorted(tmp.as_slice(), pct);
+    local_sort(&mut tmp);
+    let lo = percentile_of_sorted(&tmp, pct);
     let hundred: T = FromPrimitive::from_uint(100).unwrap();
-    let hi = percentile_of_sorted(tmp.as_slice(), hundred-pct);
-    for samp in samples.iter_mut() {
+    let hi = percentile_of_sorted(&tmp, hundred-pct);
+    for samp in samples {
         if *samp > hi {
             *samp = hi
         } else if *samp < lo {
@@ -332,8 +332,9 @@ pub fn winsorize<T: Float + FromPrimitive>(samples: &mut [T], pct: T) {
 
 /// Returns a HashMap with the number of occurrences of every element in the
 /// sequence that the iterator exposes.
-pub fn freq_count<T, U>(mut iter: T) -> hash_map::HashMap<U, uint>
-  where T: Iterator<Item=U>, U: Eq + Clone + Hash<Hasher>
+#[cfg(not(stage0))]
+pub fn freq_count<T, U>(iter: T) -> hash_map::HashMap<U, uint>
+  where T: Iterator<Item=U>, U: Eq + Clone + Hash
 {
     let mut map: hash_map::HashMap<U,uint> = hash_map::HashMap::new();
     for elem in iter {
@@ -939,10 +940,10 @@ mod bench {
     #[bench]
     pub fn sum_many_f64(b: &mut Bencher) {
         let nums = [-1e30f64, 1e60, 1e30, 1.0, -1e60];
-        let v = range(0, 500).map(|i| nums[i%5]).collect::<Vec<_>>();
+        let v = (0..500).map(|i| nums[i%5]).collect::<Vec<_>>();
 
         b.iter(|| {
-            v.as_slice().sum();
+            v.sum();
         })
     }
 }

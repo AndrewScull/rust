@@ -1,4 +1,4 @@
-// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -14,8 +14,7 @@ use prelude::v1::*;
 use self::SocketStatus::*;
 use self::InAddr::*;
 
-use ffi::CString;
-use ffi;
+use ffi::{CString, CStr};
 use old_io::net::addrinfo;
 use old_io::net::ip::{SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr};
 use old_io::{IoResult, IoError};
@@ -34,7 +33,7 @@ use old_io;
 
 // FIXME: move uses of Arc and deadline tracking to std::io
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum SocketStatus {
     Readable,
     Writable,
@@ -237,9 +236,15 @@ pub fn get_host_addresses(host: Option<&str>, servname: Option<&str>,
 
     assert!(host.is_some() || servname.is_some());
 
-    let c_host = host.map(|x| CString::from_slice(x.as_bytes()));
+    let c_host = match host {
+        Some(x) => Some(try!(CString::new(x))),
+        None => None,
+    };
     let c_host = c_host.as_ref().map(|x| x.as_ptr()).unwrap_or(null());
-    let c_serv = servname.map(|x| CString::from_slice(x.as_bytes()));
+    let c_serv = match servname {
+        Some(x) => Some(try!(CString::new(x))),
+        None => None,
+    };
     let c_serv = c_serv.as_ref().map(|x| x.as_ptr()).unwrap_or(null());
 
     let hint = hint.map(|hint| {
@@ -327,8 +332,8 @@ pub fn get_address_name(addr: IpAddr) -> Result<String, IoError> {
     }
 
     unsafe {
-        Ok(str::from_utf8(ffi::c_str_to_bytes(&hostbuf.as_ptr()))
-               .unwrap().to_string())
+        let data = CStr::from_ptr(hostbuf.as_ptr());
+        Ok(str::from_utf8(data.to_bytes()).unwrap().to_string())
     }
 }
 
@@ -500,7 +505,7 @@ pub fn connect_timeout(fd: sock_t,
     #[cfg(windows)] use libc::WSAEWOULDBLOCK as WOULDBLOCK;
 
     // Make sure the call to connect() doesn't block
-    try!(set_nonblocking(fd, true));
+    set_nonblocking(fd, true);
 
     let ret = match unsafe { libc::connect(fd, addrp, len) } {
         // If the connection is in progress, then we need to wait for it to
@@ -530,7 +535,7 @@ pub fn connect_timeout(fd: sock_t,
     };
 
     // be sure to turn blocking I/O back on
-    try!(set_nonblocking(fd, false));
+    set_nonblocking(fd, false);
     return ret;
 
     #[cfg(unix)]
@@ -556,7 +561,7 @@ pub fn await(fds: &[sock_t], deadline: Option<u64>,
              status: SocketStatus) -> IoResult<()> {
     let mut set: c::fd_set = unsafe { mem::zeroed() };
     let mut max = 0;
-    for &fd in fds.iter() {
+    for &fd in fds {
         c::fd_set(&mut set, fd);
         max = cmp::max(max, fd + 1);
     }
@@ -623,7 +628,7 @@ pub struct Guard<'a> {
 #[unsafe_destructor]
 impl<'a> Drop for Guard<'a> {
     fn drop(&mut self) {
-        assert!(set_nonblocking(self.fd, false).is_ok());
+        set_nonblocking(self.fd, false);
     }
 }
 
@@ -691,15 +696,22 @@ impl TcpStream {
         setsockopt(self.fd(), libc::IPPROTO_TCP, libc::TCP_KEEPALIVE,
                    seconds as libc::c_int)
     }
-    #[cfg(any(target_os = "freebsd", target_os = "dragonfly"))]
+    #[cfg(any(target_os = "freebsd",
+              target_os = "dragonfly"))]
     fn set_tcp_keepalive(&mut self, seconds: uint) -> IoResult<()> {
         setsockopt(self.fd(), libc::IPPROTO_TCP, libc::TCP_KEEPIDLE,
+                   seconds as libc::c_int)
+    }
+    #[cfg(target_os = "openbsd")]
+    fn set_tcp_keepalive(&mut self, seconds: uint) -> IoResult<()> {
+        setsockopt(self.fd(), libc::IPPROTO_TCP, libc::SO_KEEPALIVE,
                    seconds as libc::c_int)
     }
     #[cfg(not(any(target_os = "macos",
                   target_os = "ios",
                   target_os = "freebsd",
-                  target_os = "dragonfly")))]
+                  target_os = "dragonfly",
+                  target_os = "openbsd")))]
     fn set_tcp_keepalive(&mut self, _seconds: uint) -> IoResult<()> {
         Ok(())
     }
@@ -713,14 +725,14 @@ impl TcpStream {
             fd: self.fd(),
             guard: self.inner.lock.lock().unwrap(),
         };
-        assert!(set_nonblocking(self.fd(), true).is_ok());
+        set_nonblocking(self.fd(), true);
         ret
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
         let fd = self.fd();
-        let dolock = |&:| self.lock_nonblocking();
-        let doread = |&mut: nb| unsafe {
+        let dolock = || self.lock_nonblocking();
+        let doread = |nb| unsafe {
             let flags = if nb {c::MSG_DONTWAIT} else {0};
             libc::recv(fd,
                        buf.as_mut_ptr() as *mut libc::c_void,
@@ -732,8 +744,8 @@ impl TcpStream {
 
     pub fn write(&mut self, buf: &[u8]) -> IoResult<()> {
         let fd = self.fd();
-        let dolock = |&:| self.lock_nonblocking();
-        let dowrite = |&: nb: bool, buf: *const u8, len: uint| unsafe {
+        let dolock = || self.lock_nonblocking();
+        let dowrite = |nb: bool, buf: *const u8, len: uint| unsafe {
             let flags = if nb {c::MSG_DONTWAIT} else {0};
             libc::send(fd,
                        buf as *const _,
@@ -852,7 +864,7 @@ impl UdpSocket {
             fd: self.fd(),
             guard: self.inner.lock.lock().unwrap(),
         };
-        assert!(set_nonblocking(self.fd(), true).is_ok());
+        set_nonblocking(self.fd(), true);
         ret
     }
 
@@ -867,7 +879,7 @@ impl UdpSocket {
         let mut addrlen: libc::socklen_t =
                 mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
 
-        let dolock = |&:| self.lock_nonblocking();
+        let dolock = || self.lock_nonblocking();
         let n = try!(read(fd, self.read_deadline, dolock, |nb| unsafe {
             let flags = if nb {c::MSG_DONTWAIT} else {0};
             libc::recvfrom(fd,
@@ -877,9 +889,7 @@ impl UdpSocket {
                            storagep,
                            &mut addrlen) as libc::c_int
         }));
-        sockaddr_to_addr(&storage, addrlen as uint).and_then(|addr| {
-            Ok((n as uint, addr))
-        })
+        Ok((n as uint, sockaddr_to_addr(&storage, addrlen as uint).unwrap()))
     }
 
     pub fn send_to(&mut self, buf: &[u8], dst: SocketAddr) -> IoResult<()> {
@@ -888,8 +898,8 @@ impl UdpSocket {
         let dstp = &storage as *const _ as *const libc::sockaddr;
 
         let fd = self.fd();
-        let dolock = |&: | self.lock_nonblocking();
-        let dowrite = |&mut: nb, buf: *const u8, len: uint| unsafe {
+        let dolock = || self.lock_nonblocking();
+        let dowrite = |nb, buf: *const u8, len: uint| unsafe {
             let flags = if nb {c::MSG_DONTWAIT} else {0};
             libc::sendto(fd,
                          buf as *const libc::c_void,
@@ -900,11 +910,8 @@ impl UdpSocket {
         };
 
         let n = try!(write(fd, self.write_deadline, buf, false, dolock, dowrite));
-        if n != buf.len() {
-            Err(short_write(n, "couldn't send entire packet at once"))
-        } else {
-            Ok(())
-        }
+        assert!(n == buf.len(), "UDP packet not completely written.");
+        Ok(())
     }
 
     pub fn join_multicast(&mut self, multi: IpAddr) -> IoResult<()> {

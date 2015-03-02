@@ -9,17 +9,16 @@
 // except according to those terms.
 
 use std::old_io::process::Command;
-use std::os;
+use std::env;
 
 fn main() {
-    let args = os::args();
-    let args = args.as_slice();
-    if args.len() > 1 && args[1].as_slice() == "segfault" {
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 && args[1] == "segfault" {
         unsafe { *(0 as *mut int) = 1 }; // trigger a segfault
     } else {
-        let segfault = Command::new(args[0].as_slice()).arg("segfault").output().unwrap();
+        let segfault = Command::new(&args[0]).arg("segfault").output().unwrap();
         assert!(!segfault.status.success());
-        let error = String::from_utf8_lossy(segfault.error.as_slice());
-        assert!(!error.as_slice().contains("has overflowed its stack"));
+        let error = String::from_utf8_lossy(&segfault.error);
+        assert!(!error.contains("has overflowed its stack"));
     }
 }

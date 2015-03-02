@@ -11,18 +11,18 @@
 #![allow(deprecated)]
 
 use core::finally::{try_finally, Finally};
-use std::thread::Thread;
+use std::thread;
 
 #[test]
 fn test_success() {
-    let mut i = 0i;
+    let mut i = 0;
     try_finally(
         &mut i, (),
         |i, ()| {
             *i = 10;
         },
         |i| {
-            assert!(!Thread::panicking());
+            assert!(!thread::panicking());
             assert_eq!(*i, 10);
             *i = 20;
         });
@@ -32,7 +32,7 @@ fn test_success() {
 #[test]
 #[should_fail]
 fn test_fail() {
-    let mut i = 0i;
+    let mut i = 0;
     try_finally(
         &mut i, (),
         |i, ()| {
@@ -40,15 +40,16 @@ fn test_fail() {
             panic!();
         },
         |i| {
-            assert!(Thread::panicking());
+            assert!(thread::panicking());
             assert_eq!(*i, 10);
         })
 }
 
 #[test]
 fn test_retval() {
-    let mut closure = |&mut:| 10i;
-    let i = closure.finally(|| { });
+    let mut closure = || 10;
+    // FIXME(#16640) `: i32` annotation shouldn't be necessary
+    let i: i32 = closure.finally(|| { });
     assert_eq!(i, 10);
 }
 

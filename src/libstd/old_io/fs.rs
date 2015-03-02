@@ -61,8 +61,8 @@ use old_io;
 use iter::{Iterator, Extend};
 use option::Option;
 use option::Option::{Some, None};
-use path::{Path, GenericPath};
-use path;
+use old_path::{Path, GenericPath};
+use old_path;
 use result::Result::{Err, Ok};
 use slice::SliceExt;
 use string::String;
@@ -597,7 +597,7 @@ pub fn mkdir_recursive(path: &Path, mode: FilePermission) -> IoResult<()> {
         return Ok(())
     }
 
-    let mut comps = path.components();
+    let comps = path.components();
     let mut curpath = path.root_path().unwrap_or(Path::new("."));
 
     for c in comps {
@@ -649,7 +649,7 @@ pub fn rmdir_recursive(path: &Path) -> IoResult<()> {
 
         // delete all regular files in the way and push subdirs
         // on the stack
-        for child in children.into_iter() {
+        for child in children {
             // FIXME(#12795) we should use lstat in all cases
             let child_type = match cfg!(windows) {
                 true => try!(update_err(stat(&child), path)),
@@ -782,7 +782,7 @@ pub trait PathExtensions {
     fn is_dir(&self) -> bool;
 }
 
-impl PathExtensions for path::Path {
+impl PathExtensions for old_path::Path {
     fn stat(&self) -> IoResult<FileStat> { stat(self) }
     fn lstat(&self) -> IoResult<FileStat> { lstat(self) }
     fn exists(&self) -> bool {
@@ -822,6 +822,7 @@ fn access_string(access: FileAccess) -> &'static str {
 #[allow(unused_imports)]
 #[allow(unused_variables)]
 #[allow(unused_mut)]
+#[allow(deprecated)] // rand
 mod test {
     use prelude::v1::*;
     use old_io::{SeekSet, SeekCur, SeekEnd, Read, Open, ReadWrite, FileType};
@@ -839,7 +840,7 @@ mod test {
     macro_rules! error { ($e:expr, $s:expr) => (
         match $e {
             Ok(_) => panic!("Unexpected success. Should've been: {:?}", $s),
-            Err(ref err) => assert!(err.to_string().contains($s.as_slice()),
+            Err(ref err) => assert!(err.to_string().contains($s),
                                     format!("`{}` did not contain `{}`", err, $s))
         }
     ) }
@@ -891,7 +892,7 @@ mod test {
                 -1|0 => panic!("shouldn't happen"),
                 n => str::from_utf8(&read_buf[..n]).unwrap().to_string()
             };
-            assert_eq!(read_str.as_slice(), message);
+            assert_eq!(read_str, message);
         }
         check!(unlink(filename));
     }
@@ -906,7 +907,7 @@ mod test {
         if cfg!(unix) {
             error!(result, "no such file or directory");
         }
-        error!(result, format!("path={}; mode=open; access=read", filename.display()));
+        error!(result, &format!("path={}; mode=open; access=read", filename.display()));
     }
 
     #[test]
@@ -920,7 +921,7 @@ mod test {
         if cfg!(unix) {
             error!(result, "no such file or directory");
         }
-        error!(result, format!("path={}", filename.display()));
+        error!(result, &format!("path={}", filename.display()));
     }
 
     #[test]
@@ -936,11 +937,11 @@ mod test {
         {
             let mut read_stream = File::open_mode(filename, Open, Read);
             {
-                let read_buf = read_mem.slice_mut(0, 4);
+                let read_buf = &mut read_mem[0..4];
                 check!(read_stream.read(read_buf));
             }
             {
-                let read_buf = read_mem.slice_mut(4, 8);
+                let read_buf = &mut read_mem[4..8];
                 check!(read_stream.read(read_buf));
             }
         }
@@ -971,7 +972,7 @@ mod test {
         }
         check!(unlink(filename));
         let read_str = str::from_utf8(&read_mem).unwrap();
-        assert_eq!(read_str, message.slice(4, 8));
+        assert_eq!(read_str, &message[4..8]);
         assert_eq!(tell_pos_pre_read, set_cursor);
         assert_eq!(tell_pos_post_read, message.len() as u64);
     }
@@ -981,7 +982,7 @@ mod test {
         let initial_msg =   "food-is-yummy";
         let overwrite_msg =    "-the-bar!!";
         let final_msg =     "foo-the-bar!!";
-        let seek_idx = 3i;
+        let seek_idx = 3;
         let mut read_mem = [0; 13];
         let tmpdir = tmpdir();
         let filename = &tmpdir.join("file_rt_io_file_test_seek_and_write.txt");
@@ -1101,16 +1102,16 @@ mod test {
         let dir = &tmpdir.join("di_readdir");
         check!(mkdir(dir, old_io::USER_RWX));
         let prefix = "foo";
-        for n in range(0i,3) {
+        for n in 0..3 {
             let f = dir.join(format!("{}.txt", n));
             let mut w = check!(File::create(&f));
-            let msg_str = format!("{}{}", prefix, n.to_string());
+            let msg_str = format!("{}{}", prefix, n);
             let msg = msg_str.as_bytes();
             check!(w.write(msg));
         }
         let files = check!(readdir(dir));
         let mut mem = [0u8; 4];
-        for f in files.iter() {
+        for f in &files {
             {
                 let n = f.filestem_str();
                 check!(File::open(f).read(&mut mem));
@@ -1119,7 +1120,7 @@ mod test {
                     None|Some("") => panic!("really shouldn't happen.."),
                     Some(n) => format!("{}{}", prefix, n),
                 };
-                assert_eq!(expected.as_slice(), read_str);
+                assert_eq!(expected, read_str);
             }
             check!(unlink(f));
         }
@@ -1188,7 +1189,7 @@ mod test {
         error!(result, "couldn't recursively mkdir");
         error!(result, "couldn't create directory");
         error!(result, "mode=0700");
-        error!(result, format!("path={}", file.display()));
+        error!(result, &format!("path={}", file.display()));
     }
 
     #[test]
@@ -1254,9 +1255,9 @@ mod test {
         let to = Path::new("test/other-bogus-path");
 
         error!(copy(&from, &to),
-            format!("couldn't copy path (the source path is not an \
-                    existing file; from={:?}; to={:?})",
-                    from.display(), to.display()));
+            &format!("couldn't copy path (the source path is not an \
+                     existing file; from={:?}; to={:?})",
+                     from.display(), to.display()));
 
         match copy(&from, &to) {
             Ok(..) => panic!(),
@@ -1276,7 +1277,7 @@ mod test {
         check!(File::create(&input).write(b"hello"));
         check!(copy(&input, &out));
         let contents = check!(File::open(&out).read_to_end());
-        assert_eq!(contents.as_slice(), b"hello");
+        assert_eq!(contents, b"hello");
 
         assert_eq!(check!(input.stat()).perm, check!(out.stat()).perm);
     }

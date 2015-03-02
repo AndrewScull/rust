@@ -54,7 +54,7 @@ pub fn demangle(writer: &mut Writer, s: &str) -> IoResult<()> {
         let mut chars = inner.chars();
         while valid {
             let mut i = 0;
-            for c in chars {
+            for c in chars.by_ref() {
                 if c.is_numeric() {
                     i = i * 10 + c as uint - '0' as uint;
                 } else {
@@ -94,7 +94,7 @@ pub fn demangle(writer: &mut Writer, s: &str) -> IoResult<()> {
                         ($($pat:expr, => $demangled:expr),*) => ({
                             $(if rest.starts_with($pat) {
                                 try!(writer.write_str($demangled));
-                                rest = rest.slice_from($pat.len());
+                                rest = &rest[$pat.len()..];
                               } else)*
                             {
                                 try!(writer.write_str(rest));
@@ -107,9 +107,8 @@ pub fn demangle(writer: &mut Writer, s: &str) -> IoResult<()> {
                     // see src/librustc/back/link.rs for these mappings
                     demangle! (
                         "$SP$", => "@",
-                        "$UP$", => "Box",
-                        "$RP$", => "*",
-                        "$BP$", => "&",
+                        "$BP$", => "*",
+                        "$RF$", => "&",
                         "$LT$", => "<",
                         "$GT$", => ">",
                         "$LP$", => "(",
@@ -118,10 +117,11 @@ pub fn demangle(writer: &mut Writer, s: &str) -> IoResult<()> {
 
                         // in theory we can demangle any Unicode code point, but
                         // for simplicity we just catch the common ones.
-                        "$u{20}", => " ",
-                        "$u{27}", => "'",
-                        "$u{5b}", => "[",
-                        "$u{5d}", => "]"
+                        "$u7e$", => "~",
+                        "$u20$", => " ",
+                        "$u27$", => "'",
+                        "$u5b$", => "[",
+                        "$u5d$", => "]"
                     )
                 } else {
                     let idx = match rest.find('$') {

@@ -49,7 +49,7 @@ pub struct crate_metadata {
     pub span: Span,
 }
 
-#[derive(Copy, Show, PartialEq, Clone)]
+#[derive(Copy, Debug, PartialEq, Clone)]
 pub enum LinkagePreference {
     RequireDynamic,
     RequireStatic,
@@ -113,7 +113,7 @@ impl CStore {
     pub fn iter_crate_data<I>(&self, mut i: I) where
         I: FnMut(ast::CrateNum, &crate_metadata),
     {
-        for (&k, v) in self.metas.borrow().iter() {
+        for (&k, v) in &*self.metas.borrow() {
             i(k, &**v);
         }
     }
@@ -122,7 +122,7 @@ impl CStore {
     pub fn iter_crate_data_origins<I>(&self, mut i: I) where
         I: FnMut(ast::CrateNum, &crate_metadata, Option<CrateSource>),
     {
-        for (&k, v) in self.metas.borrow().iter() {
+        for (&k, v) in &*self.metas.borrow() {
             let origin = self.get_used_crate_source(k);
             origin.as_ref().map(|cs| { assert!(k == cs.cnum); });
             i(k, &**v, origin);
@@ -139,8 +139,7 @@ impl CStore {
     pub fn get_used_crate_source(&self, cnum: ast::CrateNum)
                                      -> Option<CrateSource> {
         self.used_crate_sources.borrow_mut()
-            .iter().find(|source| source.cnum == cnum)
-            .map(|source| source.clone())
+            .iter().find(|source| source.cnum == cnum).cloned()
     }
 
     pub fn reset(&self) {
@@ -167,12 +166,12 @@ impl CStore {
                  ordering: &mut Vec<ast::CrateNum>) {
             if ordering.contains(&cnum) { return }
             let meta = cstore.get_crate_data(cnum);
-            for (_, &dep) in meta.cnum_map.iter() {
+            for (_, &dep) in &meta.cnum_map {
                 visit(cstore, dep, ordering);
             }
             ordering.push(cnum);
         };
-        for (&num, _) in self.metas.borrow().iter() {
+        for (&num, _) in &*self.metas.borrow() {
             visit(self, num, &mut ordering);
         }
         ordering.reverse();
@@ -218,7 +217,7 @@ impl CStore {
 
     pub fn find_extern_mod_stmt_cnum(&self, emod_id: ast::NodeId)
                                      -> Option<ast::CrateNum> {
-        self.extern_mod_crate_map.borrow().get(&emod_id).map(|x| *x)
+        self.extern_mod_crate_map.borrow().get(&emod_id).cloned()
     }
 }
 

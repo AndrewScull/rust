@@ -8,7 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// ignore-android: FIXME(#10381)
 // min-lldb-version: 310
 
 // This test case checks if function arguments already have the correct value when breaking at the
@@ -245,7 +244,7 @@ fn non_immediate_args(a: BigStruct, b: BigStruct) {
 }
 
 fn binding(a: i64, b: u64, c: f64) {
-    let x = 0i; // #break
+    let x = 0; // #break
     ::std::old_io::print("")
 }
 

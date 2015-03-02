@@ -194,7 +194,8 @@ pub unsafe fn record_sp_limit(limit: uint) {
     unsafe fn target_record_sp_limit(limit: uint) {
         asm!("movq $0, %fs:24" :: "r"(limit) :: "volatile")
     }
-    #[cfg(all(target_arch = "x86_64", target_os = "dragonfly"))] #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_os = "dragonfly"))]
+    #[inline(always)]
     unsafe fn target_record_sp_limit(limit: uint) {
         asm!("movq $0, %fs:32" :: "r"(limit) :: "volatile")
     }
@@ -236,18 +237,14 @@ pub unsafe fn record_sp_limit(limit: uint) {
     }
 
     // aarch64 - FIXME(AARCH64): missing...
-    #[cfg(target_arch = "aarch64")]
-    unsafe fn target_record_sp_limit(_: uint) {
-    }
-
     // powerpc - FIXME(POWERPC): missing...
-    #[cfg(target_arch = "powerpc")]
-    unsafe fn target_record_sp_limit(_: uint) {
-    }
-
-
-    // iOS segmented stack is disabled for now, see related notes
-    #[cfg(all(target_arch = "arm", target_os = "ios"))] #[inline(always)]
+    // arm-ios - iOS segmented stack is disabled for now, see related notes
+    // openbsd - segmented stack is disabled
+    #[cfg(any(target_arch = "aarch64",
+              target_arch = "powerpc",
+              all(target_arch = "arm", target_os = "ios"),
+              target_os = "bitrig",
+              target_os = "openbsd"))]
     unsafe fn target_record_sp_limit(_: uint) {
     }
 }
@@ -290,7 +287,8 @@ pub unsafe fn get_sp_limit() -> uint {
         asm!("movq %fs:24, $0" : "=r"(limit) ::: "volatile");
         return limit;
     }
-    #[cfg(all(target_arch = "x86_64", target_os = "dragonfly"))] #[inline(always)]
+    #[cfg(all(target_arch = "x86_64", target_os = "dragonfly"))]
+    #[inline(always)]
     unsafe fn target_get_sp_limit() -> uint {
         let limit;
         asm!("movq %fs:32, $0" : "=r"(limit) ::: "volatile");
@@ -300,7 +298,6 @@ pub unsafe fn get_sp_limit() -> uint {
     unsafe fn target_get_sp_limit() -> uint {
         return STACK_LIMIT;
     }
-
 
     // x86
     #[cfg(all(target_arch = "x86",
@@ -340,21 +337,18 @@ pub unsafe fn get_sp_limit() -> uint {
     }
 
     // aarch64 - FIXME(AARCH64): missing...
-    #[cfg(target_arch = "aarch64")]
-    unsafe fn target_get_sp_limit() -> uint {
-        1024
-    }
-
-    // powepc - FIXME(POWERPC): missing...
-    #[cfg(target_arch = "powerpc")]
-    unsafe fn target_get_sp_limit() -> uint {
-        1024
-    }
-
-    // iOS doesn't support segmented stacks yet. This function might
-    // be called by runtime though so it is unsafe to mark it as
-    // unreachable, let's return a fixed constant.
-    #[cfg(all(target_arch = "arm", target_os = "ios"))] #[inline(always)]
+    // powerpc - FIXME(POWERPC): missing...
+    // arm-ios - iOS doesn't support segmented stacks yet.
+    // openbsd - OpenBSD doesn't support segmented stacks.
+    //
+    // This function might be called by runtime though
+    // so it is unsafe to unreachable, let's return a fixed constant.
+    #[cfg(any(target_arch = "aarch64",
+              target_arch = "powerpc",
+              all(target_arch = "arm", target_os = "ios"),
+              target_os = "bitrig",
+              target_os = "openbsd"))]
+    #[inline(always)]
     unsafe fn target_get_sp_limit() -> uint {
         1024
     }

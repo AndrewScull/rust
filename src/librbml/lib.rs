@@ -16,7 +16,7 @@
 //!     http://www.matroska.org/technical/specs/rfc/index.html
 
 #![crate_name = "rbml"]
-#![unstable]
+#![unstable(feature = "rustc_private")]
 #![staged_api]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
@@ -24,10 +24,15 @@
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/",
        html_playground_url = "http://play.rust-lang.org/")]
-#![allow(unknown_features)]
-#![feature(slicing_syntax)]
-#![allow(unknown_features)] #![feature(int_uint)]
-#![allow(unstable)]
+
+#![feature(collections)]
+#![feature(core)]
+#![feature(int_uint)]
+#![feature(old_io)]
+#![feature(rustc_private)]
+#![feature(staged_api)]
+
+#![cfg_attr(test, feature(test))]
 
 extern crate serialize;
 #[macro_use] extern crate log;
@@ -52,7 +57,7 @@ pub struct Doc<'a> {
 
 impl<'doc> Doc<'doc> {
     pub fn new(data: &'doc [u8]) -> Doc<'doc> {
-        Doc { data: data, start: 0u, end: data.len() }
+        Doc { data: data, start: 0, end: data.len() }
     }
 
     pub fn get<'a>(&'a self, tag: uint) -> Doc<'a> {
@@ -73,7 +78,7 @@ pub struct TaggedDoc<'a> {
     pub doc: Doc<'a>,
 }
 
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 pub enum EbmlEncoderTag {
     EsUint,     // 0
     EsU64,      // 1
@@ -107,7 +112,7 @@ pub enum EbmlEncoderTag {
     EsLabel, // Used only when debugging
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum Error {
     IntTooBig(uint),
     Expected(String),
@@ -126,12 +131,10 @@ impl fmt::Display for Error {
 pub mod reader {
     use std::char;
 
-    use std::int;
-    use std::old_io::extensions::u64_from_be_bytes;
+    use std::isize;
     use std::mem::transmute;
     use std::num::Int;
-    use std::option::Option;
-    use std::option::Option::{None, Some};
+    use std::slice::bytes;
 
     use serialize;
 
@@ -166,25 +169,25 @@ pub mod reader {
     fn vuint_at_slow(data: &[u8], start: uint) -> DecodeResult<Res> {
         let a = data[start];
         if a & 0x80u8 != 0u8 {
-            return Ok(Res {val: (a & 0x7fu8) as uint, next: start + 1u});
+            return Ok(Res {val: (a & 0x7fu8) as uint, next: start + 1});
         }
         if a & 0x40u8 != 0u8 {
-            return Ok(Res {val: ((a & 0x3fu8) as uint) << 8u |
-                        (data[start + 1u] as uint),
-                    next: start + 2u});
+            return Ok(Res {val: ((a & 0x3fu8) as uint) << 8 |
+                        (data[start + 1] as uint),
+                    next: start + 2});
         }
         if a & 0x20u8 != 0u8 {
-            return Ok(Res {val: ((a & 0x1fu8) as uint) << 16u |
-                        (data[start + 1u] as uint) << 8u |
-                        (data[start + 2u] as uint),
-                    next: start + 3u});
+            return Ok(Res {val: ((a & 0x1fu8) as uint) << 16 |
+                        (data[start + 1] as uint) << 8 |
+                        (data[start + 2] as uint),
+                    next: start + 3});
         }
         if a & 0x10u8 != 0u8 {
-            return Ok(Res {val: ((a & 0x0fu8) as uint) << 24u |
-                        (data[start + 1u] as uint) << 16u |
-                        (data[start + 2u] as uint) << 8u |
-                        (data[start + 3u] as uint),
-                    next: start + 4u});
+            return Ok(Res {val: ((a & 0x0fu8) as uint) << 24 |
+                        (data[start + 1] as uint) << 16 |
+                        (data[start + 2] as uint) << 8 |
+                        (data[start + 3] as uint),
+                    next: start + 4});
         }
         Err(IntTooBig(a as uint))
     }
@@ -194,20 +197,24 @@ pub mod reader {
             return vuint_at_slow(data, start);
         }
 
-        // Lookup table for parsing EBML Element IDs as per http://ebml.sourceforge.net/specs/
-        // The Element IDs are parsed by reading a big endian u32 positioned at data[start].
-        // Using the four most significant bits of the u32 we lookup in the table below how the
-        // element ID should be derived from it.
+        // Lookup table for parsing EBML Element IDs as per
+        // http://ebml.sourceforge.net/specs/ The Element IDs are parsed by
+        // reading a big endian u32 positioned at data[start].  Using the four
+        // most significant bits of the u32 we lookup in the table below how
+        // the element ID should be derived from it.
         //
-        // The table stores tuples (shift, mask) where shift is the number the u32 should be right
-        // shifted with and mask is the value the right shifted value should be masked with.
-        // If for example the most significant bit is set this means it's a class A ID and the u32
-        // should be right shifted with 24 and masked with 0x7f. Therefore we store (24, 0x7f) at
-        // index 0x8 - 0xF (four bit numbers where the most significant bit is set).
+        // The table stores tuples (shift, mask) where shift is the number the
+        // u32 should be right shifted with and mask is the value the right
+        // shifted value should be masked with.  If for example the most
+        // significant bit is set this means it's a class A ID and the u32
+        // should be right shifted with 24 and masked with 0x7f. Therefore we
+        // store (24, 0x7f) at index 0x8 - 0xF (four bit numbers where the most
+        // significant bit is set).
         //
-        // By storing the number of shifts and masks in a table instead of checking in order if
-        // the most significant bit is set, the second most significant bit is set etc. we can
-        // replace up to three "and+branch" with a single table lookup which gives us a measured
+        // By storing the number of shifts and masks in a table instead of
+        // checking in order if the most significant bit is set, the second
+        // most significant bit is set etc. we can replace up to three
+        // "and+branch" with a single table lookup which gives us a measured
         // speedup of around 2x on x86_64.
         static SHIFT_MASK_TABLE: [(uint, u32); 16] = [
             (0, 0x0), (0, 0x0fffffff),
@@ -221,7 +228,7 @@ pub mod reader {
             let ptr = data.as_ptr().offset(start as int) as *const u32;
             let val = Int::from_be(*ptr);
 
-            let i = (val >> 28u) as uint;
+            let i = (val >> 28) as uint;
             let (shift, mask) = SHIFT_MASK_TABLE[i];
             Ok(Res {
                 val: ((val >> shift) & mask) as uint,
@@ -307,23 +314,29 @@ pub mod reader {
 
 
     pub fn doc_as_u8(d: Doc) -> u8 {
-        assert_eq!(d.end, d.start + 1u);
+        assert_eq!(d.end, d.start + 1);
         d.data[d.start]
     }
 
     pub fn doc_as_u16(d: Doc) -> u16 {
-        assert_eq!(d.end, d.start + 2u);
-        u64_from_be_bytes(d.data, d.start, 2u) as u16
+        assert_eq!(d.end, d.start + 2);
+        let mut b = [0; 2];
+        bytes::copy_memory(&mut b, &d.data[d.start..d.end]);
+        unsafe { (*(b.as_ptr() as *const u16)).to_be() }
     }
 
     pub fn doc_as_u32(d: Doc) -> u32 {
-        assert_eq!(d.end, d.start + 4u);
-        u64_from_be_bytes(d.data, d.start, 4u) as u32
+        assert_eq!(d.end, d.start + 4);
+        let mut b = [0; 4];
+        bytes::copy_memory(&mut b, &d.data[d.start..d.end]);
+        unsafe { (*(b.as_ptr() as *const u32)).to_be() }
     }
 
     pub fn doc_as_u64(d: Doc) -> u64 {
-        assert_eq!(d.end, d.start + 8u);
-        u64_from_be_bytes(d.data, d.start, 8u)
+        assert_eq!(d.end, d.start + 8);
+        let mut b = [0; 8];
+        bytes::copy_memory(&mut b, &d.data[d.start..d.end]);
+        unsafe { (*(b.as_ptr() as *const u64)).to_be() }
     }
 
     pub fn doc_as_i8(d: Doc) -> i8 { doc_as_u8(d) as i8 }
@@ -436,7 +449,7 @@ pub mod reader {
         fn read_u8 (&mut self) -> DecodeResult<u8 > { Ok(doc_as_u8 (try!(self.next_doc(EsU8 )))) }
         fn read_uint(&mut self) -> DecodeResult<uint> {
             let v = doc_as_u64(try!(self.next_doc(EsUint)));
-            if v > (::std::uint::MAX as u64) {
+            if v > (::std::usize::MAX as u64) {
                 Err(IntTooBig(v as uint))
             } else {
                 Ok(v as uint)
@@ -457,7 +470,7 @@ pub mod reader {
         }
         fn read_int(&mut self) -> DecodeResult<int> {
             let v = doc_as_u64(try!(self.next_doc(EsInt))) as i64;
-            if v > (int::MAX as i64) || v < (int::MIN as i64) {
+            if v > (isize::MAX as i64) || v < (isize::MIN as i64) {
                 debug!("FIXME \\#6122: Removing this makes this function miscompile");
                 Err(IntTooBig(v as uint))
             } else {
@@ -684,11 +697,10 @@ pub mod reader {
 }
 
 pub mod writer {
-    use std::clone::Clone;
-    use std::old_io::extensions::u64_to_be_bytes;
+    use std::mem;
+    use std::num::Int;
     use std::old_io::{Writer, Seek};
     use std::old_io;
-    use std::mem;
 
     use super::{ EsVec, EsMap, EsEnum, EsVecLen, EsVecElt, EsMapLen, EsMapKey,
         EsEnumVid, EsU64, EsU32, EsU16, EsU8, EsInt, EsI64, EsI32, EsI16, EsI8,
@@ -708,12 +720,12 @@ pub mod writer {
 
     fn write_sized_vuint<W: Writer>(w: &mut W, n: uint, size: uint) -> EncodeResult {
         match size {
-            1u => w.write_all(&[0x80u8 | (n as u8)]),
-            2u => w.write_all(&[0x40u8 | ((n >> 8_u) as u8), n as u8]),
-            3u => w.write_all(&[0x20u8 | ((n >> 16_u) as u8), (n >> 8_u) as u8,
+            1 => w.write_all(&[0x80u8 | (n as u8)]),
+            2 => w.write_all(&[0x40u8 | ((n >> 8) as u8), n as u8]),
+            3 => w.write_all(&[0x20u8 | ((n >> 16) as u8), (n >> 8) as u8,
                             n as u8]),
-            4u => w.write_all(&[0x10u8 | ((n >> 24_u) as u8), (n >> 16_u) as u8,
-                            (n >> 8_u) as u8, n as u8]),
+            4 => w.write_all(&[0x10u8 | ((n >> 24) as u8), (n >> 16) as u8,
+                            (n >> 8) as u8, n as u8]),
             _ => Err(old_io::IoError {
                 kind: old_io::OtherIoError,
                 desc: "int too big",
@@ -723,10 +735,10 @@ pub mod writer {
     }
 
     fn write_vuint<W: Writer>(w: &mut W, n: uint) -> EncodeResult {
-        if n < 0x7f_u { return write_sized_vuint(w, n, 1u); }
-        if n < 0x4000_u { return write_sized_vuint(w, n, 2u); }
-        if n < 0x200000_u { return write_sized_vuint(w, n, 3u); }
-        if n < 0x10000000_u { return write_sized_vuint(w, n, 4u); }
+        if n < 0x7f { return write_sized_vuint(w, n, 1); }
+        if n < 0x4000 { return write_sized_vuint(w, n, 2); }
+        if n < 0x200000 { return write_sized_vuint(w, n, 3); }
+        if n < 0x10000000 { return write_sized_vuint(w, n, 4); }
         Err(old_io::IoError {
             kind: old_io::OtherIoError,
             desc: "int too big",
@@ -734,7 +746,6 @@ pub mod writer {
         })
     }
 
-    // FIXME (#2741): Provide a function to write the standard rbml header.
     impl<'a, W: Writer + Seek> Encoder<'a, W> {
         pub fn new(w: &'a mut W) -> Encoder<'a, W> {
             Encoder {
@@ -768,7 +779,7 @@ pub mod writer {
             let cur_pos = try!(self.writer.tell());
             try!(self.writer.seek(last_size_pos as i64, old_io::SeekSet));
             let size = cur_pos as uint - last_size_pos - 4;
-            try!(write_sized_vuint(self.writer, size, 4u));
+            try!(write_sized_vuint(self.writer, size, 4));
             let r = try!(self.writer.seek(cur_pos as i64, old_io::SeekSet));
 
             debug!("End tag (size = {:?})", size);
@@ -790,21 +801,18 @@ pub mod writer {
         }
 
         pub fn wr_tagged_u64(&mut self, tag_id: uint, v: u64) -> EncodeResult {
-            u64_to_be_bytes(v, 8u, |v| {
-                self.wr_tagged_bytes(tag_id, v)
-            })
+            let bytes: [u8; 8] = unsafe { mem::transmute(v.to_be()) };
+            self.wr_tagged_bytes(tag_id, &bytes)
         }
 
         pub fn wr_tagged_u32(&mut self, tag_id: uint, v: u32)  -> EncodeResult{
-            u64_to_be_bytes(v as u64, 4u, |v| {
-                self.wr_tagged_bytes(tag_id, v)
-            })
+            let bytes: [u8; 4] = unsafe { mem::transmute(v.to_be()) };
+            self.wr_tagged_bytes(tag_id, &bytes)
         }
 
         pub fn wr_tagged_u16(&mut self, tag_id: uint, v: u16) -> EncodeResult {
-            u64_to_be_bytes(v as u64, 2u, |v| {
-                self.wr_tagged_bytes(tag_id, v)
-            })
+            let bytes: [u8; 2] = unsafe { mem::transmute(v.to_be()) };
+            self.wr_tagged_bytes(tag_id, &bytes)
         }
 
         pub fn wr_tagged_u8(&mut self, tag_id: uint, v: u8) -> EncodeResult {
@@ -812,21 +820,15 @@ pub mod writer {
         }
 
         pub fn wr_tagged_i64(&mut self, tag_id: uint, v: i64) -> EncodeResult {
-            u64_to_be_bytes(v as u64, 8u, |v| {
-                self.wr_tagged_bytes(tag_id, v)
-            })
+            self.wr_tagged_u64(tag_id, v as u64)
         }
 
         pub fn wr_tagged_i32(&mut self, tag_id: uint, v: i32) -> EncodeResult {
-            u64_to_be_bytes(v as u64, 4u, |v| {
-                self.wr_tagged_bytes(tag_id, v)
-            })
+            self.wr_tagged_u32(tag_id, v as u32)
         }
 
         pub fn wr_tagged_i16(&mut self, tag_id: uint, v: i16) -> EncodeResult {
-            u64_to_be_bytes(v as u64, 2u, |v| {
-                self.wr_tagged_bytes(tag_id, v)
-            })
+            self.wr_tagged_u16(tag_id, v as u16)
         }
 
         pub fn wr_tagged_i8(&mut self, tag_id: uint, v: i8) -> EncodeResult {
@@ -853,12 +855,15 @@ pub mod writer {
 
     // Set to true to generate more debugging in EBML code.
     // Totally lame approach.
+    #[cfg(not(ndebug))]
     static DEBUG: bool = true;
+    #[cfg(ndebug)]
+    static DEBUG: bool = false;
 
     impl<'a, W: Writer + Seek> Encoder<'a, W> {
         // used internally to emit things like the vector length and so on
         fn _emit_tagged_uint(&mut self, t: EbmlEncoderTag, v: uint) -> EncodeResult {
-            assert!(v <= 0xFFFF_FFFF_u);
+            assert!(v <= 0xFFFF_FFFF);
             self.wr_tagged_u32(t as uint, v as u32)
         }
 
@@ -1177,17 +1182,17 @@ mod bench {
 
     #[bench]
     pub fn vuint_at_A_aligned(b: &mut Bencher) {
-        let data = range(0, 4*100).map(|i| {
+        let data = (0i32..4*100).map(|i| {
             match i % 2 {
               0 => 0x80u8,
               _ => i as u8,
             }
         }).collect::<Vec<_>>();
-        let mut sum = 0u;
+        let mut sum = 0;
         b.iter(|| {
             let mut i = 0;
             while i < data.len() {
-                sum += reader::vuint_at(data.as_slice(), i).unwrap().val;
+                sum += reader::vuint_at(&data, i).unwrap().val;
                 i += 4;
             }
         });
@@ -1195,17 +1200,17 @@ mod bench {
 
     #[bench]
     pub fn vuint_at_A_unaligned(b: &mut Bencher) {
-        let data = range(0, 4*100+1).map(|i| {
+        let data = (0i32..4*100+1).map(|i| {
             match i % 2 {
               1 => 0x80u8,
               _ => i as u8
             }
         }).collect::<Vec<_>>();
-        let mut sum = 0u;
+        let mut sum = 0;
         b.iter(|| {
             let mut i = 1;
             while i < data.len() {
-                sum += reader::vuint_at(data.as_slice(), i).unwrap().val;
+                sum += reader::vuint_at(&data, i).unwrap().val;
                 i += 4;
             }
         });
@@ -1213,18 +1218,18 @@ mod bench {
 
     #[bench]
     pub fn vuint_at_D_aligned(b: &mut Bencher) {
-        let data = range(0, 4*100).map(|i| {
+        let data = (0i32..4*100).map(|i| {
             match i % 4 {
               0 => 0x10u8,
               3 => i as u8,
               _ => 0u8
             }
         }).collect::<Vec<_>>();
-        let mut sum = 0u;
+        let mut sum = 0;
         b.iter(|| {
             let mut i = 0;
             while i < data.len() {
-                sum += reader::vuint_at(data.as_slice(), i).unwrap().val;
+                sum += reader::vuint_at(&data, i).unwrap().val;
                 i += 4;
             }
         });
@@ -1232,18 +1237,18 @@ mod bench {
 
     #[bench]
     pub fn vuint_at_D_unaligned(b: &mut Bencher) {
-        let data = range(0, 4*100+1).map(|i| {
+        let data = (0i32..4*100+1).map(|i| {
             match i % 4 {
               1 => 0x10u8,
               0 => i as u8,
               _ => 0u8
             }
         }).collect::<Vec<_>>();
-        let mut sum = 0u;
+        let mut sum = 0;
         b.iter(|| {
             let mut i = 1;
             while i < data.len() {
-                sum += reader::vuint_at(data.as_slice(), i).unwrap().val;
+                sum += reader::vuint_at(&data, i).unwrap().val;
                 i += 4;
             }
         });

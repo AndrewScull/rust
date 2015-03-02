@@ -10,20 +10,15 @@
 
 //! Blocking Windows-based file I/O
 
-use alloc::arc::Arc;
 use libc::{self, c_int};
 
 use mem;
-use sys::os::fill_utf16_buf_and_decode;
-use path;
 use ptr;
-use str;
 use old_io;
 
 use prelude::v1::*;
 use sys;
-use sys::os;
-use sys_common::{keep_going, eof, mkerr_libc};
+use sys_common::{mkerr_libc};
 
 use old_io::{FilePermission, Write, UnstableFileStat, Open, FileAccess, FileMode};
 use old_io::{IoResult, IoError, FileStat, SeekStyle};
@@ -262,7 +257,7 @@ pub fn readdir(p: &Path) -> IoResult<Vec<Path>> {
             let mut more_files = 1 as libc::BOOL;
             while more_files != 0 {
                 {
-                    let filename = os::truncate_utf16_at_nul(&wfd.cFileName);
+                    let filename = super::truncate_utf16_at_nul(&wfd.cFileName);
                     match String::from_utf16(filename) {
                         Ok(filename) => paths.push(Path::new(filename)),
                         Err(..) => {
@@ -342,7 +337,7 @@ pub fn chmod(p: &Path, mode: uint) -> IoResult<()> {
 
 pub fn rmdir(p: &Path) -> IoResult<()> {
     let p = try!(to_utf16(p));
-    mkerr_libc(unsafe { libc::wrmdir(p.as_ptr()) })
+    super::mkerr_winbool(unsafe { libc::RemoveDirectoryW(p.as_ptr()) })
 }
 
 pub fn chown(_p: &Path, _uid: int, _gid: int) -> IoResult<()> {
@@ -368,19 +363,14 @@ pub fn readlink(p: &Path) -> IoResult<Path> {
     }
     // Specify (sz - 1) because the documentation states that it's the size
     // without the null pointer
-    let ret = fill_utf16_buf_and_decode(|buf, sz| unsafe {
+    let ret = super::fill_utf16_buf(|buf, sz| unsafe {
         GetFinalPathNameByHandleW(handle,
                                   buf as *const u16,
                                   sz - 1,
                                   libc::VOLUME_NAME_DOS)
+    }, |data| {
+        Path::new(String::from_utf16(data).unwrap())
     });
-    let ret = match ret {
-        Some(ref s) if s.starts_with(r"\\?\") => { // "
-            Ok(Path::new(&s[4..]))
-        }
-        Some(s) => Ok(Path::new(s)),
-        None => Err(super::last_error()),
-    };
     assert!(unsafe { libc::CloseHandle(handle) } != 0);
     return ret;
 }

@@ -23,7 +23,9 @@ use libc;
 #[cfg(any(target_os = "macos",
           target_os = "ios",
           target_os = "freebsd",
-          target_os = "dragonfly"))]
+          target_os = "dragonfly",
+          target_os = "bitrig",
+          target_os = "openbsd"))]
 pub const FIONBIO: libc::c_ulong = 0x8004667e;
 #[cfg(any(all(target_os = "linux",
               any(target_arch = "x86",
@@ -41,7 +43,9 @@ pub const FIONBIO: libc::c_ulong = 0x667e;
 #[cfg(any(target_os = "macos",
           target_os = "ios",
           target_os = "freebsd",
-          target_os = "dragonfly"))]
+          target_os = "dragonfly",
+          target_os = "bitrig",
+          target_os = "openbsd"))]
 pub const FIOCLEX: libc::c_ulong = 0x20006601;
 #[cfg(any(all(target_os = "linux",
               any(target_arch = "x86",
@@ -59,12 +63,68 @@ pub const FIOCLEX: libc::c_ulong = 0x6601;
 #[cfg(any(target_os = "macos",
           target_os = "ios",
           target_os = "freebsd",
-          target_os = "dragonfly"))]
+          target_os = "dragonfly",
+          target_os = "bitrig",
+          target_os = "openbsd"))]
 pub const MSG_DONTWAIT: libc::c_int = 0x80;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const MSG_DONTWAIT: libc::c_int = 0x40;
 
 pub const WNOHANG: libc::c_int = 1;
+
+#[cfg(target_os = "linux")]
+pub const _SC_GETPW_R_SIZE_MAX: libc::c_int = 70;
+#[cfg(any(target_os = "macos",
+          target_os = "freebsd",
+          target_os = "dragonfly"))]
+pub const _SC_GETPW_R_SIZE_MAX: libc::c_int = 71;
+#[cfg(any(target_os = "bitrig",
+          target_os = "openbsd"))]
+pub const _SC_GETPW_R_SIZE_MAX: libc::c_int = 101;
+#[cfg(target_os = "android")]
+pub const _SC_GETPW_R_SIZE_MAX: libc::c_int = 0x0048;
+
+#[repr(C)]
+#[cfg(target_os = "linux")]
+pub struct passwd {
+    pub pw_name: *mut libc::c_char,
+    pub pw_passwd: *mut libc::c_char,
+    pub pw_uid: libc::uid_t,
+    pub pw_gid: libc::gid_t,
+    pub pw_gecos: *mut libc::c_char,
+    pub pw_dir: *mut libc::c_char,
+    pub pw_shell: *mut libc::c_char,
+}
+
+#[repr(C)]
+#[cfg(any(target_os = "macos",
+          target_os = "freebsd",
+          target_os = "dragonfly",
+          target_os = "bitrig",
+          target_os = "openbsd"))]
+pub struct passwd {
+    pub pw_name: *mut libc::c_char,
+    pub pw_passwd: *mut libc::c_char,
+    pub pw_uid: libc::uid_t,
+    pub pw_gid: libc::gid_t,
+    pub pw_change: libc::time_t,
+    pub pw_class: *mut libc::c_char,
+    pub pw_gecos: *mut libc::c_char,
+    pub pw_dir: *mut libc::c_char,
+    pub pw_shell: *mut libc::c_char,
+    pub pw_expire: libc::time_t,
+}
+
+#[repr(C)]
+#[cfg(target_os = "android")]
+pub struct passwd {
+    pub pw_name: *mut libc::c_char,
+    pub pw_passwd: *mut libc::c_char,
+    pub pw_uid: libc::uid_t,
+    pub pw_gid: libc::gid_t,
+    pub pw_dir: *mut libc::c_char,
+    pub pw_shell: *mut libc::c_char,
+}
 
 extern {
     pub fn gettimeofday(timeval: *mut libc::timeval,
@@ -92,6 +152,17 @@ extern {
     pub fn sigaddset(set: *mut sigset_t, signum: libc::c_int) -> libc::c_int;
     pub fn sigdelset(set: *mut sigset_t, signum: libc::c_int) -> libc::c_int;
     pub fn sigemptyset(set: *mut sigset_t) -> libc::c_int;
+
+    #[cfg(not(target_os = "ios"))]
+    pub fn getpwuid_r(uid: libc::uid_t,
+                      pwd: *mut passwd,
+                      buf: *mut libc::c_char,
+                      buflen: libc::size_t,
+                      result: *mut *mut passwd) -> libc::c_int;
+
+    pub fn utimes(filename: *const libc::c_char,
+                  times: *const libc::timeval) -> libc::c_int;
+    pub fn gai_strerror(errcode: libc::c_int) -> *const libc::c_char;
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -111,22 +182,24 @@ mod select {
 #[cfg(any(target_os = "android",
           target_os = "freebsd",
           target_os = "dragonfly",
+          target_os = "bitrig",
+          target_os = "openbsd",
           target_os = "linux"))]
 mod select {
-    use uint;
+    use usize;
     use libc;
 
-    pub const FD_SETSIZE: uint = 1024;
+    pub const FD_SETSIZE: usize = 1024;
 
     #[repr(C)]
     pub struct fd_set {
         // FIXME: shouldn't this be a c_ulong?
-        fds_bits: [libc::uintptr_t; (FD_SETSIZE / uint::BITS)]
+        fds_bits: [libc::uintptr_t; (FD_SETSIZE / usize::BITS)]
     }
 
     pub fn fd_set(set: &mut fd_set, fd: i32) {
         let fd = fd as uint;
-        set.fds_bits[fd / uint::BITS] |= 1 << (fd % uint::BITS);
+        set.fds_bits[fd / usize::BITS] |= 1 << (fd % usize::BITS);
     }
 }
 
@@ -248,7 +321,8 @@ mod signal {
     pub const SA_SIGINFO: libc::c_int = 0x0040;
     pub const SIGCHLD: libc::c_int = 20;
 
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(any(target_os = "macos",
+              target_os = "ios"))]
     pub type sigset_t = u32;
     #[cfg(any(target_os = "freebsd", target_os = "dragonfly"))]
     #[repr(C)]
@@ -273,5 +347,43 @@ mod signal {
         pub sa_handler: extern fn(libc::c_int),
         pub sa_flags: libc::c_int,
         pub sa_mask: sigset_t,
+    }
+}
+
+#[cfg(any(target_os = "bitrig", target_os = "openbsd"))]
+mod signal {
+    use libc;
+
+    pub const SA_ONSTACK: libc::c_int = 0x0001;
+    pub const SA_RESTART: libc::c_int = 0x0002;
+    pub const SA_RESETHAND: libc::c_int = 0x0004;
+    pub const SA_NOCLDSTOP: libc::c_int = 0x0008;
+    pub const SA_NODEFER: libc::c_int = 0x0010;
+    pub const SA_NOCLDWAIT: libc::c_int = 0x0020;
+    pub const SA_SIGINFO: libc::c_int = 0x0040;
+    pub const SIGCHLD: libc::c_int = 20;
+
+    pub type sigset_t = libc::c_uint;
+
+    // This structure has more fields, but we're not all that interested in
+    // them.
+    #[repr(C)]
+    pub struct siginfo {
+        pub si_signo: libc::c_int,
+        pub si_code: libc::c_int,
+        pub si_errno: libc::c_int,
+        // FIXME: Bitrig has a crazy union here in the siginfo, I think this
+        // layout will still work tho.  The status might be off by the size of
+        // a clock_t by my reading, but we can fix this later.
+        pub pid: libc::pid_t,
+        pub uid: libc::uid_t,
+        pub status: libc::c_int,
+    }
+
+    #[repr(C)]
+    pub struct sigaction {
+        pub sa_handler: extern fn(libc::c_int),
+        pub sa_mask: sigset_t,
+        pub sa_flags: libc::c_int,
     }
 }

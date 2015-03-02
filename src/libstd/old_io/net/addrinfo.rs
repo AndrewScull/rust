@@ -31,7 +31,7 @@ use sys;
 use vec::Vec;
 
 /// Hints to the types of sockets that are desired when looking up hosts
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 pub enum SocketType {
     Stream, Datagram, Raw
 }
@@ -40,7 +40,7 @@ pub enum SocketType {
 /// to manipulate how a query is performed.
 ///
 /// The meaning of each of these flags can be found with `man -s 3 getaddrinfo`
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 pub enum Flag {
     AddrConfig,
     All,
@@ -53,7 +53,7 @@ pub enum Flag {
 
 /// A transport protocol associated with either a hint or a return value of
 /// `lookup`
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 pub enum Protocol {
     TCP, UDP
 }
@@ -63,7 +63,7 @@ pub enum Protocol {
 ///
 /// For details on these fields, see their corresponding definitions via
 /// `man -s 3 getaddrinfo`
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 pub struct Hint {
     pub family: uint,
     pub socktype: Option<SocketType>,
@@ -71,7 +71,7 @@ pub struct Hint {
     pub flags: uint,
 }
 
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 pub struct Info {
     pub address: SocketAddr,
     pub family: uint,
@@ -123,7 +123,7 @@ mod test {
         let ipaddrs = get_host_addresses("localhost").unwrap();
         let mut found_local = false;
         let local_addr = &Ipv4Addr(127, 0, 0, 1);
-        for addr in ipaddrs.iter() {
+        for addr in &ipaddrs {
             found_local = found_local || addr == local_addr;
         }
         assert!(found_local);

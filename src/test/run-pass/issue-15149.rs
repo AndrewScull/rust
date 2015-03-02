@@ -8,21 +8,25 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::slice::SliceExt;
-use std::old_io::{Command, fs, USER_RWX};
-use std::os;
-use std::path::BytesContainer;
+// no-prefer-dynamic
+
+#![feature(fs, process, env, path, rand)]
+
+use std::env;
+use std::fs;
+use std::process;
 use std::rand::random;
+use std::str;
 
 fn main() {
     // If we're the child, make sure we were invoked correctly
-    let args = os::args();
-    if args.len() > 1 && args[1].as_slice() == "child" {
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 && args[1] == "child" {
         // FIXME: This should check the whole `args[0]` instead of just
         // checking that it ends_with the executable name. This
         // is needed because of Windows, which has a different behavior.
         // See #15149 for more info.
-        return assert!(args[0].ends_with(&format!("mytest{}", os::consts::EXE_SUFFIX)[]));
+        return assert!(args[0].ends_with(&format!("mytest{}", env::consts::EXE_SUFFIX)[]));
     }
 
     test();
@@ -30,32 +34,33 @@ fn main() {
 
 fn test() {
     // If we're the parent, copy our own binary to a new directory.
-    let my_path = os::self_exe_name().unwrap();
-    let my_dir  = my_path.dir_path();
+    let my_path = env::current_exe().unwrap();
+    let my_dir  = my_path.parent().unwrap();
 
     let random_u32: u32 = random();
-    let child_dir = Path::new(my_dir.join(format!("issue-15149-child-{}",
-                                                  random_u32)));
-    fs::mkdir(&child_dir, USER_RWX).unwrap();
+    let child_dir = my_dir.join(&format!("issue-15149-child-{}", random_u32));
+    fs::create_dir(&child_dir).unwrap();
 
-    let child_path = child_dir.join(format!("mytest{}",
-                                            os::consts::EXE_SUFFIX));
+    let child_path = child_dir.join(&format!("mytest{}",
+                                             env::consts::EXE_SUFFIX));
     fs::copy(&my_path, &child_path).unwrap();
 
     // Append the new directory to our own PATH.
-    let mut path = os::split_paths(os::getenv("PATH").unwrap_or(String::new()));
-    path.push(child_dir.clone());
-    let path = os::join_paths(path.as_slice()).unwrap();
+    let path = {
+        let mut paths: Vec<_> = env::split_paths(&env::var_os("PATH").unwrap()).collect();
+        paths.push(child_dir.to_path_buf());
+        env::join_paths(paths.iter()).unwrap()
+    };
 
-    let child_output = Command::new("mytest").env("PATH", path.as_slice())
-                                             .arg("child")
-                                             .output().unwrap();
+    let child_output = process::Command::new("mytest").env("PATH", &path)
+                                                      .arg("child")
+                                                      .output().unwrap();
 
     assert!(child_output.status.success(),
             format!("child assertion failed\n child stdout:\n {}\n child stderr:\n {}",
-                    child_output.output.container_as_str().unwrap(),
-                    child_output.error.container_as_str().unwrap()));
+                    str::from_utf8(&child_output.stdout).unwrap(),
+                    str::from_utf8(&child_output.stderr).unwrap()));
 
-    fs::rmdir_recursive(&child_dir).unwrap();
+    fs::remove_dir_all(&child_dir).unwrap();
 
 }

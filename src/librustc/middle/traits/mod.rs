@@ -8,17 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Trait Resolution. See doc.rs.
+//! Trait Resolution. See the Book for more.
 
 pub use self::SelectionError::*;
 pub use self::FulfillmentErrorCode::*;
 pub use self::Vtable::*;
 pub use self::ObligationCauseCode::*;
 
-use middle::mem_categorization::Typer;
 use middle::subst;
-use middle::ty::{self, Ty};
-use middle::infer::InferCtxt;
+use middle::ty::{self, HasProjectionTypes, Ty};
+use middle::ty_fold::TypeFoldable;
+use middle::infer::{self, fixup_err_to_string, InferCtxt};
 use std::slice::Iter;
 use std::rc::Rc;
 use syntax::ast;
@@ -28,6 +28,7 @@ use util::ppaux::{Repr, UserString};
 pub use self::error_reporting::report_fulfillment_errors;
 pub use self::error_reporting::suggest_new_overflow_limit;
 pub use self::coherence::orphan_check;
+pub use self::coherence::overlapping_impls;
 pub use self::coherence::OrphanCheckErr;
 pub use self::fulfill::{FulfillmentContext, RegionObligation};
 pub use self::project::MismatchedProjectionTypes;
@@ -63,7 +64,7 @@ mod util;
 /// either identifying an `impl` (e.g., `impl Eq for int`) that
 /// provides the required vtable, or else finding a bound that is in
 /// scope. The eventual result is usually a `Selection` (defined below).
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Obligation<'tcx, T> {
     pub cause: ObligationCause<'tcx>,
     pub recursion_depth: uint,
@@ -74,7 +75,7 @@ pub type PredicateObligation<'tcx> = Obligation<'tcx, ty::Predicate<'tcx>>;
 pub type TraitObligation<'tcx> = Obligation<'tcx, ty::PolyTraitPredicate<'tcx>>;
 
 /// Why did we incur this obligation? Used for error reporting.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ObligationCause<'tcx> {
     pub span: Span,
 
@@ -89,7 +90,7 @@ pub struct ObligationCause<'tcx> {
     pub code: ObligationCauseCode<'tcx>
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ObligationCauseCode<'tcx> {
     /// Not well classified or should be obvious from span.
     MiscObligation,
@@ -129,7 +130,7 @@ pub enum ObligationCauseCode<'tcx> {
     CompareImplMethodObligation,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct DerivedObligationCause<'tcx> {
     /// The trait reference of the parent obligation that led to the
     /// current obligation. Note that only trait obligations lead to
@@ -147,7 +148,7 @@ pub type TraitObligations<'tcx> = subst::VecPerParamSpace<TraitObligation<'tcx>>
 
 pub type Selection<'tcx> = Vtable<'tcx, PredicateObligation<'tcx>>;
 
-#[derive(Clone,Show)]
+#[derive(Clone,Debug)]
 pub enum SelectionError<'tcx> {
     Unimplemented,
     Overflow,
@@ -215,10 +216,16 @@ pub type SelectionResult<'tcx, T> = Result<Option<T>, SelectionError<'tcx>>;
 /// ### The type parameter `N`
 ///
 /// See explanation on `VtableImplData`.
-#[derive(Show,Clone)]
+#[derive(Debug,Clone)]
 pub enum Vtable<'tcx, N> {
     /// Vtable identifying a particular impl.
     VtableImpl(VtableImplData<'tcx, N>),
+
+    /// Vtable for default trait implementations
+    /// This carries the information and nested obligations with regards
+    /// to a default implementation for a trait `Trait`. The nested obligations
+    /// ensure the trait implementation holds for all the constituent types.
+    VtableDefaultImpl(VtableDefaultImplData<N>),
 
     /// Successful resolution to an obligation provided by the caller
     /// for some type parameter. The `Vec<N>` represents the
@@ -251,14 +258,20 @@ pub enum Vtable<'tcx, N> {
 /// is `Obligation`, as one might expect. During trans, however, this
 /// is `()`, because trans only requires a shallow resolution of an
 /// impl, and nested obligations are satisfied later.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct VtableImplData<'tcx, N> {
     pub impl_def_id: ast::DefId,
     pub substs: subst::Substs<'tcx>,
     pub nested: subst::VecPerParamSpace<N>
 }
 
-#[derive(Show,Clone)]
+#[derive(Debug,Clone)]
+pub struct VtableDefaultImplData<N> {
+    pub trait_def_id: ast::DefId,
+    pub nested: Vec<N>
+}
+
+#[derive(Debug,Clone)]
 pub struct VtableBuiltinData<N> {
     pub nested: subst::VecPerParamSpace<N>
 }
@@ -270,20 +283,10 @@ pub struct VtableObjectData<'tcx> {
     pub object_ty: Ty<'tcx>,
 }
 
-/// True if there exist types that satisfy both of the two given impls.
-pub fn overlapping_impls(infcx: &InferCtxt,
-                         impl1_def_id: ast::DefId,
-                         impl2_def_id: ast::DefId)
-                         -> bool
-{
-    coherence::impl_can_satisfy(infcx, impl1_def_id, impl2_def_id) &&
-    coherence::impl_can_satisfy(infcx, impl2_def_id, impl1_def_id)
-}
-
 /// Creates predicate obligations from the generic bounds.
 pub fn predicates_for_generics<'tcx>(tcx: &ty::ctxt<'tcx>,
                                      cause: ObligationCause<'tcx>,
-                                     generic_bounds: &ty::GenericBounds<'tcx>)
+                                     generic_bounds: &ty::InstantiatedPredicates<'tcx>)
                                      -> PredicateObligations<'tcx>
 {
     util::predicates_for_generics(tcx, cause, 0, generic_bounds)
@@ -392,6 +395,93 @@ pub fn type_known_to_meet_builtin_bound<'a,'tcx>(infcx: &InferCtxt<'a,'tcx>,
     }
 }
 
+/// Normalizes the parameter environment, reporting errors if they occur.
+pub fn normalize_param_env_or_error<'a,'tcx>(unnormalized_env: ty::ParameterEnvironment<'a,'tcx>,
+                                             cause: ObligationCause<'tcx>)
+                                             -> ty::ParameterEnvironment<'a,'tcx>
+{
+    // I'm not wild about reporting errors here; I'd prefer to
+    // have the errors get reported at a defined place (e.g.,
+    // during typeck). Instead I have all parameter
+    // environments, in effect, going through this function
+    // and hence potentially reporting errors. This ensurse of
+    // course that we never forget to normalize (the
+    // alternative seemed like it would involve a lot of
+    // manual invocations of this fn -- and then we'd have to
+    // deal with the errors at each of those sites).
+    //
+    // In any case, in practice, typeck constructs all the
+    // parameter environments once for every fn as it goes,
+    // and errors will get reported then; so after typeck we
+    // can be sure that no errors should occur.
+
+    let tcx = unnormalized_env.tcx;
+    let span = cause.span;
+    let body_id = cause.body_id;
+
+    debug!("normalize_param_env_or_error(unnormalized_env={})",
+           unnormalized_env.repr(tcx));
+
+    let infcx = infer::new_infer_ctxt(tcx);
+    let predicates = match fully_normalize(&infcx, &unnormalized_env, cause,
+                                           &unnormalized_env.caller_bounds) {
+        Ok(predicates) => predicates,
+        Err(errors) => {
+            report_fulfillment_errors(&infcx, &errors);
+            return unnormalized_env; // an unnormalized env is better than nothing
+        }
+    };
+
+    infcx.resolve_regions_and_report_errors(body_id);
+    let predicates = match infcx.fully_resolve(&predicates) {
+        Ok(predicates) => predicates,
+        Err(fixup_err) => {
+            // If we encounter a fixup error, it means that some type
+            // variable wound up unconstrained. I actually don't know
+            // if this can happen, and I certainly don't expect it to
+            // happen often, but if it did happen it probably
+            // represents a legitimate failure due to some kind of
+            // unconstrained variable, and it seems better not to ICE,
+            // all things considered.
+            let err_msg = fixup_err_to_string(fixup_err);
+            tcx.sess.span_err(span, &err_msg);
+            return unnormalized_env; // an unnormalized env is better than nothing
+        }
+    };
+
+    debug!("normalize_param_env_or_error: predicates={}",
+           predicates.repr(tcx));
+
+    unnormalized_env.with_caller_bounds(predicates)
+}
+
+pub fn fully_normalize<'a,'tcx,T>(infcx: &InferCtxt<'a,'tcx>,
+                                  closure_typer: &ty::ClosureTyper<'tcx>,
+                                  cause: ObligationCause<'tcx>,
+                                  value: &T)
+                                  -> Result<T, Vec<FulfillmentError<'tcx>>>
+    where T : TypeFoldable<'tcx> + HasProjectionTypes + Clone + Repr<'tcx>
+{
+    let tcx = closure_typer.tcx();
+
+    debug!("normalize_param_env(value={})", value.repr(tcx));
+
+    let mut selcx = &mut SelectionContext::new(infcx, closure_typer);
+    let mut fulfill_cx = FulfillmentContext::new();
+    let Normalized { value: normalized_value, obligations } =
+        project::normalize(selcx, cause, value);
+    debug!("normalize_param_env: normalized_value={} obligations={}",
+           normalized_value.repr(tcx),
+           obligations.repr(tcx));
+    for obligation in obligations {
+        fulfill_cx.register_predicate_obligation(selcx.infcx(), obligation);
+    }
+    try!(fulfill_cx.select_all_or_error(infcx, closure_typer));
+    let resolved_value = infcx.resolve_type_vars_if_possible(&normalized_value);
+    debug!("normalize_param_env: resolved_value={}", resolved_value.repr(tcx));
+    Ok(resolved_value)
+}
+
 impl<'tcx,O> Obligation<'tcx,O> {
     pub fn new(cause: ObligationCause<'tcx>,
                trait_ref: O)
@@ -444,17 +534,18 @@ impl<'tcx, N> Vtable<'tcx, N> {
     pub fn iter_nested(&self) -> Iter<N> {
         match *self {
             VtableImpl(ref i) => i.iter_nested(),
-            VtableFnPointer(..) => (&[]).iter(),
-            VtableClosure(..) => (&[]).iter(),
             VtableParam(ref n) => n.iter(),
-            VtableObject(_) => (&[]).iter(),
             VtableBuiltin(ref i) => i.iter_nested(),
+            VtableObject(_) |
+            VtableDefaultImpl(..) | VtableFnPointer(..) |
+            VtableClosure(..) => (&[]).iter(),
         }
     }
 
     pub fn map_nested<M, F>(&self, op: F) -> Vtable<'tcx, M> where F: FnMut(&N) -> M {
         match *self {
             VtableImpl(ref i) => VtableImpl(i.map_nested(op)),
+            VtableDefaultImpl(ref t) => VtableDefaultImpl(t.map_nested(op)),
             VtableFnPointer(ref sig) => VtableFnPointer((*sig).clone()),
             VtableClosure(d, ref s) => VtableClosure(d, s.clone()),
             VtableParam(ref n) => VtableParam(n.iter().map(op).collect()),
@@ -470,6 +561,7 @@ impl<'tcx, N> Vtable<'tcx, N> {
             VtableImpl(i) => VtableImpl(i.map_move_nested(op)),
             VtableFnPointer(sig) => VtableFnPointer(sig),
             VtableClosure(d, s) => VtableClosure(d, s),
+            VtableDefaultImpl(t) => VtableDefaultImpl(t.map_move_nested(op)),
             VtableParam(n) => VtableParam(n.into_iter().map(op).collect()),
             VtableObject(p) => VtableObject(p),
             VtableBuiltin(no) => VtableBuiltin(no.map_move_nested(op)),
@@ -500,6 +592,31 @@ impl<'tcx, N> VtableImplData<'tcx, N> {
             impl_def_id: impl_def_id,
             substs: substs,
             nested: nested.map_move(op)
+        }
+    }
+}
+
+impl<N> VtableDefaultImplData<N> {
+    pub fn iter_nested(&self) -> Iter<N> {
+        self.nested.iter()
+    }
+
+    pub fn map_nested<M, F>(&self, op: F) -> VtableDefaultImplData<M> where
+        F: FnMut(&N) -> M,
+    {
+        VtableDefaultImplData {
+            trait_def_id: self.trait_def_id,
+            nested: self.nested.iter().map(op).collect()
+        }
+    }
+
+    pub fn map_move_nested<M, F>(self, op: F) -> VtableDefaultImplData<M> where
+        F: FnMut(N) -> M,
+    {
+        let VtableDefaultImplData { trait_def_id, nested } = self;
+        VtableDefaultImplData {
+            trait_def_id: trait_def_id,
+            nested: nested.into_iter().map(op).collect()
         }
     }
 }

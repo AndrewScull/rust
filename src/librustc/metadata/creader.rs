@@ -1,4 +1,4 @@
-// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -26,7 +26,7 @@ use syntax::ast;
 use syntax::abi;
 use syntax::attr;
 use syntax::attr::AttrMetaMethods;
-use syntax::codemap::{COMMAND_LINE_SP, Span, mk_sp};
+use syntax::codemap::{Span, mk_sp};
 use syntax::parse;
 use syntax::parse::token::InternedString;
 use syntax::parse::token;
@@ -61,7 +61,7 @@ fn dump_crates(cstore: &CStore) {
 }
 
 fn should_link(i: &ast::Item) -> bool {
-    !attr::contains_name(&i.attrs[], "no_link")
+    !attr::contains_name(&i.attrs, "no_link")
 }
 
 struct CrateInfo {
@@ -72,7 +72,7 @@ struct CrateInfo {
 }
 
 pub fn validate_crate_name(sess: Option<&Session>, s: &str, sp: Option<Span>) {
-    let err = |&: s: &str| {
+    let err = |s: &str| {
         match (sp, sess) {
             (_, None) => panic!("{}", s),
             (Some(sp), Some(sess)) => sess.span_err(sp, s),
@@ -81,11 +81,13 @@ pub fn validate_crate_name(sess: Option<&Session>, s: &str, sp: Option<Span>) {
     };
     if s.len() == 0 {
         err("crate name must not be empty");
+    } else if s.char_at(0) == '-' {
+        err(&format!("crate name cannot start with a hyphen: {}", s));
     }
     for c in s.chars() {
         if c.is_alphanumeric() { continue }
         if c == '_' || c == '-' { continue }
-        err(&format!("invalid character `{}` in crate name: `{}`", c, s)[]);
+        err(&format!("invalid character `{}` in crate name: `{}`", c, s));
     }
     match sess {
         Some(sess) => sess.abort_if_errors(),
@@ -121,12 +123,10 @@ fn register_native_lib(sess: &Session,
     sess.cstore.add_used_library(name, kind);
 }
 
-pub struct PluginMetadata<'a> {
-    sess: &'a Session,
+// Extra info about a crate loaded for plugins or exported macros.
+struct ExtensionCrate {
     metadata: PMDSource,
     dylib: Option<Path>,
-    info: CrateInfo,
-    vi_span: Span,
     target_only: bool,
 }
 
@@ -162,7 +162,7 @@ impl<'a> CrateReader<'a> {
             dump_crates(&self.sess.cstore);
         }
 
-        for &(ref name, kind) in self.sess.opts.libs.iter() {
+        for &(ref name, kind) in &self.sess.opts.libs {
             register_native_lib(self.sess, None, name.clone(), kind);
         }
     }
@@ -170,7 +170,7 @@ impl<'a> CrateReader<'a> {
     fn process_crate(&self, c: &ast::Crate) {
         for a in c.attrs.iter().filter(|m| m.name() == "link_args") {
             match a.value_str() {
-                Some(ref linkarg) => self.sess.cstore.add_used_link_args(linkarg.get()),
+                Some(ref linkarg) => self.sess.cstore.add_used_link_args(&linkarg),
                 None => { /* fallthrough */ }
             }
         }
@@ -184,15 +184,15 @@ impl<'a> CrateReader<'a> {
                        ident, path_opt);
                 let name = match *path_opt {
                     Some((ref path_str, _)) => {
-                        let name = path_str.get().to_string();
-                        validate_crate_name(Some(self.sess), &name[],
+                        let name = path_str.to_string();
+                        validate_crate_name(Some(self.sess), &name[..],
                                             Some(i.span));
                         name
                     }
-                    None => ident.get().to_string(),
+                    None => ident.to_string(),
                 };
                 Some(CrateInfo {
-                    ident: ident.get().to_string(),
+                    ident: ident.to_string(),
                     name: name,
                     id: i.id,
                     should_link: should_link(i),
@@ -212,8 +212,8 @@ impl<'a> CrateReader<'a> {
                 match self.extract_crate_info(i) {
                     Some(info) => {
                         let (cnum, _, _) = self.resolve_crate(&None,
-                                                              &info.ident[],
-                                                              &info.name[],
+                                                              &info.ident,
+                                                              &info.name,
                                                               None,
                                                               i.span,
                                                               PathKind::Crate);
@@ -235,9 +235,9 @@ impl<'a> CrateReader<'a> {
                         None
                     })
                     .collect::<Vec<&ast::Attribute>>();
-                for m in link_args.iter() {
+                for m in &link_args {
                     match m.value_str() {
-                        Some(linkarg) => self.sess.cstore.add_used_link_args(linkarg.get()),
+                        Some(linkarg) => self.sess.cstore.add_used_link_args(&linkarg),
                         None => { /* fallthrough */ }
                     }
                 }
@@ -250,7 +250,7 @@ impl<'a> CrateReader<'a> {
                         None
                     })
                     .collect::<Vec<&ast::Attribute>>();
-                for m in link_args.iter() {
+                for m in &link_args {
                     match m.meta_item_list() {
                         Some(items) => {
                             let kind = items.iter().find(|k| {
@@ -270,7 +270,7 @@ impl<'a> CrateReader<'a> {
                                     } else {
                                         self.sess.span_err(m.span,
                                             &format!("unknown kind: `{}`",
-                                                    k)[]);
+                                                    k));
                                         cstore::NativeUnknown
                                     }
                                 }
@@ -289,7 +289,7 @@ impl<'a> CrateReader<'a> {
                                 }
                             };
                             register_native_lib(self.sess, Some(m.span),
-                                                n.get().to_string(), kind);
+                                                n.to_string(), kind);
                         }
                         None => {}
                     }
@@ -323,13 +323,14 @@ impl<'a> CrateReader<'a> {
             let source = self.sess.cstore.get_used_crate_source(cnum).unwrap();
             if let Some(locs) = self.sess.opts.externs.get(name) {
                 let found = locs.iter().any(|l| {
-                    let l = fs::realpath(&Path::new(&l[])).ok();
+                    let l = fs::realpath(&Path::new(&l[..])).ok();
                     source.dylib.as_ref().map(|p| &p.0) == l.as_ref() ||
                     source.rlib.as_ref().map(|p| &p.0) == l.as_ref()
                 });
                 if found {
                     ret = Some(cnum);
                 }
+                return
             }
 
             // Alright, so we've gotten this far which means that `data` has the
@@ -414,10 +415,11 @@ impl<'a> CrateReader<'a> {
                     hash: hash.map(|a| &*a),
                     filesearch: self.sess.target_filesearch(kind),
                     target: &self.sess.target.target,
-                    triple: &self.sess.opts.target_triple[],
+                    triple: &self.sess.opts.target_triple,
                     root: root,
                     rejected_via_hash: vec!(),
                     rejected_via_triple: vec!(),
+                    rejected_via_kind: vec!(),
                     should_match_name: true,
                 };
                 let library = load_ctxt.load_library_crate();
@@ -440,8 +442,8 @@ impl<'a> CrateReader<'a> {
         decoder::get_crate_deps(cdata).iter().map(|dep| {
             debug!("resolving dep crate {} hash: `{}`", dep.name, dep.hash);
             let (local_cnum, _, _) = self.resolve_crate(root,
-                                                   &dep.name[],
-                                                   &dep.name[],
+                                                   &dep.name,
+                                                   &dep.name,
                                                    Some(&dep.hash),
                                                    span,
                                                    PathKind::Dependency);
@@ -449,22 +451,8 @@ impl<'a> CrateReader<'a> {
         }).collect()
     }
 
-    pub fn read_plugin_metadata<'b>(&'b mut self,
-                                    krate: CrateOrString<'b>) -> PluginMetadata<'b> {
-        let (info, span) = match krate {
-            CrateOrString::Krate(c) => {
-                (self.extract_crate_info(c).unwrap(), c.span)
-            }
-            CrateOrString::Str(s) => {
-                (CrateInfo {
-                     name: s.to_string(),
-                     ident: s.to_string(),
-                     id: ast::DUMMY_NODE_ID,
-                     should_link: true,
-                 }, COMMAND_LINE_SP)
-            }
-        };
-        let target_triple = &self.sess.opts.target_triple[];
+    fn read_extension_crate(&mut self, span: Span, info: &CrateInfo) -> ExtensionCrate {
+        let target_triple = &self.sess.opts.target_triple[..];
         let is_cross = target_triple != config::host_triple();
         let mut should_link = info.should_link && !is_cross;
         let mut target_only = false;
@@ -473,8 +461,8 @@ impl<'a> CrateReader<'a> {
         let mut load_ctxt = loader::Context {
             sess: self.sess,
             span: span,
-            ident: &ident[],
-            crate_name: &name[],
+            ident: &ident[..],
+            crate_name: &name[..],
             hash: None,
             filesearch: self.sess.host_filesearch(PathKind::Crate),
             target: &self.sess.host,
@@ -482,6 +470,7 @@ impl<'a> CrateReader<'a> {
             root: &None,
             rejected_via_hash: vec!(),
             rejected_via_triple: vec!(),
+            rejected_via_kind: vec!(),
             should_match_name: true,
         };
         let library = match load_ctxt.maybe_load_library_crate() {
@@ -506,38 +495,29 @@ impl<'a> CrateReader<'a> {
                                                           PathKind::Crate).is_none();
         let metadata = if register {
             // Register crate now to avoid double-reading metadata
-            let (_, cmd, _) = self.register_crate(&None, &info.ident[],
-                                &info.name[], span, library);
+            let (_, cmd, _) = self.register_crate(&None, &info.ident,
+                                &info.name, span, library);
             PMDSource::Registered(cmd)
         } else {
             // Not registering the crate; just hold on to the metadata
             PMDSource::Owned(library.metadata)
         };
 
-        PluginMetadata {
-            sess: self.sess,
+        ExtensionCrate {
             metadata: metadata,
             dylib: dylib.map(|p| p.0),
-            info: info,
-            vi_span: span,
             target_only: target_only,
         }
     }
-}
 
-#[derive(Copy)]
-pub enum CrateOrString<'a> {
-    Krate(&'a ast::Item),
-    Str(&'a str)
-}
+    /// Read exported macros.
+    pub fn read_exported_macros(&mut self, krate: &ast::Item) -> Vec<ast::MacroDef> {
+        let ci = self.extract_crate_info(krate).unwrap();
+        let ekrate = self.read_extension_crate(krate.span, &ci);
 
-impl<'a> PluginMetadata<'a> {
-    /// Read exported macros
-    pub fn exported_macros(&self) -> Vec<ast::MacroDef> {
-        let imported_from = Some(token::intern(&self.info.ident[]).ident());
-        let source_name = format!("<{} macros>", &self.info.ident[]);
+        let source_name = format!("<{} macros>", krate.ident);
         let mut macros = vec![];
-        decoder::each_exported_macro(self.metadata.as_slice(),
+        decoder::each_exported_macro(ekrate.metadata.as_slice(),
                                      &*self.sess.cstore.intr,
             |name, attrs, body| {
                 // NB: Don't use parse::parse_tts_from_source_str because it parses with
@@ -555,7 +535,7 @@ impl<'a> PluginMetadata<'a> {
                     attrs: attrs,
                     id: ast::DUMMY_NODE_ID,
                     span: span,
-                    imported_from: imported_from,
+                    imported_from: Some(krate.ident),
                     // overridden in plugin/load.rs
                     export: false,
                     use_locally: false,
@@ -569,28 +549,35 @@ impl<'a> PluginMetadata<'a> {
     }
 
     /// Look for a plugin registrar. Returns library path and symbol name.
-    pub fn plugin_registrar(&self) -> Option<(Path, String)> {
-        if self.target_only {
+    pub fn find_plugin_registrar(&mut self, span: Span, name: &str) -> Option<(Path, String)> {
+        let ekrate = self.read_extension_crate(span, &CrateInfo {
+             name: name.to_string(),
+             ident: name.to_string(),
+             id: ast::DUMMY_NODE_ID,
+             should_link: false,
+        });
+
+        if ekrate.target_only {
             // Need to abort before syntax expansion.
-            let message = format!("plugin crate `{}` is not available for triple `{}` \
+            let message = format!("plugin `{}` is not available for triple `{}` \
                                    (only found {})",
-                                  self.info.ident,
+                                  name,
                                   config::host_triple(),
                                   self.sess.opts.target_triple);
-            self.sess.span_err(self.vi_span, &message[]);
+            self.sess.span_err(span, &message[..]);
             self.sess.abort_if_errors();
         }
 
-        let registrar = decoder::get_plugin_registrar_fn(self.metadata.as_slice())
-            .map(|id| decoder::get_symbol(self.metadata.as_slice(), id));
+        let registrar = decoder::get_plugin_registrar_fn(ekrate.metadata.as_slice())
+            .map(|id| decoder::get_symbol(ekrate.metadata.as_slice(), id));
 
-        match (self.dylib.as_ref(), registrar) {
+        match (ekrate.dylib.as_ref(), registrar) {
             (Some(dylib), Some(reg)) => Some((dylib.clone(), reg)),
             (None, Some(_)) => {
-                let message = format!("plugin crate `{}` only found in rlib format, \
+                let message = format!("plugin `{}` only found in rlib format, \
                                        but must be available in dylib format",
-                                       self.info.ident);
-                self.sess.span_err(self.vi_span, &message[]);
+                                       name);
+                self.sess.span_err(span, &message[..]);
                 // No need to abort because the loading code will just ignore this
                 // empty dylib.
                 None

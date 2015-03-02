@@ -43,8 +43,8 @@ fn parse_token_list(file: &str) -> HashMap<String, token::Token> {
             None => continue
         };
 
-        let val = line.slice_to(eq);
-        let num = line.slice_from(eq + 1);
+        let val = &line[..eq];
+        let num = &line[eq + 1..];
 
         let tok = match val {
             "SHR"               => token::BinOp(token::Shr),
@@ -136,27 +136,27 @@ fn str_to_binop(s: &str) -> token::BinOpToken {
 fn fix(mut lit: &str) -> ast::Name {
     if lit.char_at(0) == 'r' {
         if lit.char_at(1) == 'b' {
-            lit = lit.slice_from(2)
+            lit = &lit[2..]
         } else {
-            lit = lit.slice_from(1);
+            lit = &lit[1..];
         }
     } else if lit.char_at(0) == 'b' {
-        lit = lit.slice_from(1);
+        lit = &lit[1..];
     }
 
     let leading_hashes = count(lit);
 
     // +1/-1 to adjust for single quotes
-    parse::token::intern(lit.slice(leading_hashes + 1, lit.len() - leading_hashes - 1))
+    parse::token::intern(&lit[leading_hashes + 1..lit.len() - leading_hashes - 1])
 }
 
 /// Assuming a char/byte literal, strip the 'b' prefix and the single quotes.
 fn fixchar(mut lit: &str) -> ast::Name {
     if lit.char_at(0) == 'b' {
-        lit = lit.slice_from(1);
+        lit = &lit[1..];
     }
 
-    parse::token::intern(lit.slice(1, lit.len() - 1))
+    parse::token::intern(&lit[1..lit.len() - 1])
 }
 
 fn count(lit: &str) -> usize {
@@ -179,7 +179,7 @@ fn parse_antlr_token(s: &str, tokens: &HashMap<String, token::Token>) -> TokenAn
     let toknum = &s[content_end + 3 .. toknum_end];
 
     let proto_tok = tokens.get(toknum).expect(format!("didn't find token {:?} in the map",
-                                                              toknum).as_slice());
+                                                              toknum));
 
     let nm = parse::token::intern(content);
 
@@ -187,8 +187,7 @@ fn parse_antlr_token(s: &str, tokens: &HashMap<String, token::Token>) -> TokenAn
 
     let real_tok = match *proto_tok {
         token::BinOp(..)           => token::BinOp(str_to_binop(content)),
-        token::BinOpEq(..)         => token::BinOpEq(str_to_binop(content.slice_to(
-                                                                    content.len() - 1))),
+        token::BinOpEq(..)         => token::BinOpEq(str_to_binop(&content[..content.len() - 1])),
         token::Literal(token::Str_(..), n)      => token::Literal(token::Str_(fix(content)), n),
         token::Literal(token::StrRaw(..), n)    => token::Literal(token::StrRaw(fix(content),
                                                                              count(content)), n),
@@ -243,16 +242,16 @@ fn main() {
 
     let args = std::os::args();
 
-    let mut token_file = File::open(&Path::new(args[2].as_slice()));
-    let token_map = parse_token_list(token_file.read_to_string().unwrap().as_slice());
+    let mut token_file = File::open(&Path::new(args[2]));
+    let token_map = parse_token_list(token_file.read_to_string().unwrap());
 
     let mut stdin = std::io::stdin();
     let mut lock = stdin.lock();
     let lines = lock.lines();
-    let mut antlr_tokens = lines.map(|l| parse_antlr_token(l.unwrap().as_slice().trim(),
+    let mut antlr_tokens = lines.map(|l| parse_antlr_token(l.unwrap().trim(),
                                                                    &token_map));
 
-    let code = File::open(&Path::new(args[1].as_slice())).unwrap().read_to_string().unwrap();
+    let code = File::open(&Path::new(args[1])).unwrap().read_to_string().unwrap();
     let options = config::basic_options();
     let session = session::build_session(options, None,
                                          syntax::diagnostics::registry::Registry::new(&[]));

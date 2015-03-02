@@ -5,9 +5,7 @@
 This document is the primary reference for the Rust programming language. It
 provides three kinds of material:
 
-  - Chapters that formally define the language grammar and, for each
-    construct, informally describe its semantics and give examples of its
-    use.
+  - Chapters that informally describe each language construct and their use.
   - Chapters that informally describe the memory model, concurrency model,
     runtime services, linkage model and debugging facilities.
   - Appendix chapters providing rationale and references to languages that
@@ -23,8 +21,11 @@ separately by extracting documentation attributes from their source code. Many
 of the features that one might expect to be language features are library
 features in Rust, so what you're looking for may be there, not here.
 
+You may also be interested in the [grammar].
+
 [book]: book/index.html
 [standard]: std/index.html
+[grammar]: grammar.html
 
 # Notation
 
@@ -189,7 +190,7 @@ grammar as double-quoted strings. Other tokens have exact rules given.
 
 |          |          |          |          |         |
 |----------|----------|----------|----------|---------|
-| abstract | alignof  | as       | be       | box     |
+| abstract | alignof  | as       | become   | box     |
 | break    | const    | continue | crate    | do      |
 | else     | enum     | extern   | false    | final   |
 | fn       | for      | if       | impl     | in      |
@@ -250,25 +251,24 @@ cases mentioned in [Number literals](#number-literals) below.
 ##### Unicode escapes
 |   | Name |
 |---|------|
-| `\u7FFF` | 16-bit character code (exactly 4 digits) |
-| `\U7EEEFFFF` | 32-bit character code (exactly 8 digits) |
+| `\u{7FFF}` | 24-bit Unicode character code (up to 6 digits) |
 
 ##### Numbers
 
 | [Number literals](#number-literals)`*` | Example | Exponentiation | Suffixes |
 |----------------------------------------|---------|----------------|----------|
-| Decimal integer | `98_222is` | `N/A` | Integer suffixes |
-| Hex integer | `0xffis` | `N/A` | Integer suffixes |
-| Octal integer | `0o77is` | `N/A` | Integer suffixes |
-| Binary integer | `0b1111_0000is` | `N/A` | Integer suffixes |
-| Floating-point | `123.0E+77f64` | `Optional` | Floating-point suffixes |
+| Decimal integer | `98_222` | `N/A` | Integer suffixes |
+| Hex integer | `0xff` | `N/A` | Integer suffixes |
+| Octal integer | `0o77` | `N/A` | Integer suffixes |
+| Binary integer | `0b1111_0000` | `N/A` | Integer suffixes |
+| Floating-point | `123.0E+77` | `Optional` | Floating-point suffixes |
 
 `*` All number literals allow `_` as a visual separator: `1_234.0E+18f64`
 
 ##### Suffixes
 | Integer | Floating-point |
 |---------|----------------|
-| `is` (`isize`), `us` (`usize`), `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64` | `f32`, `f64` |
+| `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `is` (`isize`), `us` (`usize`) | `f32`, `f64` |
 
 #### Character and string literals
 
@@ -286,8 +286,8 @@ raw_string : '"' raw_string_body '"' | '#' raw_string '#' ;
 common_escape : '\x5c'
               | 'n' | 'r' | 't' | '0'
               | 'x' hex_digit 2
-unicode_escape : 'u' hex_digit 4
-               | 'U' hex_digit 8 ;
+
+unicode_escape : 'u' '{' hex_digit+ 6 '}';
 
 hex_digit : 'a' | 'b' | 'c' | 'd' | 'e' | 'f'
           | 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
@@ -302,7 +302,7 @@ nonzero_dec: '1' | '2' | '3' | '4'
 
 A _character literal_ is a single Unicode character enclosed within two
 `U+0027` (single-quote) characters, with the exception of `U+0027` itself,
-which must be _escaped_ by a preceding U+005C character (`\`).
+which must be _escaped_ by a preceding `U+005C` character (`\`).
 
 ##### String literals
 
@@ -310,6 +310,19 @@ A _string literal_ is a sequence of any Unicode characters enclosed within two
 `U+0022` (double-quote) characters, with the exception of `U+0022` itself,
 which must be _escaped_ by a preceding `U+005C` character (`\`), or a _raw
 string literal_.
+
+A multi-line string literal may be defined by terminating each line with a
+`U+005C` character (`\`) immediately before the newline. This causes the
+`U+005C` character, the newline, and all whitespace at the beginning of the
+next line to be ignored.
+
+```rust
+let a = "foobar";
+let b = "foo\
+         bar";
+
+assert_eq!(a,b);
+```
 
 ##### Character escapes
 
@@ -320,12 +333,9 @@ following forms:
 * An _8-bit codepoint escape_ escape starts with `U+0078` (`x`) and is
   followed by exactly two _hex digits_. It denotes the Unicode codepoint
   equal to the provided hex value.
-* A _16-bit codepoint escape_ starts with `U+0075` (`u`) and is followed
-  by exactly four _hex digits_. It denotes the Unicode codepoint equal to
-  the provided hex value.
-* A _32-bit codepoint escape_ starts with `U+0055` (`U`) and is followed
-  by exactly eight _hex digits_. It denotes the Unicode codepoint equal to
-  the provided hex value.
+* A _24-bit codepoint escape_ starts with `U+0075` (`u`) and is followed
+  by up to six _hex digits_ surrounded by braces `U+007B` (`{`) and `U+007D`
+  (`}`). It denotes the Unicode codepoint equal to the provided hex value.
 * A _whitespace escape_ is one of the characters `U+006E` (`n`), `U+0072`
   (`r`), or `U+0074` (`t`), denoting the unicode values `U+000A` (LF),
   `U+000D` (CR) or `U+0009` (HT) respectively.
@@ -385,11 +395,13 @@ character (`\`), or a single _escape_. It is equivalent to a `u8` unsigned
 
 ##### Byte string literals
 
-A _byte string literal_ is a sequence of ASCII characters and _escapes_
-enclosed within two `U+0022` (double-quote) characters, with the exception of
-`U+0022` itself, which must be _escaped_ by a preceding `U+005C` character
-(`\`), or a _raw byte string literal_. It is equivalent to a `&'static [u8]`
-borrowed array of unsigned 8-bit integers.
+A non-raw _byte string literal_ is a sequence of ASCII characters and _escapes_,
+preceded by the characters `U+0062` (`b`) and `U+0022` (double-quote), and
+followed by the character `U+0022`. If the character `U+0022` is present within
+the literal, it must be _escaped_ by a preceding `U+005C` (`\`) character.
+Alternatively, a byte string literal can be a _raw byte string literal_, defined
+below. A byte string literal is equivalent to a `&'static [u8]` borrowed array
+of unsigned 8-bit integers.
 
 Some additional _escapes_ are available in either byte or non-raw byte string
 literals. An escape starts with a `U+005C` (`\`) and continues with one of the
@@ -466,29 +478,27 @@ An _integer literal_ has one of four forms:
 
 Like any literal, an integer literal may be followed (immediately,
 without any spaces) by an _integer suffix_, which forcibly sets the
-type of the literal. There are 10 valid values for an integer suffix:
-
-* The `is` and `us` suffixes give the literal type `isize` or `usize`,
-  respectively.
-* Each of the signed and unsigned machine types `u8`, `i8`,
-  `u16`, `i16`, `u32`, `i32`, `u64` and `i64`
-  give the literal the corresponding machine type.
+type of the literal. The integer suffix must be the name of one of the
+integral types: `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`,
+`isize`, or `usize`.
 
 The type of an _unsuffixed_ integer literal is determined by type inference.
 If an integer type can be _uniquely_ determined from the surrounding program
 context, the unsuffixed integer literal has that type. If the program context
-underconstrains the type, it is considered a static type error; if the program
-context overconstrains the type, it is also considered a static type error.
+underconstrains the type, it defaults to the signed 32-bit integer `i32`; if
+the program context overconstrains the type, it is considered a static type
+error.
 
 Examples of integer literals of various forms:
 
 ```
-123is;                             // type isize
-123us;                             // type usize
-123_us;                            // type usize
+123i32;                            // type i32
+123u32;                            // type u32
+123_u32;                           // type u32
 0xff_u8;                           // type u8
 0o70_i16;                          // type i16
 0b1111_1111_1001_0000_i32;         // type i32
+0usize;                            // type usize
 ```
 
 ##### Floating-point literals
@@ -517,6 +527,9 @@ let x: f64 = 2.; // type f64
 This last example is different because it is not possible to use the suffix
 syntax with a floating point literal ending in a period. `2.f64` would attempt
 to call a method named `f64` on `2`.
+
+The representation semantics of floating-point numbers are described in
+["Machine Types"](#machine-types).
 
 #### Boolean literals
 
@@ -575,7 +588,7 @@ the final namespace qualifier is omitted.
 Two examples of paths with type arguments:
 
 ```
-# struct HashMap<K, V>;
+# struct HashMap<K, V>(K,V);
 # fn f() {
 # fn id<T>(t: T) -> T { t }
 type T = HashMap<i32,String>; // Type arguments used in a type expression
@@ -647,7 +660,7 @@ All of the above extensions are expressions with values.
 
 Users of `rustc` can define new syntax extensions in two ways:
 
-* [Compiler plugins](book/syntax-extensions.html) can include arbitrary
+* [Compiler plugins][plugin] can include arbitrary
   Rust code that manipulates syntax trees at compile time.
 
 * [Macros](book/macros.html) define new syntax in a higher-level,
@@ -731,15 +744,20 @@ Rust syntax is restricted in two ways:
    pairs when they occur at the beginning of, or immediately after, a `$(...)*`;
    requiring a distinctive token in front can solve the problem.
 
-## Syntax extensions useful for the macro author
+## Syntax extensions useful in macros
+
+* `stringify!` : turn the identifier argument into a string literal
+* `concat!` : concatenates a comma-separated list of literals
+
+## Syntax extensions for macro debugging
 
 * `log_syntax!` : print out the arguments at compile time
 * `trace_macros!` : supply `true` or `false` to enable or disable macro expansion logging
-* `stringify!` : turn the identifier argument into a string literal
-* `concat!` : concatenates a comma-separated list of literals
-* `concat_idents!` : create a new identifier by concatenating the arguments
 
-The following attributes are used for quasiquoting in procedural macros:
+## Quasiquoting
+
+The following syntax extensions are used for quasiquoting Rust syntax trees,
+usually in [procedural macros](book/plugins.html#syntax-extensions):
 
 * `quote_expr!`
 * `quote_item!`
@@ -747,6 +765,8 @@ The following attributes are used for quasiquoting in procedural macros:
 * `quote_stmt!`
 * `quote_tokens!`
 * `quote_ty!`
+
+Documentation is very limited at the moment.
 
 # Crates and source files
 
@@ -817,9 +837,8 @@ item : extern_crate_decl | use_decl | mod_item | fn_item | type_item
      | extern_block ;
 ```
 
-An _item_ is a component of a crate; some module items can be defined in crate
-files, but most are defined in source files. Items are organized within a crate
-by a nested set of [modules](#modules). Every crate has a single "outermost"
+An _item_ is a component of a crate. Items are organized within a crate by a
+nested set of [modules](#modules). Every crate has a single "outermost"
 anonymous module; all further items within the crate have [paths](#paths)
 within the module tree of the crate.
 
@@ -1001,8 +1020,8 @@ fn foo<T>(_: T){}
 fn bar(map1: HashMap<String, usize>, map2: hash_map::HashMap<String, usize>){}
 
 fn main() {
-    // Equivalent to 'std::iter::range_step(0us, 10, 2);'
-    range_step(0us, 10, 2);
+    // Equivalent to 'std::iter::range_step(0, 10, 2);'
+    range_step(0, 10, 2);
 
     // Equivalent to 'foo(vec![std::option::Option::Some(1.0f64),
     // std::option::Option::None]);'
@@ -1061,7 +1080,7 @@ mod foo {
     extern crate core;
 
     use foo::core::iter; // good: foo is at crate root
-//  use core::iter;      // bad:  native is not at the crate root
+//  use core::iter;      // bad:  core is not at the crate root
     use self::baz::foobaz;  // good: self refers to module 'foo'
     use foo::bar::foobar;   // good: foo is at crate root
 
@@ -1135,8 +1154,8 @@ used as a type name.
 
 When a generic function is referenced, its type is instantiated based on the
 context of the reference. For example, calling the `iter` function defined
-above on `[1, 2]` will instantiate type parameter `T` with `isize`, and require
-the closure parameter to have type `fn(isize)`.
+above on `[1, 2]` will instantiate type parameter `T` with `i32`, and require
+the closure parameter to have type `fn(i32)`.
 
 The type parameters can also be explicitly supplied in a trailing
 [path](#paths) component after the function name. This might be necessary if
@@ -1255,9 +1274,7 @@ fn my_err(s: &str) -> ! {
 We call such functions "diverging" because they never return a value to the
 caller. Every control path in a diverging function must end with a `panic!()` or
 a call to another diverging function on every control path. The `!` annotation
-does *not* denote a type. Rather, the result type of a diverging function is a
-special type called ⊥ ("bottom") that unifies with any type. Rust has no
-syntax for ⊥.
+does *not* denote a type.
 
 It might be necessary to declare a diverging function because as mentioned
 previously, the typechecker checks that every control path in a function ends
@@ -1605,7 +1622,7 @@ pointer values (pointing to a type for which an implementation of the given
 trait is in scope) to pointers to the trait name, used as a type.
 
 ```
-# trait Shape { }
+# trait Shape { fn dummy(&self) { } }
 # impl Shape for i32 { }
 # let mycircle = 0i32;
 let myshape: Box<Shape> = Box::new(mycircle) as Box<Shape>;
@@ -1636,8 +1653,8 @@ let x: f64 = Num::from_i32(42);
 Traits may inherit from other traits. For example, in
 
 ```
-trait Shape { fn area() -> f64; }
-trait Circle : Shape { fn radius() -> f64; }
+trait Shape { fn area(&self) -> f64; }
+trait Circle : Shape { fn radius(&self) -> f64; }
 ```
 
 the syntax `Circle : Shape` means that types that implement `Circle` must also
@@ -1680,8 +1697,8 @@ specific type.
 Implementations are defined with the keyword `impl`.
 
 ```
+# #[derive(Copy)]
 # struct Point {x: f64, y: f64};
-# impl Copy for Point {}
 # type Surface = i32;
 # struct BoundingBox {x: f64, y: f64, width: f64, height: f64};
 # trait Shape { fn draw(&self, Surface); fn bounding_box(&self) -> BoundingBox; }
@@ -1731,7 +1748,7 @@ type parameters taken by the trait it implements. Implementation parameters
 are written after the `impl` keyword.
 
 ```
-# trait Seq<T> { }
+# trait Seq<T> { fn dummy(&self, _: T) { } }
 impl<T> Seq<T> for Vec<T> {
    /* ... */
 }
@@ -1815,7 +1832,6 @@ default visibility with the `priv` keyword. When an item is declared as `pub`,
 it can be thought of as being accessible to the outside world. For example:
 
 ```
-# #![allow(missing_copy_implementations)]
 # fn main() {}
 // Declare a private struct
 struct Foo;
@@ -2017,6 +2033,11 @@ type int8_t = i8;
 - `no_start` - disable linking to the `native` crate, which specifies the
   "start" language item.
 - `no_std` - disable linking to the `std` crate.
+- `plugin` — load a list of named crates as compiler plugins, e.g.
+             `#![plugin(foo, bar)]`. Optional arguments for each plugin,
+             i.e. `#![plugin(foo(... args ...))]`, are provided to the plugin's
+             registrar function.  The `plugin` feature gate is required to use
+             this attribute.
 
 ### Module-only attributes
 
@@ -2085,7 +2106,7 @@ On `struct`s:
   remove any padding between fields (note that this is very fragile and may
   break platforms which require aligned access).
 
-### Macro- and plugin-related attributes
+### Macro-related attributes
 
 - `macro_use` on a `mod` — macros defined in this module will be visible in the
   module's parent, after this module has been included.
@@ -2100,13 +2121,8 @@ On `struct`s:
 
 - `macro_export` - export a macro for cross-crate usage.
 
-- `plugin` on an `extern crate` — load this crate as a [compiler
-  plugin][plugin].  The `plugin` feature gate is required.  Any arguments to
-  the attribute, e.g. `#[plugin=...]` or `#[plugin(...)]`, are provided to the
-  plugin.
-
-- `no_link` on an `extern crate` — even if we load this crate for macros or
-  compiler plugins, don't link it into the output.
+- `no_link` on an `extern crate` — even if we load this crate for macros, don't
+  link it into the output.
 
 See the [macros section of the
 book](book/macros.html#scoping-and-macro-import/export) for more information on
@@ -2169,7 +2185,7 @@ fn needs_foo_or_bar() {
 
 // This function is only included when compiling for a unixish OS with a 32-bit
 // architecture
-#[cfg(all(unix, target_word_size = "32"))]
+#[cfg(all(unix, target_pointer_width = "32"))]
 fn on_32bit_unix() {
   // ...
 }
@@ -2195,10 +2211,11 @@ The following configurations must be defined by the implementation:
   `"unix"` or `"windows"`. The value of this configuration option is defined
   as a configuration itself, like `unix` or `windows`.
 * `target_os = "..."`. Operating system of the target, examples include
-  `"win32"`, `"macos"`, `"linux"`, `"android"`, `"freebsd"` or `"dragonfly"`.
-* `target_word_size = "..."`. Target word size in bits. This is set to `"32"`
-  for targets with 32-bit pointers, and likewise set to `"64"` for 64-bit
-  pointers.
+  `"win32"`, `"macos"`, `"linux"`, `"android"`, `"freebsd"`, `"dragonfly"`,
+  `"bitrig"` or `"openbsd"`.
+* `target_pointer_width = "..."`. Target pointer width in bits. This is set
+  to `"32"` for targets with 32-bit pointers, and likewise set to `"64"` for
+  64-bit pointers.
 * `unix`. See `target_family`.
 * `windows`. See `target_family`.
 
@@ -2219,7 +2236,7 @@ For any lint check `C`:
 
 The lint checks supported by the compiler can be found via `rustc -W help`,
 along with their default settings.  [Compiler
-plugins](book/plugin.html#lint-plugins) can provide additional lint checks.
+plugins](book/plugins.html#lint-plugins) can provide additional lint checks.
 
 ```{.ignore}
 mod m1 {
@@ -2356,79 +2373,8 @@ Supported traits for `derive` are:
 * `FromPrimitive`, to create an instance from a numeric primitive.
 * `Hash`, to iterate over the bytes in a data type.
 * `Rand`, to create a random instance of a data type.
-* `Show`, to format a value using the `{}` formatter.
-* `Zero`, to create a zero instance of a numeric data type.
-
-### Stability
-
-One can indicate the stability of an API using the following attributes:
-
-* `deprecated`: This item should no longer be used, e.g. it has been
-  replaced. No guarantee of backwards-compatibility.
-* `experimental`: This item was only recently introduced or is
-  otherwise in a state of flux. It may change significantly, or even
-  be removed. No guarantee of backwards-compatibility.
-* `unstable`: This item is still under development, but requires more
-  testing to be considered stable. No guarantee of backwards-compatibility.
-* `stable`: This item is considered stable, and will not change
-  significantly. Guarantee of backwards-compatibility.
-* `frozen`: This item is very stable, and is unlikely to
-  change. Guarantee of backwards-compatibility.
-* `locked`: This item will never change unless a serious bug is
-  found. Guarantee of backwards-compatibility.
-
-These levels are directly inspired by
-[Node.js' "stability index"](http://nodejs.org/api/documentation.html).
-
-Stability levels are inherited, so an item's stability attribute is the default
-stability for everything nested underneath it.
-
-There are lints for disallowing items marked with certain levels: `deprecated`,
-`experimental` and `unstable`. For now, only `deprecated` warns by default, but
-this will change once the standard library has been stabilized. Stability
-levels are meant to be promises at the crate level, so these lints only apply
-when referencing items from an _external_ crate, not to items defined within
-the current crate. Items with no stability level are considered to be unstable
-for the purposes of the lint. One can give an optional string that will be
-displayed when the lint flags the use of an item.
-
-For example, if we define one crate called `stability_levels`:
-
-```{.ignore}
-#[deprecated="replaced by `best`"]
-pub fn bad() {
-    // delete everything
-}
-
-pub fn better() {
-    // delete fewer things
-}
-
-#[stable]
-pub fn best() {
-    // delete nothing
-}
-```
-
-then the lints will work as follows for a client crate:
-
-```{.ignore}
-#![warn(unstable)]
-extern crate stability_levels;
-use stability_levels::{bad, better, best};
-
-fn main() {
-    bad(); // "warning: use of deprecated item: replaced by `best`"
-
-    better(); // "warning: use of unmarked item"
-
-    best(); // no warning
-}
-```
-
-> **Note:** Currently these are only checked when applied to individual
-> functions, structs, methods and enum variants, *not* to entire modules,
-> traits, impls or enums themselves.
+* `Debug`, to format a value using the `{:?}` formatter.
+* `Copy`, for "Plain Old Data" types which can be copied by simply moving bits.
 
 ### Compiler Features
 
@@ -2450,20 +2396,36 @@ considered off, and using the features will result in a compiler error.
 
 The currently implemented features of the reference compiler are:
 
+* `advanced_slice_patterns` - see the [match expressions](#match-expressions)
+                              section for discussion; the exact semantics of
+                              slice patterns are subject to change.
+
 * `asm` - The `asm!` macro provides a means for inline assembly. This is often
           useful, but the exact syntax for this feature along with its
           semantics are likely to change, so this macro usage must be opted
           into.
 
+* `associated_types` - Allows type aliases in traits. Experimental.
+
+* `box_patterns` - Allows `box` patterns, the exact semantics of which
+                   is subject to change.
+
+* `box_syntax` - Allows use of `box` expressions, the exact semantics of which
+                 is subject to change.
+
 * `concat_idents` - Allows use of the `concat_idents` macro, which is in many
                     ways insufficient for concatenating identifiers, and may be
                     removed entirely for something more wholesome.
 
-* `default_type_params` - Allows use of default type parameters. The future of
-                          this feature is uncertain.
+* `custom_attribute` - Allows the usage of attributes unknown to the compiler
+                       so that new attributes can be added in a bacwards compatible
+                       manner (RFC 572).
 
 * `intrinsics` - Allows use of the "rust-intrinsics" ABI. Compiler intrinsics
                  are inherently unstable and no promise about them is made.
+
+* `int_uint` - Allows the use of the `int` and `uint` types, which are deprecated.
+               Use `isize` and `usize` instead.
 
 * `lang_items` - Allows use of the `#[lang]` attribute. Like `intrinsics`,
                  lang items are inherently unstable and no promise about them
@@ -2483,11 +2445,32 @@ The currently implemented features of the reference compiler are:
 * `log_syntax` - Allows use of the `log_syntax` macro attribute, which is a
                  nasty hack that will certainly be removed.
 
+* `main` - Allows use of the `#[main]` attribute, which changes the entry point
+           into a Rust program. This capabiilty is subject to change.
+
+* `macro_reexport` - Allows macros to be re-exported from one crate after being imported
+                     from another. This feature was originally designed with the sole
+                     use case of the Rust standard library in mind, and is subject to
+                     change.
+
 * `non_ascii_idents` - The compiler supports the use of non-ascii identifiers,
                        but the implementation is a little rough around the
                        edges, so this can be seen as an experimental feature
                        for now until the specification of identifiers is fully
                        fleshed out.
+
+* `no_std` - Allows the `#![no_std]` crate attribute, which disables the implicit
+             `extern crate std`. This typically requires use of the unstable APIs
+             behind the libstd "facade", such as libcore and libcollections. It
+             may also cause problems when using syntax extensions, including
+             `#[derive]`.
+
+* `on_unimplemented` - Allows the `#[rustc_on_unimplemented]` attribute, which allows
+                       trait definitions to add specialized notes to error messages
+                       when an implementation was expected but not found.
+
+* `optin_builtin_traits` - Allows the definition of default and negative trait
+                           implementations. Experimental.
 
 * `plugin` - Usage of [compiler plugins][plugin] for custom lints or syntax extensions.
              These depend on compiler internals and are subject to change.
@@ -2498,11 +2481,23 @@ The currently implemented features of the reference compiler are:
             implemented very poorly and will likely change significantly
             with a proper implementation.
 
+* `rustc_attrs` - Gates internal `#[rustc_*]` attributes which may be
+                  for internal use only or have meaning added to them in the future.
+
 * `rustc_diagnostic_macros`- A mysterious feature, used in the implementation
                              of rustc, not meant for mortals.
 
 * `simd` - Allows use of the `#[simd]` attribute, which is overly simple and
            not the SIMD interface we want to expose in the long term.
+
+* `simd_ffi` - Allows use of SIMD vectors in signatures for foreign functions.
+               The SIMD interface is subject to change.
+
+* `staged_api` - Allows usage of stability markers and `#![staged_api]` in a crate
+
+* `start` - Allows use of the `#[start]` attribute, which changes the entry point
+            into a Rust program. This capabiilty, especially the signature for the
+            annotated function, is subject to change.
 
 * `struct_inherit` - Allows using struct inheritance, which is barely
                      implemented and will probably be removed. Don't use this.
@@ -2531,7 +2526,20 @@ The currently implemented features of the reference compiler are:
                         which is considered wildly unsafe and will be
                         obsoleted by language improvements.
 
-* `associated_types` - Allows type aliases in traits. Experimental.
+* `unsafe_no_drop_flag` - Allows use of the `#[unsafe_no_drop_flag]` attribute,
+                          which removes hidden flag added to a type that
+                          implements the `Drop` trait. The design for the
+                          `Drop` flag is subject to change, and this feature
+                          may be removed in the future.
+
+* `unmarked_api` - Allows use of items within a `#![staged_api]` crate
+                   which have not been marked with a stability marker.
+                   Such items should not be allowed by the compiler to exist,
+                   so if you need this there probably is a compiler bug.
+
+* `visible_private_types` - Allows public APIs to expose otherwise private
+                            types, e.g. as the return type of a public function.
+                            This capability may be removed in the future.
 
 If a feature is promoted to a language feature, then all existing programs will
 start to receive compilation warnings about #[feature] directives which enabled
@@ -2651,9 +2659,8 @@ of any reference that points to it.
 
 When a [local variable](#memory-slots) is used as an
 [rvalue](#lvalues,-rvalues-and-temporaries) the variable will either be moved
-or copied, depending on its type. For types that contain [owning
-pointers](#pointer-types) or values that implement the special trait `Drop`,
-the variable is moved. All other types are copied.
+or copied, depending on its type. All values whose type implements `Copy` are
+copied, all others are moved.
 
 ### Literal expressions
 
@@ -2761,9 +2768,19 @@ items can bring new names into scopes and declared items are in scope for only
 the block itself.
 
 A block will execute each statement sequentially, and then execute the
-expression (if given). If the final expression is omitted, the type and return
-value of the block are `()`, but if it is provided, the type and return value
-of the block are that of the expression itself.
+expression (if given). If the block ends in a statement, its value is `()`:
+
+```
+let x: () = { println!("Hello."); };
+```
+
+If it ends in an expression, its value and type are that of the expression:
+
+```
+let x: i32 = { println!("Hello."); 5 };
+
+assert_eq!(5, x);
+```
 
 ### Method-call expressions
 
@@ -2817,9 +2834,9 @@ constant expression that can be evaluated at compile time, such as a
 [literal](#literals) or a [static item](#static-items).
 
 ```
-[1is, 2, 3, 4];
+[1, 2, 3, 4];
 ["a", "b", "c", "d"];
-[0is; 128];            // array with 128 zeros
+[0; 128];              // array with 128 zeros
 [0u8, 0u8, 0u8, 0u8];
 ```
 
@@ -2992,7 +3009,7 @@ moves](#moved-and-copied-types) its right-hand operand to its left-hand
 operand.
 
 ```
-# let mut x = 0is;
+# let mut x = 0;
 # let y = 0;
 
 x = y;
@@ -3065,7 +3082,7 @@ Some examples of call expressions:
 # fn add(x: i32, y: i32) -> i32 { 0 }
 
 let x: i32 = add(1i32, 2i32);
-let pi: Option<f32> = "3.14".parse();
+let pi: Result<f32, _> = "3.14".parse();
 ```
 
 ### Lambda expressions
@@ -3128,7 +3145,7 @@ conditional expression evaluates to `false`, the `while` expression completes.
 An example:
 
 ```
-let mut i = 0us;
+let mut i = 0;
 
 while i < 10 {
     println!("hello");
@@ -3208,7 +3225,7 @@ An example of a for loop over a series of integers:
 
 ```
 # fn bar(b:usize) { }
-for i in range(0us, 256) {
+for i in 0..256 {
     bar(i);
 }
 ```
@@ -3256,6 +3273,7 @@ stands for a *single* data field, whereas a wildcard `..` stands for *all* the
 fields of a particular variant. For example:
 
 ```
+#![feature(box_patterns)]
 #![feature(box_syntax)]
 enum List<X> { Nil, Cons(X, Box<List<X>>) }
 
@@ -3319,6 +3337,7 @@ the inside of the match.
 An example of a `match` expression:
 
 ```
+#![feature(box_patterns)]
 #![feature(box_syntax)]
 # fn process_pair(a: i32, b: i32) { }
 # fn process_ten() { }
@@ -3354,6 +3373,7 @@ Subpatterns can also be bound to variables by the use of the syntax `variable @
 subpattern`. For example:
 
 ```
+#![feature(box_patterns)]
 #![feature(box_syntax)]
 
 enum List { Nil, Cons(uint, Box<List>) }
@@ -3378,11 +3398,11 @@ fn main() {
 ```
 
 Patterns can also dereference pointers by using the `&`, `&mut` and `box`
-symbols, as appropriate. For example, these two matches on `x: &isize` are
+symbols, as appropriate. For example, these two matches on `x: &i32` are
 equivalent:
 
 ```
-# let x = &3is;
+# let x = &3;
 let y = match *x { 0 => "zero", _ => "some" };
 let z = match x { &0 => "zero", _ => "some" };
 
@@ -3403,7 +3423,7 @@ Multiple match patterns may be joined with the `|` operator. A range of values
 may be specified with `...`. For example:
 
 ```
-# let x = 2is;
+# let x = 2;
 
 let message = match x {
   0 | 1  => "not many",
@@ -3557,10 +3577,8 @@ Tuple types and values are denoted by listing the types or values of their
 elements, respectively, in a parenthesized, comma-separated list.
 
 Because tuple elements don't have a name, they can only be accessed by
-pattern-matching.
-
-The members of a tuple are laid out in memory contiguously, in order specified
-by the tuple type.
+pattern-matching or by using `N` directly as a field to access the
+`N`th element.
 
 An example of a tuple type and its use:
 
@@ -3569,6 +3587,7 @@ type Pair<'a> = (i32, &'a str);
 let p: Pair<'static> = (10, "hello");
 let (a, b) = p;
 assert!(b != "world");
+assert!(p.0 == 10);
 ```
 
 ### Array, and Slice types
@@ -3589,7 +3608,7 @@ An example of each kind:
 ```{rust}
 let vec: Vec<i32> = vec![1, 2, 3];
 let arr: [i32; 3] = [1, 2, 3];
-let s: &[i32] = vec.as_slice();
+let s: &[i32] = &vec[..];
 ```
 
 As you can see, the `vec!` macro allows you to create a `Vec<T>` easily. The
@@ -3744,16 +3763,16 @@ The type of a closure mapping an input of type `A` to an output of type `B` is
 An example of creating and calling a closure:
 
 ```rust
-let captured_var = 10is;
+let captured_var = 10;
 
-let closure_no_args = |&:| println!("captured_var={}", captured_var);
+let closure_no_args = || println!("captured_var={}", captured_var);
 
-let closure_args = |&: arg: isize| -> isize {
+let closure_args = |arg: i32| -> i32 {
   println!("captured_var={}, arg={}", captured_var, arg);
   arg // Note lack of semicolon after 'arg'
 };
 
-fn call_closure<F: Fn(), G: Fn(isize) -> isize>(c1: F, c2: G) {
+fn call_closure<F: Fn(), G: Fn(i32) -> i32>(c1: F, c2: G) {
   c1();
   c2(2);
 }
@@ -3785,7 +3804,7 @@ trait Printable {
   fn stringify(&self) -> String;
 }
 
-impl Printable for isize {
+impl Printable for i32 {
   fn stringify(&self) -> String { self.to_string() }
 }
 
@@ -3794,7 +3813,7 @@ fn print(a: Box<Printable>) {
 }
 
 fn main() {
-   print(Box::new(10is) as Box<Printable>);
+   print(Box::new(10) as Box<Printable>);
 }
 ```
 
@@ -4234,4 +4253,4 @@ that have since been removed):
   pattern syntax
 
 [ffi]: book/ffi.html
-[plugin]: book/plugin.html
+[plugin]: book/plugins.html

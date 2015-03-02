@@ -49,6 +49,12 @@ fn expand_deriving_decodable_imp<F>(cx: &mut ExtCtxt,
                                     krate: &'static str) where
     F: FnOnce(P<Item>),
 {
+    if !cx.use_std {
+        // FIXME(#21880): lift this requirement.
+        cx.span_err(span, "this trait cannot be derived with #![no_std]");
+        return;
+    }
+
     let trait_def = TraitDef {
         span: span,
         attributes: Vec::new(),
@@ -68,9 +74,9 @@ fn expand_deriving_decodable_imp<F>(cx: &mut ExtCtxt,
                 args: vec!(Ptr(box Literal(Path::new_local("__D")),
                             Borrowed(None, MutMutable))),
                 ret_ty: Literal(Path::new_(
-                    vec!("std", "result", "Result"),
+                    pathvec_std!(cx, core::result::Result),
                     None,
-                    vec!(box Self, box Literal(Path::new_(
+                    vec!(box Self_, box Literal(Path::new_(
                         vec!["__D", "Error"], None, vec![], false
                     ))),
                     true
@@ -198,7 +204,7 @@ fn decode_static_fields<F>(cx: &mut ExtCtxt,
             } else {
                 let fields = fields.iter().enumerate().map(|(i, &span)| {
                     getarg(cx, span,
-                           token::intern_and_get_ident(&format!("_field{}", i)[]),
+                           token::intern_and_get_ident(&format!("_field{}", i)),
                            i)
                 }).collect();
 

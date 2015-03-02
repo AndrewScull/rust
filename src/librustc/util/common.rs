@@ -13,7 +13,7 @@
 use std::cell::{RefCell, Cell};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::iter::repeat;
 use std::time::Duration;
 use std::collections::hash_state::HashState;
@@ -22,9 +22,12 @@ use syntax::ast;
 use syntax::visit;
 use syntax::visit::Visitor;
 
+// The name of the associated type for `Fn` return types
+pub const FN_OUTPUT_NAME: &'static str = "Output";
+
 // Useful type to use with `Result<>` indicate that an error has already
 // been reported to the user, so no need to continue checking.
-#[derive(Clone, Copy, Show)]
+#[derive(Clone, Copy, Debug)]
 pub struct ErrorReported;
 
 pub fn time<T, U, F>(do_it: bool, what: &str, u: U, f: F) -> T where
@@ -93,7 +96,7 @@ impl<'v, P> Visitor<'v> for LoopQueryVisitor<P> where P: FnMut(&ast::Expr_) -> b
         match e.node {
           // Skip inner loops, since a break in the inner loop isn't a
           // break inside the outer loop
-          ast::ExprLoop(..) | ast::ExprWhile(..) | ast::ExprForLoop(..) => {}
+          ast::ExprLoop(..) | ast::ExprWhile(..) => {}
           _ => visit::walk_expr(self, e)
         }
     }
@@ -135,17 +138,16 @@ pub fn block_query<P>(b: &ast::Block, p: P) -> bool where P: FnMut(&ast::Expr) -
 
 /// K: Eq + Hash<S>, V, S, H: Hasher<S>
 ///
-/// Determines whether there exists a path from `source` to `destination`.  The graph is defined by
-/// the `edges_map`, which maps from a node `S` to a list of its adjacent nodes `T`.
+/// Determines whether there exists a path from `source` to `destination`.  The
+/// graph is defined by the `edges_map`, which maps from a node `S` to a list of
+/// its adjacent nodes `T`.
 ///
-/// Efficiency note: This is implemented in an inefficient way because it is typically invoked on
-/// very small graphs. If the graphs become larger, a more efficient graph representation and
-/// algorithm would probably be advised.
+/// Efficiency note: This is implemented in an inefficient way because it is
+/// typically invoked on very small graphs. If the graphs become larger, a more
+/// efficient graph representation and algorithm would probably be advised.
 pub fn can_reach<T, S>(edges_map: &HashMap<T, Vec<T>, S>, source: T,
                        destination: T) -> bool
-    where S: HashState,
-          <S as HashState>::Hasher: Hasher<Output=u64>,
-          T: Hash< <S as HashState>::Hasher> + Eq + Clone,
+    where S: HashState, T: Hash + Eq + Clone,
 {
     if source == destination {
         return true;
@@ -160,7 +162,7 @@ pub fn can_reach<T, S>(edges_map: &HashMap<T, Vec<T>, S>, source: T,
     while i < queue.len() {
         match edges_map.get(&queue[i]) {
             Some(edges) => {
-                for target in edges.iter() {
+                for target in edges {
                     if *target == destination {
                         return true;
                     }
@@ -184,8 +186,8 @@ pub fn can_reach<T, S>(edges_map: &HashMap<T, Vec<T>, S>, source: T,
 /// ```
 /// pub fn memoized<T: Clone, U: Clone, M: MutableMap<T, U>>(
 ///    cache: &RefCell<M>,
-///    f: &|&: T| -> U
-/// ) -> impl |&: T| -> U {
+///    f: &|T| -> U
+/// ) -> impl |T| -> U {
 /// ```
 /// but currently it is not possible.
 ///
@@ -204,14 +206,13 @@ pub fn can_reach<T, S>(edges_map: &HashMap<T, Vec<T>, S>, source: T,
 /// ```
 #[inline(always)]
 pub fn memoized<T, U, S, F>(cache: &RefCell<HashMap<T, U, S>>, arg: T, f: F) -> U
-    where T: Clone + Hash<<S as HashState>::Hasher> + Eq,
+    where T: Clone + Hash + Eq,
           U: Clone,
           S: HashState,
-          <S as HashState>::Hasher: Hasher<Output=u64>,
           F: FnOnce(T) -> U,
 {
     let key = arg.clone();
-    let result = cache.borrow().get(&key).map(|result| result.clone());
+    let result = cache.borrow().get(&key).cloned();
     match result {
         Some(result) => result,
         None => {

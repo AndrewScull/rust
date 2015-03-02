@@ -10,6 +10,7 @@
 
 //! Implementation of the `build` subcommand, used to compile a book.
 
+use std::env;
 use std::os;
 use std::old_io;
 use std::old_io::{fs, File, BufferedWriter, TempDir, IoResult};
@@ -40,7 +41,7 @@ fn write_toc(book: &Book, path_to_root: &Path, out: &mut Writer) -> IoResult<()>
                   path_to_root: &Path,
                   out: &mut Writer) -> IoResult<()> {
         for (i, item) in items.iter().enumerate() {
-            try!(walk_item(item, &format!("{}{}.", section, i + 1)[], path_to_root, out));
+            try!(walk_item(item, &format!("{}{}.", section, i + 1)[..], path_to_root, out));
         }
         Ok(())
     }
@@ -54,7 +55,7 @@ fn write_toc(book: &Book, path_to_root: &Path, out: &mut Writer) -> IoResult<()>
                  item.title));
         if !item.children.is_empty() {
             try!(writeln!(out, "<ul class='section'>"));
-            let _ = walk_items(&item.children[], section, path_to_root, out);
+            let _ = walk_items(&item.children[..], section, path_to_root, out);
             try!(writeln!(out, "</ul>"));
         }
         try!(writeln!(out, "</li>"));
@@ -64,7 +65,7 @@ fn write_toc(book: &Book, path_to_root: &Path, out: &mut Writer) -> IoResult<()>
 
     try!(writeln!(out, "<div id='toc' class='mobile-hidden'>"));
     try!(writeln!(out, "<ul class='chapter'>"));
-    try!(walk_items(&book.chapters[], "", path_to_root, out));
+    try!(walk_items(&book.chapters[..], "", path_to_root, out));
     try!(writeln!(out, "</ul>"));
     try!(writeln!(out, "</div>"));
 
@@ -80,10 +81,10 @@ fn render(book: &Book, tgt: &Path) -> CliResult<()> {
         let out_path = tgt.join(item.path.dirname());
 
         let src;
-        if os::args().len() < 3 {
+        if env::args().len() < 3 {
             src = os::getcwd().unwrap().clone();
         } else {
-            src = Path::new(os::args()[2].clone());
+            src = Path::new(env::args().nth(2).unwrap().clone());
         }
         // preprocess the markdown, rerouting markdown references to html references
         let markdown_data = try!(File::open(&src.join(&item.path)).read_to_string());
@@ -91,7 +92,7 @@ fn render(book: &Book, tgt: &Path) -> CliResult<()> {
         {
             let urls = markdown_data.replace(".md)", ".html)");
             try!(File::create(&preprocessed_path)
-                      .write_str(&urls[]));
+                      .write_str(&urls[..]));
         }
 
         // write the prelude to a temporary HTML file for rustdoc inclusion
@@ -153,16 +154,16 @@ impl Subcommand for Build {
         let src;
         let tgt;
 
-        if os::args().len() < 3 {
+        if env::args().len() < 3 {
             src = cwd.clone();
         } else {
-            src = Path::new(os::args()[2].clone());
+            src = Path::new(env::args().nth(2).unwrap().clone());
         }
 
-        if os::args().len() < 4 {
+        if env::args().len() < 4 {
             tgt = cwd.join("_book");
         } else {
-            tgt = Path::new(os::args()[3].clone());
+            tgt = Path::new(env::args().nth(3).unwrap().clone());
         }
 
         try!(fs::mkdir(&tgt, old_io::USER_DIR));
@@ -177,8 +178,8 @@ impl Subcommand for Build {
             }
             Err(errors) => {
                 let n = errors.len();
-                for err in errors.into_iter() {
-                    term.err(&format!("error: {}", err)[]);
+                for err in errors {
+                    term.err(&format!("error: {}", err)[..]);
                 }
 
                 Err(box format!("{} errors occurred", n) as Box<Error>)

@@ -15,7 +15,7 @@
 //! This API is completely unstable and subject to change.
 
 #![crate_name = "rustc_trans"]
-#![unstable]
+#![unstable(feature = "rustc_private")]
 #![staged_api]
 #![crate_type = "dylib"]
 #![crate_type = "rlib"]
@@ -23,13 +23,22 @@
       html_favicon_url = "http://www.rust-lang.org/favicon.ico",
       html_root_url = "http://doc.rust-lang.org/nightly/")]
 
-#![allow(unknown_features)]
-#![feature(quote)]
-#![feature(slicing_syntax, unsafe_destructor)]
+#![feature(alloc)]
+#![feature(box_patterns)]
 #![feature(box_syntax)]
+#![feature(collections)]
+#![feature(core)]
+#![feature(int_uint)]
+#![feature(old_io)]
+#![feature(libc)]
+#![feature(old_path)]
+#![feature(quote)]
 #![feature(rustc_diagnostic_macros)]
-#![allow(unknown_features)] #![feature(int_uint)]
-#![allow(unstable)]
+#![feature(rustc_private)]
+#![feature(unsafe_destructor)]
+#![feature(staged_api)]
+#![feature(std_misc)]
+#![feature(unicode)]
 
 extern crate arena;
 extern crate flate;

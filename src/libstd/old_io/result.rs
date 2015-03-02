@@ -87,7 +87,7 @@ mod test {
         let mut writer: old_io::IoResult<Vec<u8>> = Ok(Vec::new());
         writer.write_all(&[0, 1, 2]).unwrap();
         writer.flush().unwrap();
-        assert_eq!(writer.unwrap(), vec!(0, 1, 2));
+        assert_eq!(writer.unwrap(), [0, 1, 2]);
     }
 
     #[test]
@@ -112,7 +112,7 @@ mod test {
         let mut buf = [0, 0];
         reader.read(&mut buf).unwrap();
         let b: &[_] = &[0, 1];
-        assert_eq!(buf.as_slice(), b);
+        assert_eq!(buf, b);
     }
 
     #[test]

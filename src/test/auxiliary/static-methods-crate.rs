@@ -11,21 +11,19 @@
 #![crate_name="static_methods_crate"]
 #![crate_type = "lib"]
 
-use std::int;
-
 pub trait read {
     fn readMaybe(s: String) -> Option<Self>;
 }
 
-impl read for int {
-    fn readMaybe(s: String) -> Option<int> {
-        s.parse()
+impl read for isize {
+    fn readMaybe(s: String) -> Option<isize> {
+        s.parse().ok()
     }
 }
 
 impl read for bool {
     fn readMaybe(s: String) -> Option<bool> {
-        match s.as_slice() {
+        match &*s {
           "true" => Some(true),
           "false" => Some(false),
           _ => None

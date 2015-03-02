@@ -25,7 +25,7 @@
 use prelude::v1::*;
 
 use ffi::CString;
-use path::BytesContainer;
+use old_path::BytesContainer;
 use old_io::{Listener, Acceptor, IoResult, TimedOut, standard_error};
 use sys::pipe::UnixAcceptor as UnixAcceptorImp;
 use sys::pipe::UnixListener as UnixListenerImp;
@@ -57,7 +57,7 @@ impl UnixStream {
     /// stream.write(&[1, 2, 3]);
     /// ```
     pub fn connect<P: BytesContainer>(path: P) -> IoResult<UnixStream> {
-        let path = CString::from_slice(path.container_as_bytes());
+        let path = try!(CString::new(path.container_as_bytes()));
         UnixStreamImp::connect(&path, None)
             .map(|inner| UnixStream { inner: inner })
     }
@@ -70,7 +70,8 @@ impl UnixStream {
     ///
     /// If a `timeout` with zero or negative duration is specified then
     /// the function returns `Err`, with the error kind set to `TimedOut`.
-    #[unstable = "the timeout argument is likely to change types"]
+    #[unstable(feature = "io",
+               reason = "the timeout argument is likely to change types")]
     pub fn connect_timeout<P>(path: P, timeout: Duration)
                               -> IoResult<UnixStream>
                               where P: BytesContainer {
@@ -78,7 +79,7 @@ impl UnixStream {
             return Err(standard_error(TimedOut));
         }
 
-        let path = CString::from_slice(path.container_as_bytes());
+        let path = try!(CString::new(path.container_as_bytes()));
         UnixStreamImp::connect(&path, Some(timeout.num_milliseconds() as u64))
             .map(|inner| UnixStream { inner: inner })
     }
@@ -109,7 +110,8 @@ impl UnixStream {
     /// Sets the read/write timeout for this socket.
     ///
     /// For more information, see `TcpStream::set_timeout`
-    #[unstable = "the timeout argument may change in type and value"]
+    #[unstable(feature = "io",
+               reason = "the timeout argument may change in type and value")]
     pub fn set_timeout(&mut self, timeout_ms: Option<u64>) {
         self.inner.set_timeout(timeout_ms)
     }
@@ -117,7 +119,8 @@ impl UnixStream {
     /// Sets the read timeout for this socket.
     ///
     /// For more information, see `TcpStream::set_timeout`
-    #[unstable = "the timeout argument may change in type and value"]
+    #[unstable(feature = "io",
+               reason = "the timeout argument may change in type and value")]
     pub fn set_read_timeout(&mut self, timeout_ms: Option<u64>) {
         self.inner.set_read_timeout(timeout_ms)
     }
@@ -125,7 +128,8 @@ impl UnixStream {
     /// Sets the write timeout for this socket.
     ///
     /// For more information, see `TcpStream::set_timeout`
-    #[unstable = "the timeout argument may change in type and value"]
+    #[unstable(feature = "io",
+               reason = "the timeout argument may change in type and value")]
     pub fn set_write_timeout(&mut self, timeout_ms: Option<u64>) {
         self.inner.set_write_timeout(timeout_ms)
     }
@@ -182,7 +186,7 @@ impl UnixListener {
     /// # }
     /// ```
     pub fn bind<P: BytesContainer>(path: P) -> IoResult<UnixListener> {
-        let path = CString::from_slice(path.container_as_bytes());
+        let path = try!(CString::new(path.container_as_bytes()));
         UnixListenerImp::bind(&path)
             .map(|inner| UnixListener { inner: inner })
     }
@@ -219,8 +223,9 @@ impl UnixAcceptor {
     /// When using this method, it is likely necessary to reset the timeout as
     /// appropriate, the timeout specified is specific to this object, not
     /// specific to the next request.
-    #[unstable = "the name and arguments to this function are likely \
-                      to change"]
+    #[unstable(feature = "io",
+               reason = "the name and arguments to this function are likely \
+                         to change")]
     pub fn set_timeout(&mut self, timeout_ms: Option<u64>) {
         self.inner.set_timeout(timeout_ms)
     }
@@ -229,7 +234,7 @@ impl UnixAcceptor {
     ///
     /// This function has the same semantics as `TcpAcceptor::close_accept`, and
     /// more information can be found in that documentation.
-    #[unstable]
+    #[unstable(feature = "io")]
     pub fn close_accept(&mut self) -> IoResult<()> {
         self.inner.close_accept()
     }
@@ -279,19 +284,19 @@ mod tests {
     use old_io::test::*;
     use super::*;
     use sync::mpsc::channel;
-    use thread::Thread;
+    use thread;
     use time::Duration;
 
     pub fn smalltest<F,G>(server: F, client: G)
         where F : FnOnce(UnixStream), F : Send,
-              G : FnOnce(UnixStream), G : Send
+              G : FnOnce(UnixStream), G : Send + 'static
     {
         let path1 = next_test_unix();
         let path2 = path1.clone();
 
         let mut acceptor = UnixListener::bind(&path1).listen();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             match UnixStream::connect(&path2) {
                 Ok(c) => client(c),
                 Err(e) => panic!("failed connect: {}", e),
@@ -386,8 +391,8 @@ mod tests {
             Err(e) => panic!("failed listen: {}", e),
         };
 
-        let _t = Thread::spawn(move|| {
-            for _ in range(0u, times) {
+        let _t = thread::spawn(move|| {
+            for _ in 0..times {
                 let mut stream = UnixStream::connect(&path2);
                 match stream.write(&[100]) {
                     Ok(..) => {}
@@ -396,7 +401,7 @@ mod tests {
             }
         });
 
-        for _ in range(0, times) {
+        for _ in 0..times {
             let mut client = acceptor.accept();
             let mut buf = [0];
             match client.read(&mut buf) {
@@ -420,7 +425,7 @@ mod tests {
         let addr = next_test_unix();
         let mut acceptor = UnixListener::bind(&addr).listen();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut s = UnixStream::connect(&addr);
             let mut buf = [0, 0];
             debug!("client reading");
@@ -436,7 +441,7 @@ mod tests {
 
         let (tx1, rx1) = channel();
         let (tx2, rx2) = channel();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut s2 = s2;
             rx1.recv().unwrap();
             debug!("writer writing");
@@ -459,7 +464,7 @@ mod tests {
         let (tx1, rx) = channel();
         let tx2 = tx1.clone();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut s = UnixStream::connect(&addr);
             s.write(&[1]).unwrap();
             rx.recv().unwrap();
@@ -471,7 +476,7 @@ mod tests {
         let s2 = s1.clone();
 
         let (done, rx) = channel();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut s2 = s2;
             let mut buf = [0, 0];
             s2.read(&mut buf).unwrap();
@@ -490,7 +495,7 @@ mod tests {
         let addr = next_test_unix();
         let mut acceptor = UnixListener::bind(&addr).listen();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut s = UnixStream::connect(&addr);
             let buf = &mut [0, 1];
             s.read(buf).unwrap();
@@ -501,7 +506,7 @@ mod tests {
         let s2 = s1.clone();
 
         let (tx, rx) = channel();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut s2 = s2;
             s2.write(&[1]).unwrap();
             tx.send(()).unwrap();
@@ -548,17 +553,17 @@ mod tests {
         // continue to receive any pending connections.
         let (tx, rx) = channel();
         let addr2 = addr.clone();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             tx.send(UnixStream::connect(&addr2).unwrap()).unwrap();
         });
         let l = rx.recv().unwrap();
-        for i in range(0u, 1001) {
+        for i in 0..1001 {
             match a.accept() {
                 Ok(..) => break,
                 Err(ref e) if e.kind == TimedOut => {}
                 Err(e) => panic!("error: {}", e),
             }
-            ::thread::Thread::yield_now();
+            ::thread::yield_now();
             if i == 1000 { panic!("should have a pending connection") }
         }
         drop(l);
@@ -566,7 +571,7 @@ mod tests {
         // Unset the timeout and make sure that this always blocks.
         a.set_timeout(None);
         let addr2 = addr.clone();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             drop(UnixStream::connect(&addr2).unwrap());
         });
         a.accept().unwrap();
@@ -604,7 +609,7 @@ mod tests {
         let addr = next_test_unix();
         let a = UnixListener::bind(&addr).listen().unwrap();
         let (_tx, rx) = channel::<()>();
-        Thread::spawn(move|| {
+        thread::spawn(move|| {
             let mut a = a;
             let _s = a.accept().unwrap();
             let _ = rx.recv();
@@ -641,7 +646,7 @@ mod tests {
         let addr = next_test_unix();
         let a = UnixListener::bind(&addr).listen().unwrap();
         let (_tx, rx) = channel::<()>();
-        Thread::spawn(move|| {
+        thread::spawn(move|| {
             let mut a = a;
             let _s = a.accept().unwrap();
             let _ = rx.recv();
@@ -650,7 +655,7 @@ mod tests {
         let mut s = UnixStream::connect(&addr).unwrap();
         let s2 = s.clone();
         let (tx, rx) = channel();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut s2 = s2;
             assert!(s2.read(&mut [0]).is_err());
             tx.send(()).unwrap();
@@ -667,7 +672,7 @@ mod tests {
         let addr = next_test_unix();
         let mut a = UnixListener::bind(&addr).listen().unwrap();
         let (tx, rx) = channel::<()>();
-        Thread::spawn(move|| {
+        thread::spawn(move|| {
             let mut s = UnixStream::connect(&addr).unwrap();
             rx.recv().unwrap();
             assert!(s.write(&[0]).is_ok());
@@ -680,7 +685,7 @@ mod tests {
         assert_eq!(s.read(&mut [0]).err().unwrap().kind, TimedOut);
 
         s.set_timeout(Some(20));
-        for i in range(0u, 1001) {
+        for i in 0..1001 {
             match s.write(&[0; 128 * 1024]) {
                 Ok(()) | Err(IoError { kind: ShortWrite(..), .. }) => {},
                 Err(IoError { kind: TimedOut, .. }) => break,
@@ -705,7 +710,7 @@ mod tests {
         let addr = next_test_unix();
         let mut a = UnixListener::bind(&addr).listen().unwrap();
         let (tx, rx) = channel::<()>();
-        Thread::spawn(move|| {
+        thread::spawn(move|| {
             let mut s = UnixStream::connect(&addr).unwrap();
             rx.recv().unwrap();
             let mut amt = 0;
@@ -724,7 +729,7 @@ mod tests {
         assert_eq!(s.read(&mut [0]).err().unwrap().kind, TimedOut);
 
         tx.send(()).unwrap();
-        for _ in range(0u, 100) {
+        for _ in 0..100 {
             assert!(s.write(&[0;128 * 1024]).is_ok());
         }
     }
@@ -734,7 +739,7 @@ mod tests {
         let addr = next_test_unix();
         let mut a = UnixListener::bind(&addr).listen().unwrap();
         let (tx, rx) = channel::<()>();
-        Thread::spawn(move|| {
+        thread::spawn(move|| {
             let mut s = UnixStream::connect(&addr).unwrap();
             rx.recv().unwrap();
             assert!(s.write(&[0]).is_ok());
@@ -743,7 +748,7 @@ mod tests {
 
         let mut s = a.accept().unwrap();
         s.set_write_timeout(Some(20));
-        for i in range(0u, 1001) {
+        for i in 0..1001 {
             match s.write(&[0; 128 * 1024]) {
                 Ok(()) | Err(IoError { kind: ShortWrite(..), .. }) => {},
                 Err(IoError { kind: TimedOut, .. }) => break,
@@ -761,7 +766,7 @@ mod tests {
         let addr = next_test_unix();
         let mut a = UnixListener::bind(&addr).listen().unwrap();
         let (tx, rx) = channel::<()>();
-        Thread::spawn(move|| {
+        thread::spawn(move|| {
             let mut s = UnixStream::connect(&addr).unwrap();
             rx.recv().unwrap();
             assert!(s.write(&[0]).is_ok());
@@ -771,7 +776,7 @@ mod tests {
         let mut s = a.accept().unwrap();
         let s2 = s.clone();
         let (tx2, rx2) = channel();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut s2 = s2;
             assert!(s2.read(&mut [0]).is_ok());
             tx2.send(()).unwrap();
@@ -793,10 +798,10 @@ mod tests {
         let mut a2 = a.clone();
 
         let addr2 = addr.clone();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let _ = UnixStream::connect(&addr2);
         });
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let _ = UnixStream::connect(&addr);
         });
 
@@ -816,20 +821,20 @@ mod tests {
         let (tx, rx) = channel();
         let tx2 = tx.clone();
 
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut a = a;
             tx.send(a.accept()).unwrap()
         });
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut a = a2;
             tx2.send(a.accept()).unwrap()
         });
 
         let addr2 = addr.clone();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let _ = UnixStream::connect(&addr2);
         });
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let _ = UnixStream::connect(&addr);
         });
 
@@ -855,7 +860,7 @@ mod tests {
         let mut a2 = a.clone();
 
         let (tx, rx) = channel();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut a = a;
             tx.send(a.accept()).unwrap();
         });

@@ -42,7 +42,7 @@ use std::old_io::{self, MemReader};
 use std::option;
 use std::str::FromStr;
 
-#[derive(Copy, PartialEq, Show)]
+#[derive(Copy, PartialEq, Debug)]
 pub enum PpSourceMode {
     PpmNormal,
     PpmEveryBodyLoops,
@@ -54,7 +54,7 @@ pub enum PpSourceMode {
 }
 
 
-#[derive(Copy, PartialEq, Show)]
+#[derive(Copy, PartialEq, Debug)]
 pub enum PpFlowGraphMode {
     Default,
     /// Drops the labels from the edges in the flowgraph output. This
@@ -63,7 +63,7 @@ pub enum PpFlowGraphMode {
     /// have become a pain to maintain.
     UnlabelledEdges,
 }
-#[derive(Copy, PartialEq, Show)]
+#[derive(Copy, PartialEq, Debug)]
 pub enum PpMode {
     PpmSource(PpSourceMode),
     PpmFlowGraph(PpFlowGraphMode),
@@ -87,19 +87,19 @@ pub fn parse_pretty(sess: &Session,
         ("flowgraph,unlabelled", true)    => PpmFlowGraph(PpFlowGraphMode::UnlabelledEdges),
         _ => {
             if extended {
-                sess.fatal(format!(
+                sess.fatal(&format!(
                     "argument to `xpretty` must be one of `normal`, \
                      `expanded`, `flowgraph[,unlabelled]=<nodeid>`, `typed`, `identified`, \
-                     `expanded,identified`, or `everybody_loops`; got {}", name).as_slice());
+                     `expanded,identified`, or `everybody_loops`; got {}", name));
             } else {
-                sess.fatal(format!(
+                sess.fatal(&format!(
                     "argument to `pretty` must be one of `normal`, \
                      `expanded`, `typed`, `identified`, \
-                     or `expanded,identified`; got {}", name).as_slice());
+                     or `expanded,identified`; got {}", name));
             }
         }
     };
-    let opt_second = opt_second.and_then(|s| s.parse::<UserIdentifiedItem>());
+    let opt_second = opt_second.and_then(|s| s.parse::<UserIdentifiedItem>().ok());
     (first, opt_second)
 }
 
@@ -312,7 +312,7 @@ impl<'tcx> pprust::PpAnn for TypedAnnotation<'tcx> {
                 try!(pp::word(&mut s.s,
                               &ppaux::ty_to_string(
                                   tcx,
-                                  ty::expr_ty(tcx, expr))[]));
+                                  ty::expr_ty(tcx, expr))));
                 s.pclose()
             }
             _ => Ok(())
@@ -338,20 +338,18 @@ fn gather_flowgraph_variants(sess: &Session) -> Vec<borrowck_dot::Variant> {
     variants
 }
 
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub enum UserIdentifiedItem {
     ItemViaNode(ast::NodeId),
     ItemViaPath(Vec<String>),
 }
 
 impl FromStr for UserIdentifiedItem {
-    fn from_str(s: &str) -> Option<UserIdentifiedItem> {
-        s.parse().map(ItemViaNode).or_else(|| {
-            let v : Vec<_> = s.split_str("::")
-                .map(|x|x.to_string())
-                .collect();
-            Some(ItemViaPath(v))
-        })
+    type Err = ();
+    fn from_str(s: &str) -> Result<UserIdentifiedItem, ()> {
+        Ok(s.parse().map(ItemViaNode).unwrap_or_else(|_| {
+            ItemViaPath(s.split("::").map(|s| s.to_string()).collect())
+        }))
     }
 }
 
@@ -385,23 +383,23 @@ impl UserIdentifiedItem {
             ItemViaNode(node_id) =>
                 NodesMatchingDirect(Some(node_id).into_iter()),
             ItemViaPath(ref parts) =>
-                NodesMatchingSuffix(map.nodes_matching_suffix(&parts[])),
+                NodesMatchingSuffix(map.nodes_matching_suffix(&parts[..])),
         }
     }
 
     fn to_one_node_id(self, user_option: &str, sess: &Session, map: &ast_map::Map) -> ast::NodeId {
-        let fail_because = |&: is_wrong_because| -> ast::NodeId {
+        let fail_because = |is_wrong_because| -> ast::NodeId {
             let message =
                 format!("{} needs NodeId (int) or unique \
                          path suffix (b::c::d); got {}, which {}",
                         user_option,
                         self.reconstructed_input(),
                         is_wrong_because);
-            sess.fatal(&message[])
+            sess.fatal(&message[..])
         };
 
         let mut saw_node = ast::DUMMY_NODE_ID;
-        let mut seen = 0u;
+        let mut seen = 0;
         for node in self.all_matching_node_ids(map) {
             saw_node = node;
             seen += 1;
@@ -519,12 +517,12 @@ pub fn pretty_print_input(sess: Session,
         krate
     };
 
-    let id = link::find_crate_name(Some(&sess), krate.attrs.as_slice(), input);
+    let id = link::find_crate_name(Some(&sess), &krate.attrs, input);
 
     let is_expanded = needs_expansion(&ppm);
     let compute_ast_map = needs_ast_map(&ppm, &opt_uii);
     let krate = if compute_ast_map {
-        match driver::phase_2_configure_and_expand(&sess, krate, &id[], None) {
+        match driver::phase_2_configure_and_expand(&sess, krate, &id[..], None) {
             None => return,
             Some(k) => k
         }
@@ -543,7 +541,7 @@ pub fn pretty_print_input(sess: Session,
     };
 
     let src_name = driver::source_name(input);
-    let src = sess.codemap().get_filemap(&src_name[])
+    let src = sess.codemap().get_filemap(&src_name[..])
                             .src.as_bytes().to_vec();
     let mut rdr = MemReader::new(src);
 
@@ -604,7 +602,7 @@ pub fn pretty_print_input(sess: Session,
             debug!("pretty printing flow graph for {:?}", opt_uii);
             let uii = opt_uii.unwrap_or_else(|| {
                 sess.fatal(&format!("`pretty flowgraph=..` needs NodeId (int) or
-                                     unique path suffix (b::c::d)")[])
+                                     unique path suffix (b::c::d)"))
 
             });
             let ast_map = ast_map.expect("--pretty flowgraph missing ast_map");
@@ -612,7 +610,7 @@ pub fn pretty_print_input(sess: Session,
 
             let node = ast_map.find(nodeid).unwrap_or_else(|| {
                 sess.fatal(&format!("--pretty flowgraph couldn't find id: {}",
-                                   nodeid)[])
+                                   nodeid))
             });
 
             let code = blocks::Code::from_node(node);
@@ -634,8 +632,8 @@ pub fn pretty_print_input(sess: Session,
                     // point to what was found, if there's an
                     // accessible span.
                     match ast_map.opt_span(nodeid) {
-                        Some(sp) => sess.span_fatal(sp, &message[]),
-                        None => sess.fatal(&message[])
+                        Some(sp) => sess.span_fatal(sp, &message[..]),
+                        None => sess.fatal(&message[..])
                     }
                 }
             }

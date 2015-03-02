@@ -25,9 +25,9 @@ use syntax::ptr::P;
 use rustc::plugin::Registry;
 
 #[macro_export]
-macro_rules! exported_macro { () => (2i) }
+macro_rules! exported_macro { () => (2) }
 
-macro_rules! unexported_macro { () => (3i) }
+macro_rules! unexported_macro { () => (3) }
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
@@ -44,7 +44,7 @@ fn expand_make_a_1(cx: &mut ExtCtxt, sp: Span, tts: &[TokenTree])
     if !tts.is_empty() {
         cx.span_fatal(sp, "make_a_1 takes no arguments");
     }
-    MacExpr::new(quote_expr!(cx, 1i))
+    MacEager::expr(quote_expr!(cx, 1))
 }
 
 // See Issue #15750
@@ -54,7 +54,7 @@ fn expand_identity(cx: &mut ExtCtxt, _span: Span, tts: &[TokenTree])
     let mut parser = parse::new_parser_from_tts(cx.parse_sess(),
         cx.cfg(), tts.to_vec());
     let expr = parser.parse_expr();
-    MacExpr::new(quote_expr!(&mut *cx, $expr))
+    MacEager::expr(quote_expr!(&mut *cx, $expr))
 }
 
 fn expand_into_foo(cx: &mut ExtCtxt, sp: Span, attr: &MetaItem, it: P<Item>)
@@ -87,7 +87,7 @@ fn expand_forged_ident(cx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<Mac
         let mut parser = new_parser_from_tts(parse_sess, cfg, tt);
         parser.parse_expr()
     };
-    MacExpr::new(expr)
+    MacEager::expr(expr)
 }
 
 pub fn foo() {}

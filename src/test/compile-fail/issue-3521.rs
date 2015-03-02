@@ -11,9 +11,11 @@
 fn main() {
     let foo = 100;
 
-    #[derive(Show)]
+    #[derive(Debug)]
     enum Stuff {
-        Bar = foo //~ ERROR attempt to use a non-constant value in a constant
+        Bar = foo
+        //~^ ERROR attempt to use a non-constant value in a constant
+        //~| ERROR unresolved name `foo`
     }
 
     println!("{}", Stuff::Bar);

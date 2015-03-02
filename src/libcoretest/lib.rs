@@ -8,11 +8,20 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(unsafe_destructor, slicing_syntax)]
-#![feature(unboxed_closures)]
 #![feature(box_syntax)]
-#![allow(unknown_features)] #![feature(int_uint)]
-#![allow(unstable)]
+#![feature(int_uint)]
+#![feature(unboxed_closures)]
+#![feature(unsafe_destructor)]
+#![feature(core)]
+#![feature(test)]
+#![feature(rand)]
+#![feature(unicode)]
+#![feature(std_misc)]
+#![feature(libc)]
+#![feature(hash)]
+#![feature(io)]
+#![feature(collections)]
+#![allow(deprecated)] // rand
 
 extern crate core;
 extern crate test;

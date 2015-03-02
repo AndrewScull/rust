@@ -19,7 +19,7 @@ use trans::type_::Type;
 use std::cmp;
 
 fn align_up_to(off: uint, a: uint) -> uint {
-    return (off + a - 1u) / a * a;
+    return (off + a - 1) / a * a;
 }
 
 fn align(off: uint, ty: Type) -> uint {
@@ -150,7 +150,7 @@ pub fn compute_abi_info(ccx: &CrateContext,
                         rty: Type,
                         ret_def: bool) -> FnType {
     let mut arg_tys = Vec::new();
-    for &aty in atys.iter() {
+    for &aty in atys {
         let ty = classify_arg_ty(ccx, aty);
         arg_tys.push(ty);
     }

@@ -27,7 +27,7 @@ use std::u32;
 pub fn path_name_i(idents: &[Ident]) -> String {
     // FIXME: Bad copies (#2543 -- same for everything else that says "bad")
     idents.iter().map(|i| {
-        token::get_ident(*i).get().to_string()
+        token::get_ident(*i).to_string()
     }).collect::<Vec<String>>().connect("::")
 }
 
@@ -102,6 +102,20 @@ pub fn is_by_value_binop(b: BinOp_) -> bool {
     }
 }
 
+/// Returns `true` if the binary operator is symmetric in the sense that LHS
+/// and RHS must have the same type. So the type of LHS can serve as an hint
+/// for the type of RHS and vice versa.
+pub fn is_symmetric_binop(b: BinOp_) -> bool {
+    match b {
+        BiAdd | BiSub | BiMul | BiDiv | BiRem |
+        BiBitXor | BiBitAnd | BiBitOr |
+        BiEq | BiLt | BiLe | BiNe | BiGt | BiGe => {
+            true
+        }
+        _ => false
+    }
+}
+
 /// Returns `true` if the unary operator takes its argument by value
 pub fn is_by_value_unop(u: UnOp) -> bool {
     match u {
@@ -120,17 +134,14 @@ pub fn unop_to_string(op: UnOp) -> &'static str {
 }
 
 pub fn is_path(e: P<Expr>) -> bool {
-    return match e.node { ExprPath(_) => true, _ => false };
+    match e.node { ExprPath(..) => true, _ => false }
 }
 
 /// Get a string representation of a signed int type, with its value.
 /// We want to avoid "45int" and "-3int" in favor of "45" and "-3"
 pub fn int_ty_to_string(t: IntTy, val: Option<i64>) -> String {
     let s = match t {
-        TyIs(true) if val.is_some() => "i",
-        TyIs(true) => "int",
-        TyIs(false) if val.is_some() => "is",
-        TyIs(false) => "isize",
+        TyIs(_) => "isize",
         TyI8 => "i8",
         TyI16 => "i16",
         TyI32 => "i32",
@@ -159,10 +170,7 @@ pub fn int_ty_max(t: IntTy) -> u64 {
 /// We want to avoid "42u" in favor of "42us". "42uint" is right out.
 pub fn uint_ty_to_string(t: UintTy, val: Option<u64>) -> String {
     let s = match t {
-        TyUs(true) if val.is_some() => "u",
-        TyUs(true) => "uint",
-        TyUs(false) if val.is_some() => "us",
-        TyUs(false) => "usize",
+        TyUs(_) => "usize",
         TyU8 => "u8",
         TyU16 => "u16",
         TyU32 => "u32",
@@ -244,16 +252,20 @@ pub fn name_to_dummy_lifetime(name: Name) -> Lifetime {
 /// hint of where they came from, (previously they would all just be
 /// listed as `__extensions__::method_name::hash`, with no indication
 /// of the type).
-pub fn impl_pretty_name(trait_ref: &Option<TraitRef>, ty: &Ty) -> Ident {
-    let mut pretty = pprust::ty_to_string(ty);
+pub fn impl_pretty_name(trait_ref: &Option<TraitRef>, ty: Option<&Ty>) -> Ident {
+    let mut pretty = match ty {
+        Some(t) => pprust::ty_to_string(t),
+        None => String::from_str("..")
+    };
+
     match *trait_ref {
         Some(ref trait_ref) => {
             pretty.push('.');
-            pretty.push_str(&pprust::path_to_string(&trait_ref.path)[]);
+            pretty.push_str(&pprust::path_to_string(&trait_ref.path));
         }
         None => {}
     }
-    token::gensym_ident(&pretty[])
+    token::gensym_ident(&pretty[..])
 }
 
 pub fn trait_method_to_ty_method(method: &Method) -> TypeMethod {
@@ -302,7 +314,7 @@ pub fn split_trait_methods(trait_methods: &[TraitItem])
                            -> (Vec<TypeMethod>, Vec<P<Method>> ) {
     let mut reqd = Vec::new();
     let mut provd = Vec::new();
-    for trt_method in trait_methods.iter() {
+    for trt_method in trait_methods {
         match *trt_method {
             RequiredMethod(ref tm) => reqd.push((*tm).clone()),
             ProvidedMethod(ref m) => provd.push((*m).clone()),
@@ -322,21 +334,21 @@ pub fn struct_field_visibility(field: ast::StructField) -> Visibility {
 pub fn operator_prec(op: ast::BinOp_) -> usize {
   match op {
       // 'as' sits here with 12
-      BiMul | BiDiv | BiRem     => 11us,
-      BiAdd | BiSub             => 10us,
-      BiShl | BiShr             =>  9us,
-      BiBitAnd                  =>  8us,
-      BiBitXor                  =>  7us,
-      BiBitOr                   =>  6us,
-      BiLt | BiLe | BiGe | BiGt | BiEq | BiNe => 3us,
-      BiAnd                     =>  2us,
-      BiOr                      =>  1us
+      BiMul | BiDiv | BiRem     => 11,
+      BiAdd | BiSub             => 10,
+      BiShl | BiShr             =>  9,
+      BiBitAnd                  =>  8,
+      BiBitXor                  =>  7,
+      BiBitOr                   =>  6,
+      BiLt | BiLe | BiGe | BiGt | BiEq | BiNe => 3,
+      BiAnd                     =>  2,
+      BiOr                      =>  1
   }
 }
 
 /// Precedence of the `as` operator, which is a binary operator
 /// not appearing in the prior table.
-pub const AS_PREC: usize = 12us;
+pub const AS_PREC: usize = 12;
 
 pub fn empty_generics() -> Generics {
     Generics {
@@ -352,7 +364,7 @@ pub fn empty_generics() -> Generics {
 // ______________________________________________________________________
 // Enumerating the IDs which appear in an AST
 
-#[derive(RustcEncodable, RustcDecodable, Show, Copy)]
+#[derive(RustcEncodable, RustcDecodable, Debug, Copy)]
 pub struct IdRange {
     pub min: NodeId,
     pub max: NodeId,
@@ -391,10 +403,10 @@ pub struct IdVisitor<'a, O:'a> {
 
 impl<'a, O: IdVisitingOperation> IdVisitor<'a, O> {
     fn visit_generics_helper(&mut self, generics: &Generics) {
-        for type_parameter in generics.ty_params.iter() {
+        for type_parameter in &*generics.ty_params {
             self.operation.visit_id(type_parameter.id)
         }
-        for lifetime in generics.lifetimes.iter() {
+        for lifetime in &generics.lifetimes {
             self.operation.visit_id(lifetime.lifetime.id)
         }
     }
@@ -430,14 +442,14 @@ impl<'a, 'v, O: IdVisitingOperation> Visitor<'v> for IdVisitor<'a, O> {
                     ViewPathSimple(_, _) |
                     ViewPathGlob(_) => {}
                     ViewPathList(_, ref paths) => {
-                        for path in paths.iter() {
+                        for path in paths {
                             self.operation.visit_id(path.node.id())
                         }
                     }
                 }
             }
             ItemEnum(ref enum_definition, _) => {
-                for variant in enum_definition.variants.iter() {
+                for variant in &enum_definition.variants {
                     self.operation.visit_id(variant.node.id)
                 }
             }
@@ -476,9 +488,6 @@ impl<'a, 'v, O: IdVisitingOperation> Visitor<'v> for IdVisitor<'a, O> {
 
     fn visit_ty(&mut self, typ: &Ty) {
         self.operation.visit_id(typ.id);
-        if let TyPath(_, id) = typ.node {
-            self.operation.visit_id(id);
-        }
         visit::walk_ty(self, typ)
     }
 
@@ -511,7 +520,7 @@ impl<'a, 'v, O: IdVisitingOperation> Visitor<'v> for IdVisitor<'a, O> {
             visit::FkFnBlock => {}
         }
 
-        for argument in function_declaration.inputs.iter() {
+        for argument in &function_declaration.inputs {
             self.operation.visit_id(argument.id)
         }
 
@@ -552,12 +561,17 @@ impl<'a, 'v, O: IdVisitingOperation> Visitor<'v> for IdVisitor<'a, O> {
         visit::walk_trait_item(self, tm);
     }
 
-    fn visit_lifetime_ref(&mut self, lifetime: &'v Lifetime) {
+    fn visit_lifetime_ref(&mut self, lifetime: &Lifetime) {
         self.operation.visit_id(lifetime.id);
     }
 
-    fn visit_lifetime_def(&mut self, def: &'v LifetimeDef) {
+    fn visit_lifetime_def(&mut self, def: &LifetimeDef) {
         self.visit_lifetime_ref(&def.lifetime);
+    }
+
+    fn visit_trait_ref(&mut self, trait_ref: &TraitRef) {
+        self.operation.visit_id(trait_ref.ref_id);
+        visit::walk_trait_ref(self, trait_ref);
     }
 }
 
@@ -665,25 +679,18 @@ pub fn pat_is_ident(pat: P<ast::Pat>) -> bool {
 pub fn path_name_eq(a : &ast::Path, b : &ast::Path) -> bool {
     (a.span == b.span)
     && (a.global == b.global)
-    && (segments_name_eq(&a.segments[], &b.segments[]))
+    && (segments_name_eq(&a.segments[..], &b.segments[..]))
 }
 
 // are two arrays of segments equal when compared unhygienically?
 pub fn segments_name_eq(a : &[ast::PathSegment], b : &[ast::PathSegment]) -> bool {
-    if a.len() != b.len() {
-        false
-    } else {
-        for (idx,seg) in a.iter().enumerate() {
-            if seg.identifier.name != b[idx].identifier.name
-                // FIXME #7743: ident -> name problems in lifetime comparison?
-                // can types contain idents?
-                || seg.parameters != b[idx].parameters
-            {
-                return false;
-            }
-        }
-        true
-    }
+    a.len() == b.len() &&
+    a.iter().zip(b.iter()).all(|(s, t)| {
+        s.identifier.name == t.identifier.name &&
+        // FIXME #7743: ident -> name problems in lifetime comparison?
+        // can types contain idents?
+        s.parameters == t.parameters
+    })
 }
 
 /// Returns true if this literal is a string and false otherwise.
@@ -753,13 +760,13 @@ mod test {
     #[test] fn idents_name_eq_test() {
         assert!(segments_name_eq(
             &[Ident{name:Name(3),ctxt:4}, Ident{name:Name(78),ctxt:82}]
-                .iter().map(ident_to_segment).collect::<Vec<PathSegment>>()[],
+                .iter().map(ident_to_segment).collect::<Vec<PathSegment>>(),
             &[Ident{name:Name(3),ctxt:104}, Ident{name:Name(78),ctxt:182}]
-                .iter().map(ident_to_segment).collect::<Vec<PathSegment>>()[]));
+                .iter().map(ident_to_segment).collect::<Vec<PathSegment>>()));
         assert!(!segments_name_eq(
             &[Ident{name:Name(3),ctxt:4}, Ident{name:Name(78),ctxt:82}]
-                .iter().map(ident_to_segment).collect::<Vec<PathSegment>>()[],
+                .iter().map(ident_to_segment).collect::<Vec<PathSegment>>(),
             &[Ident{name:Name(3),ctxt:104}, Ident{name:Name(77),ctxt:182}]
-                .iter().map(ident_to_segment).collect::<Vec<PathSegment>>()[]));
+                .iter().map(ident_to_segment).collect::<Vec<PathSegment>>()));
     }
 }

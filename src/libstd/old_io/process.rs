@@ -10,7 +10,6 @@
 
 //! Bindings for executing child processes
 
-#![allow(unstable)]
 #![allow(non_upper_case_globals)]
 
 pub use self::StdioContainer::*;
@@ -26,12 +25,12 @@ use old_io::{IoResult, IoError};
 use old_io;
 use libc;
 use os;
-use path::BytesContainer;
+use old_path::BytesContainer;
 use sync::mpsc::{channel, Receiver};
 use sys::fs::FileDesc;
 use sys::process::Process as ProcessImp;
 use sys;
-use thread::Thread;
+use thread;
 
 #[cfg(windows)] use hash;
 #[cfg(windows)] use str;
@@ -101,17 +100,17 @@ pub struct Process {
 /// A representation of environment variable name
 /// It compares case-insensitive on Windows and case-sensitive everywhere else.
 #[cfg(not(windows))]
-#[derive(Hash, PartialEq, Eq, Clone, Show)]
+#[derive(Hash, PartialEq, Eq, Clone, Debug)]
 struct EnvKey(CString);
 
 #[doc(hidden)]
 #[cfg(windows)]
-#[derive(Eq, Clone, Show)]
+#[derive(Eq, Clone, Debug)]
 struct EnvKey(CString);
 
 #[cfg(windows)]
-impl<H: hash::Writer + hash::Hasher> hash::Hash<H> for EnvKey {
-    fn hash(&self, state: &mut H) {
+impl hash::Hash for EnvKey {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
         let &EnvKey(ref x) = self;
         match str::from_utf8(x.as_bytes()) {
             Ok(s) => for ch in s.chars() {
@@ -209,7 +208,7 @@ impl Command {
     /// otherwise configure the process.
     pub fn new<T: BytesContainer>(program: T) -> Command {
         Command {
-            program: CString::from_slice(program.container_as_bytes()),
+            program: CString::new(program.container_as_bytes()).unwrap(),
             args: Vec::new(),
             env: None,
             cwd: None,
@@ -224,18 +223,19 @@ impl Command {
 
     /// Add an argument to pass to the program.
     pub fn arg<'a, T: BytesContainer>(&'a mut self, arg: T) -> &'a mut Command {
-        self.args.push(CString::from_slice(arg.container_as_bytes()));
+        self.args.push(CString::new(arg.container_as_bytes()).unwrap());
         self
     }
 
     /// Add multiple arguments to pass to the program.
     pub fn args<'a, T: BytesContainer>(&'a mut self, args: &[T]) -> &'a mut Command {
         self.args.extend(args.iter().map(|arg| {
-            CString::from_slice(arg.container_as_bytes())
+            CString::new(arg.container_as_bytes()).unwrap()
         }));
         self
     }
     // Get a mutable borrow of the environment variable map for this `Command`.
+    #[allow(deprecated)]
     fn get_env_map<'a>(&'a mut self) -> &'a mut EnvMap {
         match self.env {
             Some(ref mut map) => map,
@@ -243,8 +243,8 @@ impl Command {
                 // if the env is currently just inheriting from the parent's,
                 // materialize the parent's env into a hashtable.
                 self.env = Some(os::env_as_bytes().into_iter().map(|(k, v)| {
-                    (EnvKey(CString::from_slice(k.as_slice())),
-                     CString::from_slice(v.as_slice()))
+                    (EnvKey(CString::new(k).unwrap()),
+                     CString::new(v).unwrap())
                 }).collect());
                 self.env.as_mut().unwrap()
             }
@@ -258,8 +258,8 @@ impl Command {
     pub fn env<'a, T, U>(&'a mut self, key: T, val: U)
                          -> &'a mut Command
                          where T: BytesContainer, U: BytesContainer {
-        let key = EnvKey(CString::from_slice(key.container_as_bytes()));
-        let val = CString::from_slice(val.container_as_bytes());
+        let key = EnvKey(CString::new(key.container_as_bytes()).unwrap());
+        let val = CString::new(val.container_as_bytes()).unwrap();
         self.get_env_map().insert(key, val);
         self
     }
@@ -267,7 +267,7 @@ impl Command {
     /// Removes an environment variable mapping.
     pub fn env_remove<'a, T>(&'a mut self, key: T) -> &'a mut Command
                              where T: BytesContainer {
-        let key = EnvKey(CString::from_slice(key.container_as_bytes()));
+        let key = EnvKey(CString::new(key.container_as_bytes()).unwrap());
         self.get_env_map().remove(&key);
         self
     }
@@ -280,15 +280,15 @@ impl Command {
                                  -> &'a mut Command
                                  where T: BytesContainer, U: BytesContainer {
         self.env = Some(env.iter().map(|&(ref k, ref v)| {
-            (EnvKey(CString::from_slice(k.container_as_bytes())),
-             CString::from_slice(v.container_as_bytes()))
+            (EnvKey(CString::new(k.container_as_bytes()).unwrap()),
+             CString::new(v.container_as_bytes()).unwrap())
         }).collect());
         self
     }
 
     /// Set the working directory for the child process.
     pub fn cwd<'a>(&'a mut self, dir: &Path) -> &'a mut Command {
-        self.cwd = Some(CString::from_slice(dir.as_vec()));
+        self.cwd = Some(CString::new(dir.as_vec()).unwrap());
         self
     }
 
@@ -398,14 +398,15 @@ impl Command {
     }
 }
 
+#[stable(feature = "rust1", since = "1.0.0")]
 impl fmt::Debug for Command {
     /// Format the program and arguments of a Command for display. Any
     /// non-utf8 data is lossily converted using the utf8 replacement
     /// character.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{}", String::from_utf8_lossy(self.program.as_bytes())));
-        for arg in self.args.iter() {
-            try!(write!(f, " '{}'", String::from_utf8_lossy(arg.as_bytes())));
+        try!(write!(f, "{:?}", self.program));
+        for arg in &self.args {
+            try!(write!(f, " '{:?}'", arg));
         }
         Ok(())
     }
@@ -443,7 +444,7 @@ impl sys::process::ProcessConfig<EnvKey, CString> for Command {
         &self.program
     }
     fn args(&self) -> &[CString] {
-        self.args.as_slice()
+        &self.args
     }
     fn env(&self) -> Option<&EnvMap> {
         self.env.as_ref()
@@ -497,7 +498,7 @@ pub enum StdioContainer {
 
 /// Describes the result of a process after it has terminated.
 /// Note that Windows have no signals, so the result is usually ExitStatus.
-#[derive(PartialEq, Eq, Clone, Copy, Show)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum ProcessExit {
     /// Normal termination with an exit status.
     ExitStatus(int),
@@ -506,7 +507,7 @@ pub enum ProcessExit {
     ExitSignal(int),
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl fmt::Display for ProcessExit {
     /// Format a ProcessExit enum, to nicely present the information.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -657,7 +658,6 @@ impl Process {
     /// # Example
     ///
     /// ```no_run
-    /// # #![allow(unstable)]
     /// use std::old_io::{Command, IoResult};
     /// use std::old_io::process::ProcessExit;
     ///
@@ -685,7 +685,8 @@ impl Process {
     ///     p.wait()
     /// }
     /// ```
-    #[unstable = "the type of the timeout is likely to change"]
+    #[unstable(feature = "io",
+               reason = "the type of the timeout is likely to change")]
     pub fn set_timeout(&mut self, timeout_ms: Option<u64>) {
         self.deadline = timeout_ms.map(|i| i + sys::timer::now()).unwrap_or(0);
     }
@@ -706,7 +707,7 @@ impl Process {
             let (tx, rx) = channel();
             match stream {
                 Some(stream) => {
-                    Thread::spawn(move |:| {
+                    thread::spawn(move || {
                         let mut stream = stream;
                         tx.send(stream.read_to_end()).unwrap();
                     });
@@ -767,7 +768,7 @@ mod tests {
     use super::{CreatePipe};
     use super::{InheritFd, Process, PleaseExitSignal, Command, ProcessOutput};
     use sync::mpsc::channel;
-    use thread::Thread;
+    use thread;
     use time::Duration;
 
     // FIXME(#10380) these tests should not all be ignored on android.
@@ -803,12 +804,12 @@ mod tests {
     #[cfg(all(unix, not(target_os="android")))]
     #[test]
     fn signal_reported_right() {
-        let p = Command::new("/bin/sh").arg("-c").arg("kill -1 $$").spawn();
+        let p = Command::new("/bin/sh").arg("-c").arg("kill -9 $$").spawn();
         assert!(p.is_ok());
         let mut p = p.unwrap();
         match p.wait().unwrap() {
-            process::ExitSignal(1) => {},
-            result => panic!("not terminated by signal 1 (instead, {})", result),
+            process::ExitSignal(9) => {},
+            result => panic!("not terminated by signal 9 (instead, {})", result),
         }
     }
 
@@ -918,7 +919,7 @@ mod tests {
     fn test_process_output_output() {
         let ProcessOutput {status, output, error}
              = Command::new("echo").arg("hello").output().unwrap();
-        let output_str = str::from_utf8(output.as_slice()).unwrap();
+        let output_str = str::from_utf8(&output).unwrap();
 
         assert!(status.success());
         assert_eq!(output_str.trim().to_string(), "hello");
@@ -959,7 +960,7 @@ mod tests {
     fn test_wait_with_output_once() {
         let prog = Command::new("echo").arg("hello").spawn().unwrap();
         let ProcessOutput {status, output, error} = prog.wait_with_output().unwrap();
-        let output_str = str::from_utf8(output.as_slice()).unwrap();
+        let output_str = str::from_utf8(&output).unwrap();
 
         assert!(status.success());
         assert_eq!(output_str.trim().to_string(), "hello");
@@ -1049,10 +1050,10 @@ mod tests {
         let output = String::from_utf8(prog.wait_with_output().unwrap().output).unwrap();
 
         let r = os::env();
-        for &(ref k, ref v) in r.iter() {
+        for &(ref k, ref v) in &r {
             // don't check windows magical empty-named variables
             assert!(k.is_empty() ||
-                    output.contains(format!("{}={}", *k, *v).as_slice()),
+                    output.contains(&format!("{}={}", *k, *v)),
                     "output doesn't contain `{}={}`\n{}",
                     k, v, output);
         }
@@ -1067,15 +1068,15 @@ mod tests {
         let output = String::from_utf8(prog.wait_with_output().unwrap().output).unwrap();
 
         let r = os::env();
-        for &(ref k, ref v) in r.iter() {
+        for &(ref k, ref v) in &r {
             // don't check android RANDOM variables
             if *k != "RANDOM".to_string() {
-                assert!(output.contains(format!("{}={}",
-                                                *k,
-                                                *v).as_slice()) ||
-                        output.contains(format!("{}=\'{}\'",
-                                                *k,
-                                                *v).as_slice()));
+                assert!(output.contains(&format!("{}={}",
+                                                 *k,
+                                                 *v)) ||
+                        output.contains(&format!("{}=\'{}\'",
+                                                 *k,
+                                                 *v)));
             }
         }
     }
@@ -1094,13 +1095,13 @@ mod tests {
             None => {}
             Some(val) => {
                 path_val = val;
-                new_env.push(("PATH", path_val.as_slice()))
+                new_env.push(("PATH", &path_val))
             }
         }
 
-        let prog = env_cmd().env_set_all(new_env.as_slice()).spawn().unwrap();
+        let prog = env_cmd().env_set_all(&new_env).spawn().unwrap();
         let result = prog.wait_with_output().unwrap();
-        let output = String::from_utf8_lossy(result.output.as_slice()).to_string();
+        let output = String::from_utf8_lossy(&result.output).to_string();
 
         assert!(output.contains("RUN_TEST_NEW_ENV=123"),
                 "didn't find RUN_TEST_NEW_ENV inside of:\n\n{}", output);
@@ -1110,7 +1111,7 @@ mod tests {
     fn test_add_to_env() {
         let prog = env_cmd().env("RUN_TEST_NEW_ENV", "123").spawn().unwrap();
         let result = prog.wait_with_output().unwrap();
-        let output = String::from_utf8_lossy(result.output.as_slice()).to_string();
+        let output = String::from_utf8_lossy(&result.output).to_string();
 
         assert!(output.contains("RUN_TEST_NEW_ENV=123"),
                 "didn't find RUN_TEST_NEW_ENV inside of:\n\n{}", output);
@@ -1147,7 +1148,7 @@ mod tests {
     fn test_zero() {
         let mut p = sleeper();
         p.signal_kill().unwrap();
-        for _ in range(0i, 20) {
+        for _ in 0..20 {
             if p.signal(0).is_err() {
                 assert!(!p.wait().unwrap().success());
                 return
@@ -1172,14 +1173,14 @@ mod tests {
     fn wait_timeout2() {
         let (tx, rx) = channel();
         let tx2 = tx.clone();
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut p = sleeper();
             p.set_timeout(Some(10));
             assert_eq!(p.wait().err().unwrap().kind, TimedOut);
             p.signal_kill().unwrap();
             tx.send(()).unwrap();
         });
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             let mut p = sleeper();
             p.set_timeout(Some(10));
             assert_eq!(p.wait().err().unwrap().kind, TimedOut);
@@ -1229,7 +1230,7 @@ mod tests {
         cmd.env("path", "foo");
         cmd.env("Path", "bar");
         let env = &cmd.env.unwrap();
-        let val = env.get(&EnvKey(CString::from_slice(b"PATH")));
-        assert!(val.unwrap() == &CString::from_slice(b"bar"));
+        let val = env.get(&EnvKey(CString::new(b"PATH").unwrap()));
+        assert!(val.unwrap() == &CString::new(b"bar").unwrap());
     }
 }

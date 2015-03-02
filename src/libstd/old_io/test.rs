@@ -12,6 +12,7 @@
 
 use prelude::v1::*;
 
+use env;
 use os;
 use sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
 
@@ -45,12 +46,12 @@ fn base_port() -> u16 {
     ];
 
     // FIXME (#9639): This needs to handle non-utf8 paths
-    let path = os::getcwd().unwrap();
-    let path_s = path.as_str().unwrap();
+    let path = env::current_dir().unwrap();
+    let path_s = path.to_str().unwrap();
 
     let mut final_base = base;
 
-    for &(dir, base) in bases.iter() {
+    for &(dir, base) in &bases {
         if path_s.contains(dir) {
             final_base = base;
             break;

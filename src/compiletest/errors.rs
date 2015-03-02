@@ -17,7 +17,7 @@ pub struct ExpectedError {
     pub msg: String,
 }
 
-#[derive(PartialEq, Show)]
+#[derive(PartialEq, Debug)]
 enum WhichLine { ThisLine, FollowPrevious(uint), AdjustBackward(uint) }
 
 /// Looks for either "//~| KIND MESSAGE" or "//~^^... KIND MESSAGE"
@@ -44,7 +44,7 @@ pub fn load_errors(testfile: &Path) -> Vec<ExpectedError> {
     rdr.lines().enumerate().filter_map(|(line_no, ln)| {
         parse_expected(last_nonfollow_error,
                        line_no + 1,
-                       ln.unwrap().as_slice())
+                       &ln.unwrap())
             .map(|(which, error)| {
                 match which {
                     FollowPrevious(_) => {}
@@ -58,7 +58,7 @@ pub fn load_errors(testfile: &Path) -> Vec<ExpectedError> {
 fn parse_expected(last_nonfollow_error: Option<uint>,
                   line_num: uint,
                   line: &str) -> Option<(WhichLine, ExpectedError)> {
-    let start = match line.find_str("//~") { Some(i) => i, None => return None };
+    let start = match line.find("//~") { Some(i) => i, None => return None };
     let (follow, adjusts) = if line.char_at(start + 3) == '|' {
         (true, 0)
     } else {

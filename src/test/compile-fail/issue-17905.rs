@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[derive(Show)]
+#[derive(Debug)]
 struct Pair<T, V> (T, V);
 
 impl Pair<
@@ -25,6 +25,6 @@ impl Pair<
 }
 
 fn main() {
-    let result = &Pair("shane", 1is);
+    let result = &Pair("shane", 1);
     result.say();
 }

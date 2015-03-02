@@ -49,15 +49,15 @@ impl<'a> Iterator for BookItems<'a> {
                 let cur = self.cur_items.get(self.cur_idx).unwrap();
 
                 let mut section = "".to_string();
-                for &(_, idx) in self.stack.iter() {
-                    section.push_str(&(idx + 1).to_string()[]);
+                for &(_, idx) in &self.stack {
+                    section.push_str(&(idx + 1).to_string()[..]);
                     section.push('.');
                 }
-                section.push_str(&(self.cur_idx + 1).to_string()[]);
+                section.push_str(&(self.cur_idx + 1).to_string()[..]);
                 section.push('.');
 
                 self.stack.push((self.cur_items, self.cur_idx));
-                self.cur_items = &cur.children[];
+                self.cur_items = &cur.children[..];
                 self.cur_idx = 0;
                 return Some((section, cur))
             }
@@ -68,7 +68,7 @@ impl<'a> Iterator for BookItems<'a> {
 impl Book {
     pub fn iter(&self) -> BookItems {
         BookItems {
-            cur_items: &self.chapters[],
+            cur_items: &self.chapters[..],
             cur_idx: 0,
             stack: Vec::new(),
         }
@@ -114,12 +114,12 @@ pub fn parse_summary<R: Reader>(input: R, src: &Path) -> Result<Book, Vec<String
             }
         };
 
-        let star_idx = match line.find_str("*") { Some(i) => i, None => continue };
+        let star_idx = match line.find("*") { Some(i) => i, None => continue };
 
-        let start_bracket = star_idx + line[star_idx..].find_str("[").unwrap();
-        let end_bracket = start_bracket + line[start_bracket..].find_str("](").unwrap();
+        let start_bracket = star_idx + line[star_idx..].find("[").unwrap();
+        let end_bracket = start_bracket + line[start_bracket..].find("](").unwrap();
         let start_paren = end_bracket + 1;
-        let end_paren = start_paren + line[start_paren..].find_str(")").unwrap();
+        let end_paren = start_paren + line[start_paren..].find(")").unwrap();
 
         let given_path = &line[start_paren + 1 .. end_paren];
         let title = line[start_bracket + 1..end_bracket].to_string();
@@ -143,9 +143,9 @@ pub fn parse_summary<R: Reader>(input: R, src: &Path) -> Result<Book, Vec<String
             path_to_root: path_to_root,
             children: vec!(),
         };
-        let level = indent.chars().map(|c| {
+        let level = indent.chars().map(|c| -> usize {
             match c {
-                ' ' => 1us,
+                ' ' => 1,
                 '\t' => 4,
                 _ => unreachable!()
             }

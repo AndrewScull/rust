@@ -27,10 +27,11 @@
 
 use self::StdSource::*;
 
+use boxed;
 use boxed::Box;
 use cell::RefCell;
 use clone::Clone;
-use failure::LOCAL_STDERR;
+use panicking::LOCAL_STDERR;
 use fmt;
 use old_io::{Reader, Writer, IoResult, IoError, OtherIoError, Buffer,
          standard_error, EndOfFile, LineBufferedWriter, BufferedReader};
@@ -48,7 +49,7 @@ use str::StrExt;
 use string::String;
 use sys::{fs, tty};
 use sync::{Arc, Mutex, MutexGuard, Once, ONCE_INIT};
-use uint;
+use usize;
 use vec::Vec;
 
 // And so begins the tale of acquiring a uv handle to a stdio stream on all
@@ -143,7 +144,8 @@ impl StdinReader {
     /// ```rust
     /// use std::old_io;
     ///
-    /// for line in old_io::stdin().lock().lines() {
+    /// let mut stdin = old_io::stdin();
+    /// for line in stdin.lock().lines() {
     ///     println!("{}", line.unwrap());
     /// }
     /// ```
@@ -217,15 +219,15 @@ impl Reader for StdinReader {
 /// See `stdout()` for more notes about this function.
 pub fn stdin() -> StdinReader {
     // We're following the same strategy as kimundi's lazy_static library
-    static mut STDIN: *const StdinReader = 0 as *const StdinReader;
+    static mut STDIN: *mut StdinReader = 0 as *mut StdinReader;
     static ONCE: Once = ONCE_INIT;
 
     unsafe {
         ONCE.call_once(|| {
-            // The default buffer capacity is 64k, but apparently windows doesn't like
-            // 64k reads on stdin. See #13304 for details, but the idea is that on
-            // windows we use a slightly smaller buffer that's been seen to be
-            // acceptable.
+            // The default buffer capacity is 64k, but apparently windows
+            // doesn't like 64k reads on stdin. See #13304 for details, but the
+            // idea is that on windows we use a slightly smaller buffer that's
+            // been seen to be acceptable.
             let stdin = if cfg!(windows) {
                 BufferedReader::with_capacity(8 * 1024, stdin_raw())
             } else {
@@ -234,12 +236,12 @@ pub fn stdin() -> StdinReader {
             let stdin = StdinReader {
                 inner: Arc::new(Mutex::new(RaceBox(stdin)))
             };
-            STDIN = mem::transmute(box stdin);
+            STDIN = boxed::into_raw(box stdin);
 
             // Make sure to free it at exit
             rt::at_exit(|| {
-                mem::transmute::<_, Box<StdinReader>>(STDIN);
-                STDIN = ptr::null();
+                Box::from_raw(STDIN);
+                STDIN = ptr::null_mut();
             });
         });
 
@@ -383,12 +385,14 @@ pub fn println(s: &str) {
 
 /// Similar to `print`, but takes a `fmt::Arguments` structure to be compatible
 /// with the `format_args!` macro.
+#[stable(feature = "rust1", since = "1.0.0")]
 pub fn print_args(fmt: fmt::Arguments) {
     with_task_stdout(|io| write!(io, "{}", fmt))
 }
 
 /// Similar to `println`, but takes a `fmt::Arguments` structure to be
 /// compatible with the `format_args!` macro.
+#[stable(feature = "rust1", since = "1.0.0")]
 pub fn println_args(fmt: fmt::Arguments) {
     with_task_stdout(|io| writeln!(io, "{}", fmt))
 }
@@ -510,7 +514,7 @@ impl Writer for StdWriter {
         //
         // [1]: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1232
         // [2]: http://www.mail-archive.com/log4net-dev@logging.apache.org/msg00661.html
-        let max_size = if cfg!(windows) {8192} else {uint::MAX};
+        let max_size = if cfg!(windows) {8192} else {usize::MAX};
         for chunk in buf.chunks(max_size) {
             try!(match self.inner {
                 TTY(ref mut tty) => tty.write(chunk),
@@ -527,7 +531,7 @@ mod tests {
 
     use super::*;
     use sync::mpsc::channel;
-    use thread::Thread;
+    use thread;
 
     #[test]
     fn smoke() {
@@ -543,7 +547,7 @@ mod tests {
 
         let (tx, rx) = channel();
         let (mut r, w) = (ChanReader::new(rx), ChanWriter::new(tx));
-        let _t = Thread::spawn(move|| {
+        let _t = thread::spawn(move|| {
             set_stdout(box w);
             println!("hello!");
         });
@@ -556,7 +560,7 @@ mod tests {
 
         let (tx, rx) = channel();
         let (mut r, w) = (ChanReader::new(rx), ChanWriter::new(tx));
-        let _t = Thread::spawn(move || -> () {
+        let _t = thread::spawn(move || -> () {
             set_stderr(box w);
             panic!("my special message");
         });

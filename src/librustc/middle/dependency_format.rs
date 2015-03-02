@@ -85,7 +85,7 @@ pub type Dependencies = FnvHashMap<config::CrateType, DependencyList>;
 
 pub fn calculate(tcx: &ty::ctxt) {
     let mut fmts = tcx.dependency_formats.borrow_mut();
-    for &ty in tcx.sess.crate_types.borrow().iter() {
+    for &ty in &*tcx.sess.crate_types.borrow() {
         fmts.insert(ty, calculate_type(&tcx.sess, ty));
     }
     tcx.sess.abort_if_errors();
@@ -118,7 +118,7 @@ fn calculate_type(sess: &session::Session,
                 let src = sess.cstore.get_used_crate_source(cnum).unwrap();
                 if src.rlib.is_some() { return }
                 sess.err(&format!("dependency `{}` not found in rlib format",
-                                 data.name)[]);
+                                 data.name));
             });
             return Vec::new();
         }
@@ -148,7 +148,7 @@ fn calculate_type(sess: &session::Session,
             debug!("adding dylib: {}", data.name);
             add_library(sess, cnum, cstore::RequireDynamic, &mut formats);
             let deps = csearch::get_dylib_dependency_formats(&sess.cstore, cnum);
-            for &(depnum, style) in deps.iter() {
+            for &(depnum, style) in &deps {
                 debug!("adding {:?}: {}", style,
                        sess.cstore.get_crate_data(depnum).name.clone());
                 add_library(sess, depnum, style, &mut formats);
@@ -157,8 +157,8 @@ fn calculate_type(sess: &session::Session,
     });
 
     // Collect what we've got so far in the return vector.
-    let mut ret = range(1, sess.cstore.next_crate_num()).map(|i| {
-        match formats.get(&i).map(|v| *v) {
+    let mut ret = (1..sess.cstore.next_crate_num()).map(|i| {
+        match formats.get(&i).cloned() {
             v @ Some(cstore::RequireDynamic) => v,
             _ => None,
         }
@@ -197,7 +197,7 @@ fn calculate_type(sess: &session::Session,
                                  match kind {
                                      cstore::RequireStatic => "rlib",
                                      cstore::RequireDynamic => "dylib",
-                                 })[]);
+                                 }));
             }
         }
     }
@@ -222,7 +222,7 @@ fn add_library(sess: &session::Session,
                 let data = sess.cstore.get_crate_data(cnum);
                 sess.err(&format!("cannot satisfy dependencies so `{}` only \
                                   shows up once",
-                                 data.name)[]);
+                                 data.name));
                 sess.help("having upstream crates all available in one format \
                            will likely make this go away");
             }

@@ -420,7 +420,7 @@ fn main() {
 ```
 
 Alternatively, you may need to alter global state provided by a foreign
-interface. To do this, statics can be declared with `mut` so rust can mutate
+interface. To do this, statics can be declared with `mut` so we can mutate
 them.
 
 ```no_run
@@ -435,12 +435,19 @@ extern {
 }
 
 fn main() {
-    let prompt = CString::from_slice(b"[my-awesome-shell] $");
-    unsafe { rl_prompt = prompt.as_ptr(); }
-    // get a line, process it
-    unsafe { rl_prompt = ptr::null(); }
+    let prompt = CString::new("[my-awesome-shell] $").unwrap();
+    unsafe {
+        rl_prompt = prompt.as_ptr();
+
+        println!("{:?}", rl_prompt);
+
+        rl_prompt = ptr::null();
+    }
 }
 ```
+
+Note that all interaction with a `static mut` is unsafe, both reading and
+writing. Dealing with global mutable state requires a great deal of care.
 
 # Foreign calling conventions
 
@@ -534,6 +541,6 @@ pub extern fn hello_rust() -> *const u8 {
 
 The `extern` makes this function adhere to the C calling convention, as
 discussed above in "[Foreign Calling
-Conventions](guide-ffi.html#foreign-calling-conventions)". The `no_mangle`
+Conventions](ffi.html#foreign-calling-conventions)". The `no_mangle`
 attribute turns off Rust's name mangling, so that it is easier to link to.
 

@@ -14,12 +14,11 @@ use libc;
 use mem;
 use ptr;
 use prelude::v1::*;
-use super::{last_error, last_net_error, retry, sock_t};
+use super::{last_error, last_net_error, sock_t};
 use sync::Arc;
 use sync::atomic::{AtomicBool, Ordering};
-use sys::fs::FileDesc;
 use sys::{self, c, set_nonblocking, wouldblock, timer};
-use sys_common::{self, timeout, eof, net};
+use sys_common::{timeout, eof, net};
 
 pub use sys_common::net::TcpStream;
 
@@ -116,9 +115,6 @@ pub struct TcpAcceptor {
     deadline: u64,
 }
 
-unsafe impl Send for TcpAcceptor {}
-unsafe impl Sync for TcpAcceptor {}
-
 struct AcceptorInner {
     listener: TcpListener,
     abort: Event,
@@ -126,7 +122,6 @@ struct AcceptorInner {
     closed: AtomicBool,
 }
 
-unsafe impl Send for AcceptorInner {}
 unsafe impl Sync for AcceptorInner {}
 
 impl TcpAcceptor {
@@ -197,17 +192,13 @@ impl TcpAcceptor {
                         c::WSAEventSelect(socket, events[1], 0)
                     };
                     if ret != 0 { return Err(last_net_error()) }
-                    try!(set_nonblocking(socket, false));
+                    set_nonblocking(socket, false);
                     return Ok(stream)
                 }
             }
         }
 
         Err(eof())
-    }
-
-    pub fn socket_name(&mut self) -> IoResult<ip::SocketAddr> {
-        net::sockname(self.socket(), libc::getsockname)
     }
 
     pub fn set_timeout(&mut self, timeout: Option<u64>) {

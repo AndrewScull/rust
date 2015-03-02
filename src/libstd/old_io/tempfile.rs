@@ -9,15 +9,16 @@
 // except according to those terms.
 
 //! Temporary files and directories
+#![allow(deprecated)] // rand
 
+use env;
+use iter::{IteratorExt};
 use old_io::{fs, IoError, IoErrorKind, IoResult};
 use old_io;
-use iter::{IteratorExt, range};
 use ops::Drop;
-use option::Option;
 use option::Option::{None, Some};
-use os;
-use path::{Path, GenericPath};
+use option::Option;
+use old_path::{Path, GenericPath};
 use rand::{Rng, thread_rng};
 use result::Result::{Ok, Err};
 use str::StrExt;
@@ -95,14 +96,15 @@ impl TempDir {
     /// deleted once the returned wrapper is destroyed.
     ///
     /// If no directory can be created, `Err` is returned.
+    #[allow(deprecated)]
     pub fn new_in(tmpdir: &Path, prefix: &str) -> IoResult<TempDir> {
         if !tmpdir.is_absolute() {
-            let abs_tmpdir = try!(os::make_absolute(tmpdir));
-            return TempDir::new_in(&abs_tmpdir, prefix);
+            let cur_dir = try!(::os::getcwd());
+            return TempDir::new_in(&cur_dir.join(tmpdir), prefix);
         }
 
         let mut rng = thread_rng();
-        for _ in range(0, NUM_RETRIES) {
+        for _ in 0..NUM_RETRIES {
             let suffix: String = rng.gen_ascii_chars().take(NUM_RAND_CHARS).collect();
             let leaf = if prefix.len() > 0 {
                 format!("{}.{}", prefix, suffix)
@@ -132,8 +134,9 @@ impl TempDir {
     /// deleted once the returned wrapper is destroyed.
     ///
     /// If no directory can be created, `Err` is returned.
+    #[allow(deprecated)]
     pub fn new(prefix: &str) -> IoResult<TempDir> {
-        TempDir::new_in(&os::tmpdir(), prefix)
+        TempDir::new_in(&::os::tmpdir(), prefix)
     }
 
     /// Unwrap the wrapped `std::path::Path` from the `TempDir` wrapper.

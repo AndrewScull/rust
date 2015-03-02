@@ -45,7 +45,7 @@ fn combine(seek: SeekStyle, cur: uint, end: uint, offset: i64) -> IoResult<u64> 
 /// let mut w = SeekableMemWriter::new();
 /// w.write(&[0, 1, 2]);
 ///
-/// assert_eq!(w.unwrap(), vec!(0, 1, 2));
+/// assert_eq!(w.unwrap(), [0, 1, 2]);
 /// ```
 pub struct SeekableMemWriter {
     buf: Vec<u8>,
@@ -71,7 +71,7 @@ impl SeekableMemWriter {
     /// No method is exposed for acquiring a mutable reference to the buffer
     /// because it could corrupt the state of this `MemWriter`.
     #[inline]
-    pub fn get_ref<'a>(&'a self) -> &'a [u8] { self.buf.as_slice() }
+    pub fn get_ref<'a>(&'a self) -> &'a [u8] { &self.buf }
 
     /// Unwraps this `SeekableMemWriter`, returning the underlying buffer
     #[inline]
@@ -189,8 +189,8 @@ mod tests {
         b.bytes = (times * len) as u64;
         b.iter(|| {
             let mut wr = SeekableMemWriter::new();
-            for _ in range(0, times) {
-                wr.write(src.as_slice()).unwrap();
+            for _ in 0..times {
+                wr.write(&src).unwrap();
             }
 
             let v = wr.unwrap();

@@ -10,6 +10,7 @@
 
 extern crate rustc;
 extern crate rustc_driver;
+extern crate rustc_lint;
 extern crate syntax;
 
 use rustc::session::{build_session, Session};
@@ -22,15 +23,15 @@ fn main() {
     fn main() {}
     "#;
 
-    let args = std::os::args();
+    let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 4 {
         panic!("expected rustc path");
     }
 
-    let tmpdir = Path::new(args[1].as_slice());
+    let tmpdir = Path::new(&args[1]);
 
-    let mut sysroot = Path::new(args[3].as_slice());
+    let mut sysroot = Path::new(&args[3]);
     sysroot.pop();
     sysroot.pop();
 
@@ -46,6 +47,7 @@ fn basic_sess(sysroot: Path) -> Session {
 
     let descriptions = Registry::new(&rustc::diagnostics::DIAGNOSTICS);
     let sess = build_session(opts, None, descriptions);
+    rustc_lint::register_builtins(&mut sess.lint_store.borrow_mut(), Some(&sess));
     sess
 }
 

@@ -14,10 +14,10 @@
 #![deny(warnings)]
 #![allow(unused_must_use)]
 #![allow(unknown_features)]
-#![allow(unstable)]
 #![feature(box_syntax)]
 
 use std::fmt;
+use std::usize;
 
 struct A;
 struct B;
@@ -40,7 +40,7 @@ impl fmt::Display for C {
 }
 
 macro_rules! t {
-    ($a:expr, $b:expr) => { assert_eq!($a.as_slice(), $b) }
+    ($a:expr, $b:expr) => { assert_eq!($a, $b) }
 }
 
 pub fn main() {
@@ -60,16 +60,16 @@ pub fn main() {
     // At least exercise all the formats
     t!(format!("{}", true), "true");
     t!(format!("{}", '☃'), "☃");
-    t!(format!("{}", 10i), "10");
-    t!(format!("{}", 10u), "10");
+    t!(format!("{}", 10), "10");
+    t!(format!("{}", 10_usize), "10");
     t!(format!("{:?}", '☃'), "'\\u{2603}'");
-    t!(format!("{:?}", 10i), "10");
-    t!(format!("{:?}", 10u), "10");
+    t!(format!("{:?}", 10), "10");
+    t!(format!("{:?}", 10_usize), "10");
     t!(format!("{:?}", "true"), "\"true\"");
     t!(format!("{:?}", "foo\nbar"), "\"foo\\nbar\"");
-    t!(format!("{:o}", 10u), "12");
-    t!(format!("{:x}", 10u), "a");
-    t!(format!("{:X}", 10u), "A");
+    t!(format!("{:o}", 10_usize), "12");
+    t!(format!("{:x}", 10_usize), "a");
+    t!(format!("{:X}", 10_usize), "A");
     t!(format!("{}", "foo"), "foo");
     t!(format!("{}", "foo".to_string()), "foo");
     t!(format!("{:p}", 0x1234 as *const isize), "0x1234");
@@ -77,16 +77,16 @@ pub fn main() {
     t!(format!("{:x}", A), "aloha");
     t!(format!("{:X}", B), "adios");
     t!(format!("foo {} ☃☃☃☃☃☃", "bar"), "foo bar ☃☃☃☃☃☃");
-    t!(format!("{1} {0}", 0i, 1i), "1 0");
-    t!(format!("{foo} {bar}", foo=0i, bar=1is), "0 1");
-    t!(format!("{foo} {1} {bar} {0}", 0is, 1is, foo=2is, bar=3is), "2 1 3 0");
+    t!(format!("{1} {0}", 0, 1), "1 0");
+    t!(format!("{foo} {bar}", foo=0, bar=1), "0 1");
+    t!(format!("{foo} {1} {bar} {0}", 0, 1, foo=2, bar=3), "2 1 3 0");
     t!(format!("{} {0}", "a"), "a a");
-    t!(format!("{foo_bar}", foo_bar=1i), "1");
-    t!(format!("{}", 5i + 5i), "10");
+    t!(format!("{foo_bar}", foo_bar=1), "1");
+    t!(format!("{}", 5 + 5), "10");
     t!(format!("{:#4}", C), "☃123");
 
     // FIXME(#20676)
-    // let a: &fmt::Debug = &1i;
+    // let a: &fmt::Debug = &1;
     // t!(format!("{:?}", a), "1");
 
 
@@ -138,6 +138,13 @@ pub fn main() {
     t!(format!("{:+10.3e}", 1.2345e6f64),  "  +1.234e6");
     t!(format!("{:+10.3e}", -1.2345e6f64), "  -1.234e6");
 
+    // Test that pointers don't get truncated.
+    {
+        let val = usize::MAX;
+        let exp = format!("{:#x}", val);
+        t!(format!("{:p}", val as *const isize), exp);
+    }
+
     // Escaping
     t!(format!("{{"), "{");
     t!(format!("}}"), "}");
@@ -147,14 +154,14 @@ pub fn main() {
     test_order();
 
     // make sure that format! doesn't move out of local variables
-    let a = box 3i;
+    let a = box 3;
     format!("{}", a);
     format!("{}", a);
 
     // make sure that format! doesn't cause spurious unused-unsafe warnings when
     // it's inside of an outer unsafe block
     unsafe {
-        let a: isize = ::std::mem::transmute(3u);
+        let a: isize = ::std::mem::transmute(3_usize);
         format!("{}", a);
     }
 
@@ -166,14 +173,14 @@ pub fn main() {
 }
 
 // Basic test to make sure that we can invoke the `write!` macro with an
-// io::Writer instance.
+// fmt::Write instance.
 fn test_write() {
-    use std::fmt::Writer;
+    use std::fmt::Write;
     let mut buf = String::new();
-    write!(&mut buf, "{}", 3i);
+    write!(&mut buf, "{}", 3);
     {
         let w = &mut buf;
-        write!(w, "{foo}", foo=4i);
+        write!(w, "{foo}", foo=4);
         write!(w, "{}", "hello");
         writeln!(w, "{}", "line");
         writeln!(w, "{foo}", foo="bar");
@@ -195,13 +202,13 @@ fn test_print() {
 // Just make sure that the macros are defined, there's not really a lot that we
 // can do with them just yet (to test the output)
 fn test_format_args() {
-    use std::fmt::Writer;
+    use std::fmt::Write;
     let mut buf = String::new();
     {
         let w = &mut buf;
-        write!(w, "{}", format_args!("{}", 1i));
+        write!(w, "{}", format_args!("{}", 1));
         write!(w, "{}", format_args!("test"));
-        write!(w, "{}", format_args!("{test}", test=3i));
+        write!(w, "{}", format_args!("{test}", test=3));
     }
     let s = buf;
     t!(s, "1test3");

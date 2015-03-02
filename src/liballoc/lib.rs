@@ -57,22 +57,27 @@
 //! default global allocator. It is not compatible with the libc allocator API.
 
 #![crate_name = "alloc"]
-#![unstable]
+#![unstable(feature = "alloc")]
+#![feature(staged_api)]
 #![staged_api]
 #![crate_type = "rlib"]
 #![doc(html_logo_url = "http://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png",
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/")]
 
+#![feature(no_std)]
 #![no_std]
-#![allow(unknown_features)]
-#![allow(unstable)]
 #![feature(lang_items, unsafe_destructor)]
 #![feature(box_syntax)]
 #![feature(optin_builtin_traits)]
-// FIXME(#21363) remove `old_impl_check` when bug is fixed
-#![feature(old_impl_check)]
-#![allow(unknown_features)] #![feature(int_uint)]
+#![feature(unboxed_closures)]
+#![feature(unsafe_no_drop_flag)]
+#![feature(core)]
+#![feature(unique)]
+#![cfg_attr(test, feature(test, alloc, rustc_private))]
+#![cfg_attr(all(not(feature = "external_funcs"), not(feature = "external_crate")),
+            feature(libc))]
+
 
 #[macro_use]
 extern crate core;
@@ -122,10 +127,3 @@ pub fn oom() -> ! {
 //                optimize it out).
 #[doc(hidden)]
 pub fn fixme_14344_be_sure_to_link_to_collections() {}
-
-#[cfg(not(test))]
-#[doc(hidden)]
-mod std {
-    pub use core::fmt;
-    pub use core::option;
-}

@@ -12,7 +12,7 @@ Rust has two distinct terms that relate to the module system: *crate* and
 *module*. A crate is synonymous with a *library* or *package* in other
 languages. Hence "Cargo" as the name of Rust's package management tool: you
 ship your crates to others with Cargo. Crates can produce an executable or a
-shared library, depending on the project.
+library, depending on the project.
 
 Each crate has an implicit *root module* that contains the code for that crate.
 You can then define a tree of sub-modules under that root module. Modules allow
@@ -20,7 +20,7 @@ you to partition your code within the crate itself.
 
 As an example, let's make a *phrases* crate, which will give us various phrases
 in different languages. To keep things simple, we'll stick to "greetings" and
-"farewells" as two kinds of phrases, and use English and Japanese (日本語） as
+"farewells" as two kinds of phrases, and use English and Japanese (日本語) as
 two languages for those phrases to be in. We'll use this module layout:
 
 ```text
@@ -550,6 +550,10 @@ module, we now have a `phrases::japanese::hello()` function and a
 `phrases::japanese::greetings::hello()` and
 `phrases::japanese::farewells::goodbye()`. Our internal organization doesn't
 define our external interface.
+
+Here we have a `pub use` for each function we want to bring into the 
+`japanese` scope. We could alternatively use the wildcard syntax to include
+everything from `greetings` into the current scope: `pub use self::greetings::*`. 
 
 Also, note that we `pub use`d before we declared our `mod`s. Rust requires that
 `use` declarations go first.

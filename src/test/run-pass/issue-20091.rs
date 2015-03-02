@@ -8,14 +8,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// ignore-windows currently windows requires UTF-8 for spawning processes
-
-use std::old_io::Command;
-use std::os;
-
+#[cfg(unix)]
 fn main() {
-    if os::args().len() == 1 {
-        assert!(Command::new(os::self_exe_name().unwrap()).arg(b"\xff")
+    use std::process::Command;
+    use std::env;
+    use std::os::unix::prelude::*;
+    use std::ffi::OsStr;
+
+    if env::args().len() == 1 {
+        assert!(Command::new(&env::current_exe().unwrap())
+                        .arg(<OsStr as OsStrExt>::from_bytes(b"\xff"))
                         .status().unwrap().success())
     }
 }
+
+#[cfg(windows)]
+fn main() {}

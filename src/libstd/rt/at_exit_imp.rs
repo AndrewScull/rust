@@ -14,13 +14,13 @@
 
 use core::prelude::*;
 
+use boxed;
 use boxed::Box;
 use vec::Vec;
-use mem;
 use thunk::Thunk;
 use sys_common::mutex::{Mutex, MUTEX_INIT};
 
-type Queue = Vec<Thunk>;
+type Queue = Vec<Thunk<'static>>;
 
 // NB these are specifically not types from `std::sync` as they currently rely
 // on poisoning and this module needs to operate at a lower level than requiring
@@ -32,7 +32,7 @@ static mut QUEUE: *mut Queue = 0 as *mut Queue;
 unsafe fn init() {
     if QUEUE.is_null() {
         let state: Box<Queue> = box Vec::new();
-        QUEUE = mem::transmute(state);
+        QUEUE = boxed::into_raw(state);
     } else {
         // can't re-init after a cleanup
         rtassert!(QUEUE as uint != 1);
@@ -57,15 +57,15 @@ pub fn cleanup() {
 
         // If we never called init, not need to cleanup!
         if queue as uint != 0 {
-            let queue: Box<Queue> = mem::transmute(queue);
-            for to_run in queue.into_iter() {
+            let queue: Box<Queue> = Box::from_raw(queue);
+            for to_run in *queue {
                 to_run.invoke(());
             }
         }
     }
 }
 
-pub fn push(f: Thunk) {
+pub fn push(f: Thunk<'static>) {
     unsafe {
         LOCK.lock();
         init();

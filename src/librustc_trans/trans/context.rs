@@ -22,6 +22,7 @@ use trans::common::{ExternMap,tydesc_info,BuilderRef_res};
 use trans::debuginfo;
 use trans::monomorphize::MonoId;
 use trans::type_::{Type, TypeNames};
+use middle::subst::Substs;
 use middle::ty::{self, Ty};
 use session::config::NoDebugInfo;
 use session::Session;
@@ -105,17 +106,20 @@ pub struct LocalCrateContext<'tcx> {
     const_cstr_cache: RefCell<FnvHashMap<InternedString, ValueRef>>,
 
     /// Reverse-direction for const ptrs cast from globals.
-    /// Key is an int, cast from a ValueRef holding a *T,
+    /// Key is a ValueRef holding a *T,
     /// Val is a ValueRef holding a *[T].
     ///
     /// Needed because LLVM loses pointer->pointee association
     /// when we ptrcast, and we have to ptrcast during translation
-    /// of a [T] const because we form a slice, a [*T,int] pair, not
-    /// a pointer to an LLVM array type.
-    const_globals: RefCell<FnvHashMap<int, ValueRef>>,
+    /// of a [T] const because we form a slice, a (*T,usize) pair, not
+    /// a pointer to an LLVM array type. Similar for trait objects.
+    const_unsized: RefCell<FnvHashMap<ValueRef, ValueRef>>,
+
+    /// Cache of emitted const globals (value -> global)
+    const_globals: RefCell<FnvHashMap<ValueRef, ValueRef>>,
 
     /// Cache of emitted const values
-    const_values: RefCell<NodeMap<ValueRef>>,
+    const_values: RefCell<FnvHashMap<(ast::NodeId, &'tcx Substs<'tcx>), ValueRef>>,
 
     /// Cache of emitted static values
     static_values: RefCell<NodeMap<ValueRef>>,
@@ -221,15 +225,15 @@ impl<'a, 'tcx> Iterator for CrateContextMaybeIterator<'a, 'tcx> {
 
 unsafe fn create_context_and_module(sess: &Session, mod_name: &str) -> (ContextRef, ModuleRef) {
     let llcx = llvm::LLVMContextCreate();
-    let mod_name = CString::from_slice(mod_name.as_bytes());
+    let mod_name = CString::new(mod_name).unwrap();
     let llmod = llvm::LLVMModuleCreateWithNameInContext(mod_name.as_ptr(), llcx);
 
-    let data_layout = sess.target.target.data_layout.as_slice();
-    let data_layout = CString::from_slice(data_layout.as_bytes());
+    let data_layout = sess.target.target.data_layout.as_bytes();
+    let data_layout = CString::new(data_layout).unwrap();
     llvm::LLVMSetDataLayout(llmod, data_layout.as_ptr());
 
-    let llvm_target = sess.target.target.llvm_target.as_slice();
-    let llvm_target = CString::from_slice(llvm_target.as_bytes());
+    let llvm_target = sess.target.target.llvm_target.as_bytes();
+    let llvm_target = CString::new(llvm_target).unwrap();
     llvm::LLVMRustSetNormalizedTarget(llmod, llvm_target.as_ptr());
     (llcx, llmod)
 }
@@ -258,15 +262,15 @@ impl<'tcx> SharedCrateContext<'tcx> {
             symbol_hasher: RefCell::new(symbol_hasher),
             tcx: tcx,
             stats: Stats {
-                n_static_tydescs: Cell::new(0u),
-                n_glues_created: Cell::new(0u),
-                n_null_glues: Cell::new(0u),
-                n_real_glues: Cell::new(0u),
-                n_fns: Cell::new(0u),
-                n_monos: Cell::new(0u),
-                n_inlines: Cell::new(0u),
-                n_closures: Cell::new(0u),
-                n_llvm_insns: Cell::new(0u),
+                n_static_tydescs: Cell::new(0),
+                n_glues_created: Cell::new(0),
+                n_null_glues: Cell::new(0),
+                n_real_glues: Cell::new(0),
+                n_fns: Cell::new(0),
+                n_monos: Cell::new(0),
+                n_inlines: Cell::new(0),
+                n_closures: Cell::new(0),
+                n_llvm_insns: Cell::new(0),
                 llvm_insns: RefCell::new(FnvHashMap()),
                 fn_stats: RefCell::new(Vec::new()),
             },
@@ -274,7 +278,7 @@ impl<'tcx> SharedCrateContext<'tcx> {
             available_drop_glues: RefCell::new(FnvHashMap()),
         };
 
-        for i in range(0, local_count) {
+        for i in 0..local_count {
             // Append ".rs" to crate name as LLVM module identifier.
             //
             // LLVM code generator emits a ".file filename" directive
@@ -284,7 +288,7 @@ impl<'tcx> SharedCrateContext<'tcx> {
             // such as a function name in the module.
             // 1. http://llvm.org/bugs/show_bug.cgi?id=11479
             let llmod_id = format!("{}.{}.rs", crate_name, i);
-            let local_ccx = LocalCrateContext::new(&shared_ccx, &llmod_id[]);
+            let local_ccx = LocalCrateContext::new(&shared_ccx, &llmod_id[..]);
             shared_ccx.local_ccxs.push(local_ccx);
         }
 
@@ -310,7 +314,7 @@ impl<'tcx> SharedCrateContext<'tcx> {
         let (local_ccx, index) =
             self.local_ccxs
                 .iter()
-                .zip(range(0, self.local_ccxs.len()))
+                .zip(0..self.local_ccxs.len())
                 .min_by(|&(local_ccx, _idx)| local_ccx.n_llvm_insns.get())
                 .unwrap();
         CrateContext {
@@ -374,7 +378,7 @@ impl<'tcx> LocalCrateContext<'tcx> {
                                           .target
                                           .target
                                           .data_layout
-                                          []);
+                                          );
 
             let dbg_cx = if shared.tcx.sess.opts.debuginfo != NoDebugInfo {
                 Some(debuginfo::CrateDebugContext::new(llmod))
@@ -400,8 +404,9 @@ impl<'tcx> LocalCrateContext<'tcx> {
                 monomorphizing: RefCell::new(DefIdMap()),
                 vtables: RefCell::new(FnvHashMap()),
                 const_cstr_cache: RefCell::new(FnvHashMap()),
+                const_unsized: RefCell::new(FnvHashMap()),
                 const_globals: RefCell::new(FnvHashMap()),
-                const_values: RefCell::new(NodeMap()),
+                const_values: RefCell::new(FnvHashMap()),
                 static_values: RefCell::new(NodeMap()),
                 extern_const_values: RefCell::new(DefIdMap()),
                 impl_method_cache: RefCell::new(FnvHashMap()),
@@ -418,7 +423,7 @@ impl<'tcx> LocalCrateContext<'tcx> {
                 dbg_cx: dbg_cx,
                 eh_personality: RefCell::new(None),
                 intrinsics: RefCell::new(FnvHashMap()),
-                n_llvm_insns: Cell::new(0u),
+                n_llvm_insns: Cell::new(0),
                 trait_cache: RefCell::new(FnvHashMap()),
             };
 
@@ -615,11 +620,16 @@ impl<'b, 'tcx> CrateContext<'b, 'tcx> {
         &self.local.const_cstr_cache
     }
 
-    pub fn const_globals<'a>(&'a self) -> &'a RefCell<FnvHashMap<int, ValueRef>> {
+    pub fn const_unsized<'a>(&'a self) -> &'a RefCell<FnvHashMap<ValueRef, ValueRef>> {
+        &self.local.const_unsized
+    }
+
+    pub fn const_globals<'a>(&'a self) -> &'a RefCell<FnvHashMap<ValueRef, ValueRef>> {
         &self.local.const_globals
     }
 
-    pub fn const_values<'a>(&'a self) -> &'a RefCell<NodeMap<ValueRef>> {
+    pub fn const_values<'a>(&'a self) -> &'a RefCell<FnvHashMap<(ast::NodeId, &'tcx Substs<'tcx>),
+                                                                ValueRef>> {
         &self.local.const_values
     }
 
@@ -721,7 +731,7 @@ impl<'b, 'tcx> CrateContext<'b, 'tcx> {
     /// currently conservatively bounded to 1 << 47 as that is enough to cover the current usable
     /// address space on 64-bit ARMv8 and x86_64.
     pub fn obj_size_bound(&self) -> u64 {
-        match &self.sess().target.target.target_pointer_width[] {
+        match &self.sess().target.target.target_pointer_width[..] {
             "32" => 1 << 31,
             "64" => 1 << 47,
             _ => unreachable!() // error handled by config::build_target_config
@@ -731,7 +741,7 @@ impl<'b, 'tcx> CrateContext<'b, 'tcx> {
     pub fn report_overbig_object(&self, obj: Ty<'tcx>) -> ! {
         self.sess().fatal(
             &format!("the type `{}` is too big for the current architecture",
-                    obj.repr(self.tcx()))[])
+                    obj.repr(self.tcx())))
     }
 }
 

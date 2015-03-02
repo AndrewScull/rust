@@ -11,13 +11,14 @@
 #![allow(unknown_features)]
 #![feature(box_syntax)]
 
-use std::thread::Thread;
+use std::thread;
 
 fn f() {
-    let _a = box 0i;
+    let _a = box 0;
     panic!();
 }
 
 pub fn main() {
-    let _t = Thread::scoped(f);
+    let t = thread::spawn(f);
+    drop(t.join());
 }

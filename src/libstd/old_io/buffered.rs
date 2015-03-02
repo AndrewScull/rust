@@ -52,7 +52,7 @@ pub struct BufferedReader<R> {
     cap: uint,
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<R> fmt::Debug for BufferedReader<R> where R: fmt::Debug {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "BufferedReader {{ reader: {:?}, buffer: {}/{} }}",
@@ -97,7 +97,7 @@ impl<R: Reader> BufferedReader<R> {
 impl<R: Reader> Buffer for BufferedReader<R> {
     fn fill_buf<'a>(&'a mut self) -> IoResult<&'a [u8]> {
         if self.pos == self.cap {
-            self.cap = try!(self.inner.read(self.buf.as_mut_slice()));
+            self.cap = try!(self.inner.read(&mut self.buf));
             self.pos = 0;
         }
         Ok(&self.buf[self.pos..self.cap])
@@ -111,7 +111,7 @@ impl<R: Reader> Buffer for BufferedReader<R> {
 
 impl<R: Reader> Reader for BufferedReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
-        if self.pos == self.cap && buf.len() >= self.buf.capacity() {
+        if self.pos == self.cap && buf.len() >= self.buf.len() {
             return self.inner.read(buf);
         }
         let nread = {
@@ -151,7 +151,7 @@ pub struct BufferedWriter<W> {
     pos: uint
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<W> fmt::Debug for BufferedWriter<W> where W: fmt::Debug {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "BufferedWriter {{ writer: {:?}, buffer: {}/{} }}",
@@ -251,7 +251,7 @@ pub struct LineBufferedWriter<W> {
     inner: BufferedWriter<W>,
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<W> fmt::Debug for LineBufferedWriter<W> where W: fmt::Debug {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "LineBufferedWriter {{ writer: {:?}, buffer: {}/{} }}",
@@ -342,7 +342,7 @@ pub struct BufferedStream<S> {
     inner: BufferedReader<InternalBufferedWriter<S>>
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<S> fmt::Debug for BufferedStream<S> where S: fmt::Debug {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let reader = &self.inner;
@@ -546,7 +546,7 @@ mod test {
         assert_eq!(a, &w.get_ref()[]);
         let w = w.into_inner();
         let a: &[_] = &[0, 1];
-        assert_eq!(a, &w[]);
+        assert_eq!(a, &w[..]);
     }
 
     // This is just here to make sure that we don't infinite loop in the
@@ -643,14 +643,14 @@ mod test {
     #[test]
     fn read_char_buffered() {
         let buf = [195u8, 159u8];
-        let mut reader = BufferedReader::with_capacity(1, &buf[]);
+        let mut reader = BufferedReader::with_capacity(1, &buf[..]);
         assert_eq!(reader.read_char(), Ok('ß'));
     }
 
     #[test]
     fn test_chars() {
         let buf = [195u8, 159u8, b'a'];
-        let mut reader = BufferedReader::with_capacity(1, &buf[]);
+        let mut reader = BufferedReader::with_capacity(1, &buf[..]);
         let mut it = reader.chars();
         assert_eq!(it.next(), Some(Ok('ß')));
         assert_eq!(it.next(), Some(Ok('a')));

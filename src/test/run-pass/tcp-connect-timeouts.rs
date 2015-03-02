@@ -16,7 +16,6 @@
 // one test task to ensure that errors are timeouts, not file descriptor
 // exhaustion.
 
-#![allow(unstable)]
 #![reexport_test_harness_main = "test_main"]
 
 #![allow(unused_imports)]
@@ -42,7 +41,7 @@ fn eventual_timeout() {
     rx1.recv().unwrap();
 
     let mut v = Vec::new();
-    for _ in range(0u, 10000) {
+    for _ in 0_usize..10000 {
         match TcpStream::connect_timeout(addr, Duration::milliseconds(100)) {
             Ok(e) => v.push(e),
             Err(ref e) if e.kind == old_io::TimedOut => return,

@@ -9,6 +9,7 @@
 // except according to those terms.
 pub use self::MaybeTyped::*;
 
+use rustc_lint;
 use rustc_driver::driver;
 use rustc::session::{self, config};
 use rustc::session::config::UnstableFeatures;
@@ -108,21 +109,22 @@ pub fn run_core(search_paths: SearchPaths, cfgs: Vec<String>, externs: Externs,
     };
 
     let codemap = codemap::CodeMap::new();
-    let diagnostic_handler = diagnostic::default_handler(diagnostic::Auto, None);
+    let diagnostic_handler = diagnostic::default_handler(diagnostic::Auto, None, true);
     let span_diagnostic_handler =
         diagnostic::mk_span_handler(diagnostic_handler, codemap);
 
     let sess = session::build_session_(sessopts, cpath,
                                        span_diagnostic_handler);
+    rustc_lint::register_builtins(&mut sess.lint_store.borrow_mut(), Some(&sess));
 
     let cfg = config::build_configuration(&sess);
 
     let krate = driver::phase_1_parse_input(&sess, cfg, &input);
 
-    let name = link::find_crate_name(Some(&sess), krate.attrs.as_slice(),
+    let name = link::find_crate_name(Some(&sess), &krate.attrs,
                                      &input);
 
-    let krate = driver::phase_2_configure_and_expand(&sess, krate, name.as_slice(), None)
+    let krate = driver::phase_2_configure_and_expand(&sess, krate, &name, None)
                     .expect("phase_2_configure_and_expand aborted in rustdoc!");
 
     let mut forest = ast_map::Forest::new(krate);

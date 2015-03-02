@@ -17,7 +17,7 @@ pub mod kitty {
       pub name : String,
     }
 
-    impl fmt::String for cat {
+    impl fmt::Display for cat {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "{}", self.name)
         }
@@ -26,8 +26,8 @@ pub mod kitty {
     impl cat {
         fn meow(&mut self) {
             println!("Meow");
-            self.meows += 1u;
-            if self.meows % 5u == 0u {
+            self.meows += 1_usize;
+            if self.meows % 5_usize == 0_usize {
                 self.how_hungry += 1;
             }
         }

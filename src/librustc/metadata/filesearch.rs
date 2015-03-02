@@ -13,9 +13,10 @@
 pub use self::FileMatch::*;
 
 use std::collections::HashSet;
+use std::env;
+use std::os;
 use std::old_io::fs::PathExtensions;
 use std::old_io::fs;
-use std::os;
 
 use util::fs as myfs;
 use session::search_paths::{SearchPaths, PathKind};
@@ -66,7 +67,7 @@ impl<'a> FileSearch<'a> {
         // Try RUST_PATH
         if !found {
             let rustpath = rust_path();
-            for path in rustpath.iter() {
+            for path in &rustpath {
                 let tlib_path = make_rustpkg_lib_path(
                     self.sysroot, path, self.triple);
                 debug!("is {} in visited_dirs? {}", tlib_path.display(),
@@ -207,7 +208,7 @@ static PATH_ENTRY_SEPARATOR: &'static str = ":";
 
 /// Returns RUST_PATH as a string, without default paths added
 pub fn get_rust_path() -> Option<String> {
-    os::getenv("RUST_PATH").map(|x| x.to_string())
+    env::var("RUST_PATH").ok()
 }
 
 /// Returns the value of RUST_PATH, as a list
@@ -219,7 +220,7 @@ pub fn rust_path() -> Vec<Path> {
     let mut env_rust_path: Vec<Path> = match get_rust_path() {
         Some(env_path) => {
             let env_path_components =
-                env_path.split_str(PATH_ENTRY_SEPARATOR);
+                env_path.split(PATH_ENTRY_SEPARATOR);
             env_path_components.map(|s| Path::new(s)).collect()
         }
         None => Vec::new()
@@ -243,8 +244,7 @@ pub fn rust_path() -> Vec<Path> {
         }
         cwd.pop();
     }
-    let h = os::homedir();
-    for h in h.iter() {
+    if let Some(h) = os::homedir() {
         let p = h.join(".rust");
         if !env_rust_path.contains(&p) && p.exists() {
             env_rust_path.push(p);

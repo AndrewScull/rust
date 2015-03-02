@@ -8,9 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-pub use self::ClosureKind::*;
-
 use back::link::mangle_internal_name_by_path_and_seq;
+use llvm::ValueRef;
 use middle::mem_categorization::Typer;
 use trans::adt;
 use trans::base::*;
@@ -33,9 +32,9 @@ use syntax::ast_util;
 
 fn load_closure_environment<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                                         arg_scope_id: ScopeId,
-                                        freevar_mode: ast::CaptureClause,
                                         freevars: &[ty::Freevar])
-                                        -> Block<'blk, 'tcx> {
+                                        -> Block<'blk, 'tcx>
+{
     let _icx = push_ctxt("closure::load_closure_environment");
 
     // Special case for small by-value selfs.
@@ -65,18 +64,21 @@ fn load_closure_environment<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
     };
 
     for (i, freevar) in freevars.iter().enumerate() {
+        let upvar_id = ty::UpvarId { var_id: freevar.def.local_node_id(),
+                                     closure_expr_id: closure_id.node };
+        let upvar_capture = bcx.tcx().upvar_capture(upvar_id).unwrap();
         let mut upvar_ptr = GEPi(bcx, llenv, &[0, i]);
-        let captured_by_ref = match freevar_mode {
-            ast::CaptureByRef => {
+        let captured_by_ref = match upvar_capture {
+            ty::UpvarCapture::ByValue => false,
+            ty::UpvarCapture::ByRef(..) => {
                 upvar_ptr = Load(bcx, upvar_ptr);
                 true
             }
-            ast::CaptureByValue => false
         };
         let def_id = freevar.def.def_id();
         bcx.fcx.llupvars.borrow_mut().insert(def_id.node, upvar_ptr);
 
-        if kind == ty::FnOnceClosureKind && freevar_mode == ast::CaptureByValue {
+        if kind == ty::FnOnceClosureKind && !captured_by_ref {
             bcx.fcx.schedule_drop_mem(arg_scope_id,
                                       upvar_ptr,
                                       node_id_type(bcx, def_id.node))
@@ -96,38 +98,23 @@ fn load_closure_environment<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
     bcx
 }
 
-#[derive(PartialEq)]
-pub enum ClosureKind<'tcx> {
+pub enum ClosureEnv<'a> {
     NotClosure,
-    // See load_closure_environment.
-    Closure(ast::CaptureClause)
+    Closure(&'a [ty::Freevar]),
 }
 
-pub struct ClosureEnv<'a, 'tcx> {
-    freevars: &'a [ty::Freevar],
-    pub kind: ClosureKind<'tcx>
-}
-
-impl<'a, 'tcx> ClosureEnv<'a, 'tcx> {
-    pub fn new(freevars: &'a [ty::Freevar], kind: ClosureKind<'tcx>)
-               -> ClosureEnv<'a, 'tcx> {
-        ClosureEnv {
-            freevars: freevars,
-            kind: kind
-        }
-    }
-
-    pub fn load<'blk>(self, bcx: Block<'blk, 'tcx>, arg_scope: ScopeId)
-                      -> Block<'blk, 'tcx> {
-        // Don't bother to create the block if there's nothing to load
-        if self.freevars.is_empty() {
-            return bcx;
-        }
-
-        match self.kind {
-            NotClosure => bcx,
-            Closure(freevar_mode) => {
-                load_closure_environment(bcx, arg_scope, freevar_mode, self.freevars)
+impl<'a> ClosureEnv<'a> {
+    pub fn load<'blk,'tcx>(self, bcx: Block<'blk, 'tcx>, arg_scope: ScopeId)
+                           -> Block<'blk, 'tcx>
+    {
+        match self {
+            ClosureEnv::NotClosure => bcx,
+            ClosureEnv::Closure(freevars) => {
+                if freevars.is_empty() {
+                    bcx
+                } else {
+                    load_closure_environment(bcx, arg_scope, freevars)
+                }
             }
         }
     }
@@ -139,7 +126,7 @@ pub fn get_or_create_declaration_if_closure<'a, 'tcx>(ccx: &CrateContext<'a, 'tc
                                                       closure_id: ast::DefId,
                                                       substs: &Substs<'tcx>)
                                                       -> Option<Datum<'tcx, Rvalue>> {
-    if !ccx.tcx().closures.borrow().contains_key(&closure_id) {
+    if !ccx.tcx().closure_kinds.borrow().contains_key(&closure_id) {
         // Not a closure.
         return None
     }
@@ -151,7 +138,7 @@ pub fn get_or_create_declaration_if_closure<'a, 'tcx>(ccx: &CrateContext<'a, 'tc
     // duplicate declarations
     let function_type = erase_regions(ccx.tcx(), &function_type);
     let params = match function_type.sty {
-        ty::ty_closure(_, _, ref substs) => substs.types.clone(),
+        ty::ty_closure(_, _, substs) => &substs.types,
         _ => unreachable!()
     };
     let mono_id = MonoId {
@@ -171,7 +158,7 @@ pub fn get_or_create_declaration_if_closure<'a, 'tcx>(ccx: &CrateContext<'a, 'tc
         mangle_internal_name_by_path_and_seq(path, "closure")
     });
 
-    let llfn = decl_internal_rust_fn(ccx, function_type, &symbol[]);
+    let llfn = decl_internal_rust_fn(ccx, function_type, &symbol[..]);
 
     // set an inline hint for all closures
     set_inline_hint(llfn);
@@ -185,61 +172,69 @@ pub fn get_or_create_declaration_if_closure<'a, 'tcx>(ccx: &CrateContext<'a, 'tc
     Some(Datum::new(llfn, function_type, Rvalue::new(ByValue)))
 }
 
-pub fn trans_closure_expr<'blk, 'tcx>(mut bcx: Block<'blk, 'tcx>,
-                                      decl: &ast::FnDecl,
-                                      body: &ast::Block,
-                                      id: ast::NodeId,
-                                      dest: expr::Dest)
-                                      -> Block<'blk, 'tcx>
+pub enum Dest<'a, 'tcx: 'a> {
+    SaveIn(Block<'a, 'tcx>, ValueRef),
+    Ignore(&'a CrateContext<'a, 'tcx>)
+}
+
+pub fn trans_closure_expr<'a, 'tcx>(dest: Dest<'a, 'tcx>,
+                                    decl: &ast::FnDecl,
+                                    body: &ast::Block,
+                                    id: ast::NodeId,
+                                    param_substs: &'tcx Substs<'tcx>)
+                                    -> Option<Block<'a, 'tcx>>
 {
+    let ccx = match dest {
+        Dest::SaveIn(bcx, _) => bcx.ccx(),
+        Dest::Ignore(ccx) => ccx
+    };
+    let tcx = ccx.tcx();
     let _icx = push_ctxt("closure::trans_closure");
 
     debug!("trans_closure()");
 
     let closure_id = ast_util::local_def(id);
     let llfn = get_or_create_declaration_if_closure(
-        bcx.ccx(),
+        ccx,
         closure_id,
-        bcx.fcx.param_substs).unwrap();
+        param_substs).unwrap();
 
     // Get the type of this closure. Use the current `param_substs` as
     // the closure substitutions. This makes sense because the closure
     // takes the same set of type arguments as the enclosing fn, and
     // this function (`trans_closure`) is invoked at the point
     // of the closure expression.
-    let typer = NormalizingClosureTyper::new(bcx.tcx());
-    let function_type = typer.closure_type(closure_id, bcx.fcx.param_substs);
+    let typer = NormalizingClosureTyper::new(tcx);
+    let function_type = typer.closure_type(closure_id, param_substs);
 
     let freevars: Vec<ty::Freevar> =
-        ty::with_freevars(bcx.tcx(), id, |fv| fv.iter().map(|&fv| fv).collect());
-    let freevar_mode = bcx.tcx().capture_mode(id);
+        ty::with_freevars(tcx, id, |fv| fv.iter().cloned().collect());
 
-    let sig = ty::erase_late_bound_regions(bcx.tcx(), &function_type.sig);
+    let sig = ty::erase_late_bound_regions(tcx, &function_type.sig);
 
-    trans_closure(bcx.ccx(),
+    trans_closure(ccx,
                   decl,
                   body,
                   llfn.val,
-                  bcx.fcx.param_substs,
+                  param_substs,
                   id,
                   &[],
                   sig.output,
                   function_type.abi,
-                  ClosureEnv::new(&freevars[],
-                                  Closure(freevar_mode)));
+                  ClosureEnv::Closure(&freevars[..]));
 
     // Don't hoist this to the top of the function. It's perfectly legitimate
     // to have a zero-size closure (in which case dest will be `Ignore`) and
     // we must still generate the closure body.
-    let dest_addr = match dest {
-        expr::SaveIn(p) => p,
-        expr::Ignore => {
+    let (mut bcx, dest_addr) = match dest {
+        Dest::SaveIn(bcx, p) => (bcx, p),
+        Dest::Ignore(_) => {
             debug!("trans_closure() ignoring result");
-            return bcx
+            return None;
         }
     };
 
-    let repr = adt::represent_type(bcx.ccx(), node_id_type(bcx, id));
+    let repr = adt::represent_type(ccx, node_id_type(bcx, id));
 
     // Create the closure.
     for (i, freevar) in freevars.iter().enumerate() {
@@ -249,17 +244,19 @@ pub fn trans_closure_expr<'blk, 'tcx>(mut bcx: Block<'blk, 'tcx>,
                                                    dest_addr,
                                                    0,
                                                    i);
-        match freevar_mode {
-            ast::CaptureByValue => {
+        let upvar_id = ty::UpvarId { var_id: freevar.def.local_node_id(),
+                                     closure_expr_id: id };
+        match tcx.upvar_capture(upvar_id).unwrap() {
+            ty::UpvarCapture::ByValue => {
                 bcx = datum.store_to(bcx, upvar_slot_dest);
             }
-            ast::CaptureByRef => {
+            ty::UpvarCapture::ByRef(..) => {
                 Store(bcx, datum.to_llref(), upvar_slot_dest);
             }
         }
     }
     adt::trans_set_discr(bcx, &*repr, dest_addr, 0);
 
-    bcx
+    Some(bcx)
 }
 

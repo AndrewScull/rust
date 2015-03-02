@@ -1,4 +1,4 @@
-// Copyright 2014 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2014-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -12,7 +12,6 @@ use prelude::v1::*;
 use self::Req::*;
 
 use collections::HashMap;
-use collections::hash_map::Hasher;
 use ffi::CString;
 use hash::Hash;
 use old_io::process::{ProcessExit, ExitStatus, ExitSignal};
@@ -20,7 +19,7 @@ use old_io::{self, IoResult, IoError, EndOfFile};
 use libc::{self, pid_t, c_void, c_int};
 use mem;
 use os;
-use path::BytesContainer;
+use old_path::BytesContainer;
 use ptr;
 use sync::mpsc::{channel, Sender, Receiver};
 use sys::fs::FileDesc;
@@ -31,6 +30,12 @@ use sys_common::{AsInner, mkerr_libc, timeout};
 pub use sys_common::ProcessConfig;
 
 helper_init! { static HELPER: Helper<Req> }
+
+/// Unix-specific extensions to the Command builder
+pub struct CommandExt {
+    uid: Option<u32>,
+    gid: Option<u32>,
+}
 
 /// The unique id of the process (this should never be negative).
 pub struct Process {
@@ -61,10 +66,9 @@ impl Process {
                               out_fd: Option<P>, err_fd: Option<P>)
                               -> IoResult<Process>
         where C: ProcessConfig<K, V>, P: AsInner<FileDesc>,
-              K: BytesContainer + Eq + Hash<Hasher>, V: BytesContainer
+              K: BytesContainer + Eq + Hash, V: BytesContainer
     {
         use libc::funcs::posix88::unistd::{fork, dup2, close, chdir, execvp};
-        use libc::funcs::bsd44::getdtablesize;
 
         mod rustrt {
             extern {
@@ -72,21 +76,18 @@ impl Process {
             }
         }
 
-        #[cfg(target_os = "macos")]
-        unsafe fn set_environ(envp: *const c_void) {
-            extern { fn _NSGetEnviron() -> *mut *const c_void; }
-
-            *_NSGetEnviron() = envp;
-        }
-        #[cfg(not(target_os = "macos"))]
-        unsafe fn set_environ(envp: *const c_void) {
-            extern { static mut environ: *const c_void; }
-            environ = envp;
-        }
-
         unsafe fn set_cloexec(fd: c_int) {
             let ret = c::ioctl(fd, c::FIOCLEX);
             assert_eq!(ret, 0);
+        }
+
+        #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+        unsafe fn getdtablesize() -> c_int {
+            libc::sysconf(libc::consts::os::sysconf::_SC_OPEN_MAX) as c_int
+        }
+        #[cfg(not(all(target_os = "android", target_arch = "aarch64")))]
+        unsafe fn getdtablesize() -> c_int {
+            libc::funcs::bsd44::getdtablesize()
         }
 
         let dirp = cfg.cwd().map(|c| c.as_ptr()).unwrap_or(ptr::null());
@@ -96,8 +97,8 @@ impl Process {
             mem::transmute::<&ProcessConfig<K,V>,&'static ProcessConfig<K,V>>(cfg)
         };
 
-        with_envp(cfg.env(), move|: envp: *const c_void| {
-            with_argv(cfg.program(), cfg.args(), move|: argv: *const *const libc::c_char| unsafe {
+        with_envp(cfg.env(), move|envp: *const c_void| {
+            with_argv(cfg.program(), cfg.args(), move|argv: *const *const libc::c_char| unsafe {
                 let (input, mut output) = try!(sys::os::pipe());
 
                 // We may use this in the child, so perform allocations before the
@@ -197,7 +198,7 @@ impl Process {
                 // up /dev/null into that file descriptor. Otherwise, the first file
                 // descriptor opened up in the child would be numbered as one of the
                 // stdio file descriptors, which is likely to wreak havoc.
-                let setup = |&: src: Option<P>, dst: c_int| {
+                let setup = |src: Option<P>, dst: c_int| {
                     let src = match src {
                         None => {
                             let flags = if dst == libc::STDIN_FILENO {
@@ -224,7 +225,7 @@ impl Process {
                 if !setup(err_fd, libc::STDERR_FILENO) { fail(&mut output) }
 
                 // close all other fds
-                for fd in range(3, getdtablesize()).rev() {
+                for fd in (3..getdtablesize()).rev() {
                     if fd != output.fd() {
                         let _ = close(fd as c_int);
                     }
@@ -269,7 +270,7 @@ impl Process {
                     fail(&mut output);
                 }
                 if !envp.is_null() {
-                    set_environ(envp);
+                    *sys::os::environ() = envp as *const _;
                 }
                 let _ = execvp(*argv, argv as *mut _);
                 fail(&mut output);
@@ -352,8 +353,8 @@ impl Process {
             unsafe {
                 let mut pipes = [0; 2];
                 assert_eq!(libc::pipe(pipes.as_mut_ptr()), 0);
-                set_nonblocking(pipes[0], true).ok().unwrap();
-                set_nonblocking(pipes[1], true).ok().unwrap();
+                set_nonblocking(pipes[0], true);
+                set_nonblocking(pipes[1], true);
                 WRITE_FD = pipes[1];
 
                 let mut old: c::sigaction = mem::zeroed();
@@ -369,7 +370,7 @@ impl Process {
         fn waitpid_helper(input: libc::c_int,
                           messages: Receiver<Req>,
                           (read_fd, old): (libc::c_int, c::sigaction)) {
-            set_nonblocking(input, true).ok().unwrap();
+            set_nonblocking(input, true);
             let mut set: c::fd_set = unsafe { mem::zeroed() };
             let mut tv: libc::timeval;
             let mut active = Vec::<(libc::pid_t, Sender<ProcessExit>, u64)>::new();
@@ -400,7 +401,7 @@ impl Process {
                 match unsafe { c::select(max, &mut set, ptr::null_mut(),
                                          ptr::null_mut(), p) } {
                     // interrupted, retry
-                    -1 if os::errno() == libc::EINTR as uint => continue,
+                    -1 if os::errno() == libc::EINTR as i32 => continue,
 
                     // We read something, break out and process
                     1 | 2 => {}
@@ -509,7 +510,7 @@ impl Process {
         // which will wake up the other end at some point, so we just allow this
         // signal to be coalesced with the pending signals on the pipe.
         extern fn sigchld_handler(_signum: libc::c_int) {
-            let msg = 1i;
+            let msg = 1;
             match unsafe {
                 libc::write(WRITE_FD, &msg as *const _ as *const libc::c_void, 1)
             } {
@@ -558,7 +559,7 @@ fn with_envp<K,V,T,F>(env: Option<&HashMap<K, V>>,
                       cb: F)
                       -> T
     where F : FnOnce(*const c_void) -> T,
-          K : BytesContainer + Eq + Hash<Hasher>,
+          K : BytesContainer + Eq + Hash,
           V : BytesContainer
 {
     // On posixy systems we can pass a char** for envp, which is a
@@ -570,7 +571,7 @@ fn with_envp<K,V,T,F>(env: Option<&HashMap<K, V>>,
         Some(env) => {
             let mut tmps = Vec::with_capacity(env.len());
 
-            for pair in env.iter() {
+            for pair in env {
                 let mut kv = Vec::new();
                 kv.push_all(pair.0.container_as_bytes());
                 kv.push('=' as u8);
@@ -604,7 +605,9 @@ fn translate_status(status: c_int) -> ProcessExit {
     #[cfg(any(target_os = "macos",
               target_os = "ios",
               target_os = "freebsd",
-              target_os = "dragonfly"))]
+              target_os = "dragonfly",
+              target_os = "bitrig",
+              target_os = "openbsd"))]
     mod imp {
         pub fn WIFEXITED(status: i32) -> bool { (status & 0x7f) == 0 }
         pub fn WEXITSTATUS(status: i32) -> i32 { status >> 8 }

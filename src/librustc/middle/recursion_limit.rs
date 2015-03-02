@@ -18,16 +18,15 @@
 use session::Session;
 use syntax::ast;
 use syntax::attr::AttrMetaMethods;
-use std::str::FromStr;
 
 pub fn update_recursion_limit(sess: &Session, krate: &ast::Crate) {
-    for attr in krate.attrs.iter() {
+    for attr in &krate.attrs {
         if !attr.check_name("recursion_limit") {
             continue;
         }
 
         if let Some(s) = attr.value_str() {
-            if let Some(n) = FromStr::from_str(s.get()) {
+            if let Some(n) = s.parse().ok() {
                 sess.recursion_limit.set(n);
                 return;
             }

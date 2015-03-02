@@ -11,9 +11,10 @@
 // The regression test for #15031 to make sure destructuring trait
 // reference work properly.
 
+#![feature(box_patterns)]
 #![feature(box_syntax)]
 
-trait T {}
+trait T { fn foo(&self) {} }
 impl T for isize {}
 
 fn main() {
@@ -27,29 +28,29 @@ fn main() {
     // if n > m, it's a type mismatch error.
 
     // n < m
-    let &x = &(&1is as &T);
-    let &x = &&(&1is as &T);
-    let &&x = &&(&1is as &T);
+    let &x = &(&1 as &T);
+    let &x = &&(&1 as &T);
+    let &&x = &&(&1 as &T);
 
     // n == m
-    let &x = &1is as &T;      //~ ERROR type `&T` cannot be dereferenced
-    let &&x = &(&1is as &T);  //~ ERROR type `&T` cannot be dereferenced
-    let box x = box 1is as Box<T>; //~ ERROR type `Box<T>` cannot be dereferenced
+    let &x = &1 as &T;      //~ ERROR type `&T` cannot be dereferenced
+    let &&x = &(&1 as &T);  //~ ERROR type `&T` cannot be dereferenced
+    let box x = box 1 as Box<T>; //~ ERROR type `Box<T>` cannot be dereferenced
 
     // n > m
-    let &&x = &1is as &T;
+    let &&x = &1 as &T;
     //~^ ERROR mismatched types
     //~| expected `T`
     //~| found `&_`
     //~| expected trait T
     //~| found &-ptr
-    let &&&x = &(&1is as &T);
+    let &&&x = &(&1 as &T);
     //~^ ERROR mismatched types
     //~| expected `T`
     //~| found `&_`
     //~| expected trait T
     //~| found &-ptr
-    let box box x = box 1is as Box<T>;
+    let box box x = box 1 as Box<T>;
     //~^ ERROR mismatched types
     //~| expected `T`
     //~| found `Box<_>`

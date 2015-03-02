@@ -29,20 +29,23 @@
 //! for conversion to/from various other string types. Eventually these types
 //! will offer a full-fledged string API.
 
-#![unstable = "recently added as part of path/io reform"]
+#![unstable(feature = "os",
+            reason = "recently added as part of path/io reform")]
 
 use core::prelude::*;
 
-use core::borrow::{BorrowFrom, ToOwned};
+use borrow::{Borrow, ToOwned};
 use fmt::{self, Debug};
 use mem;
 use string::{String, CowString};
 use ops;
 use cmp;
-use hash::{Hash, Hasher, Writer};
+use hash::{Hash, Hasher};
+use old_path::{Path, GenericPath};
 
 use sys::os_str::{Buf, Slice};
 use sys_common::{AsInner, IntoInner, FromInner};
+use super::AsOsStr;
 
 /// Owned, mutable OS strings.
 #[derive(Clone)]
@@ -68,6 +71,11 @@ impl OsString {
         OsString { inner: Buf::from_str(s) }
     }
 
+    /// Constructs a new empty `OsString`.
+    pub fn new() -> OsString {
+        OsString { inner: Buf::from_string(String::new()) }
+    }
+
     /// Convert the `OsString` into a `String` if it contains valid Unicode data.
     ///
     /// On failure, ownership of the original `OsString` is returned.
@@ -81,11 +89,11 @@ impl OsString {
     }
 }
 
-impl ops::Index<ops::FullRange> for OsString {
+impl ops::Index<ops::RangeFull> for OsString {
     type Output = OsStr;
 
     #[inline]
-    fn index(&self, _index: &ops::FullRange) -> &OsStr {
+    fn index(&self, _index: &ops::RangeFull) -> &OsStr {
         unsafe { mem::transmute(self.inner.as_slice()) }
     }
 }
@@ -95,13 +103,70 @@ impl ops::Deref for OsString {
 
     #[inline]
     fn deref(&self) -> &OsStr {
-        &self[]
+        &self[..]
     }
 }
 
 impl Debug for OsString {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         fmt::Debug::fmt(&**self, formatter)
+    }
+}
+
+impl PartialEq for OsString {
+    fn eq(&self, other: &OsString) -> bool {
+        &**self == &**other
+    }
+}
+
+impl PartialEq<str> for OsString {
+    fn eq(&self, other: &str) -> bool {
+        &**self == other
+    }
+}
+
+impl PartialEq<OsString> for str {
+    fn eq(&self, other: &OsString) -> bool {
+        &**other == self
+    }
+}
+
+impl Eq for OsString {}
+
+impl PartialOrd for OsString {
+    #[inline]
+    fn partial_cmp(&self, other: &OsString) -> Option<cmp::Ordering> {
+        (&**self).partial_cmp(&**other)
+    }
+    #[inline]
+    fn lt(&self, other: &OsString) -> bool { &**self < &**other }
+    #[inline]
+    fn le(&self, other: &OsString) -> bool { &**self <= &**other }
+    #[inline]
+    fn gt(&self, other: &OsString) -> bool { &**self > &**other }
+    #[inline]
+    fn ge(&self, other: &OsString) -> bool { &**self >= &**other }
+}
+
+impl PartialOrd<str> for OsString {
+    #[inline]
+    fn partial_cmp(&self, other: &str) -> Option<cmp::Ordering> {
+        (&**self).partial_cmp(other)
+    }
+}
+
+impl Ord for OsString {
+    #[inline]
+    fn cmp(&self, other: &OsString) -> cmp::Ordering {
+        (&**self).cmp(&**other)
+    }
+}
+
+#[stable(feature = "rust1", since = "1.0.0")]
+impl Hash for OsString {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (&**self).hash(state)
     }
 }
 
@@ -125,7 +190,7 @@ impl OsStr {
         self.inner.to_string_lossy()
     }
 
-    /// Copy the slice into an onwed `OsString`.
+    /// Copy the slice into an owned `OsString`.
     pub fn to_os_string(&self) -> OsString {
         OsString { inner: self.inner.to_owned() }
     }
@@ -189,9 +254,10 @@ impl Ord for OsStr {
     fn cmp(&self, other: &OsStr) -> cmp::Ordering { self.bytes().cmp(other.bytes()) }
 }
 
-impl<'a, S: Hasher + Writer> Hash<S> for OsStr {
+#[stable(feature = "rust1", since = "1.0.0")]
+impl Hash for OsStr {
     #[inline]
-    fn hash(&self, state: &mut S) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.bytes().hash(state)
     }
 }
@@ -202,18 +268,19 @@ impl Debug for OsStr {
     }
 }
 
-impl BorrowFrom<OsString> for OsStr {
-    fn borrow_from(owned: &OsString) -> &OsStr { &owned[] }
+impl Borrow<OsStr> for OsString {
+    fn borrow(&self) -> &OsStr { &self[..] }
 }
 
-impl ToOwned<OsString> for OsStr {
+impl ToOwned for OsStr {
+    type Owned = OsString;
     fn to_owned(&self) -> OsString { self.to_os_string() }
 }
 
-/// Freely convertible to an `&OsStr` slice.
-pub trait AsOsStr {
-    /// Convert to an `&OsStr` slice.
-    fn as_os_str(&self) -> &OsStr;
+impl<'a, T: AsOsStr + ?Sized> AsOsStr for &'a T {
+    fn as_os_str(&self) -> &OsStr {
+        (*self).as_os_str()
+    }
 }
 
 impl AsOsStr for OsStr {
@@ -224,7 +291,7 @@ impl AsOsStr for OsStr {
 
 impl AsOsStr for OsString {
     fn as_os_str(&self) -> &OsStr {
-        &self[]
+        &self[..]
     }
 }
 
@@ -236,7 +303,22 @@ impl AsOsStr for str {
 
 impl AsOsStr for String {
     fn as_os_str(&self) -> &OsStr {
-        OsStr::from_str(&self[])
+        OsStr::from_str(&self[..])
+    }
+}
+
+#[cfg(unix)]
+impl AsOsStr for Path {
+    fn as_os_str(&self) -> &OsStr {
+        unsafe { mem::transmute(self.as_vec()) }
+    }
+}
+
+#[cfg(windows)]
+impl AsOsStr for Path {
+    fn as_os_str(&self) -> &OsStr {
+        // currently .as_str() is actually infallible on windows
+        OsStr::from_str(self.as_str().unwrap())
     }
 }
 

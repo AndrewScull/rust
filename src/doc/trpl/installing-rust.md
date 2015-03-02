@@ -24,11 +24,11 @@ installer](https://static.rust-lang.org/dist/rust-nightly-x86_64-pc-windows-gnu.
 and run it.
 
 If you decide you don't want Rust anymore, we'll be a bit sad, but that's okay.
-Not every programming language is great for everyone. Just pass an argument to
-the script:
+Not every programming language is great for everyone. Just run the uninstall
+script:
 
 ```bash
-$ curl -s https://static.rust-lang.org/rustup.sh | sudo sh -s -- --uninstall
+$ sudo /usr/local/lib/rustlib/uninstall.sh
 ```
 
 If you used the Windows installer, just re-run the `.exe` and it will give you
@@ -70,10 +70,10 @@ If you've got Rust installed, you can open up a shell, and type this:
 $ rustc --version
 ```
 
-You should see some output that looks something like this:
+You should see the version number, commit hash, commit date and build date:
 
 ```bash
-rustc 1.0.0-nightly (f11f3e7ba 2015-01-04 20:02:14 +0000)
+rustc 1.0.0-nightly (f11f3e7ba 2015-01-04) (built 2015-01-06)
 ```
 
 If you did, Rust has been installed successfully! Congrats!

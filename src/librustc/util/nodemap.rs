@@ -15,7 +15,7 @@
 use std::collections::hash_state::{DefaultState};
 use std::collections::{HashMap, HashSet};
 use std::default::Default;
-use std::hash::{Hasher, Writer, Hash};
+use std::hash::{Hasher, Hash};
 use syntax::ast;
 
 pub type FnvHashMap<K, V> = HashMap<K, V, DefaultState<FnvHasher>>;
@@ -27,10 +27,10 @@ pub type DefIdMap<T> = FnvHashMap<ast::DefId, T>;
 pub type NodeSet = FnvHashSet<ast::NodeId>;
 pub type DefIdSet = FnvHashSet<ast::DefId>;
 
-pub fn FnvHashMap<K: Hash<FnvHasher> + Eq, V>() -> FnvHashMap<K, V> {
+pub fn FnvHashMap<K: Hash + Eq, V>() -> FnvHashMap<K, V> {
     Default::default()
 }
-pub fn FnvHashSet<V: Hash<FnvHasher> + Eq>() -> FnvHashSet<V> {
+pub fn FnvHashSet<V: Hash + Eq>() -> FnvHashSet<V> {
     Default::default()
 }
 
@@ -46,7 +46,6 @@ pub fn DefIdSet() -> DefIdSet { FnvHashSet() }
 ///
 /// This uses FNV hashing, as described here:
 /// http://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
-#[allow(missing_copy_implementations)]
 pub struct FnvHasher(u64);
 
 impl Default for FnvHasher {
@@ -54,18 +53,13 @@ impl Default for FnvHasher {
 }
 
 impl Hasher for FnvHasher {
-    type Output = u64;
-    fn reset(&mut self) { *self = Default::default(); }
-    fn finish(&self) -> u64 { self.0 }
-}
-
-impl Writer for FnvHasher {
     fn write(&mut self, bytes: &[u8]) {
         let FnvHasher(mut hash) = *self;
-        for byte in bytes.iter() {
+        for byte in bytes {
             hash = hash ^ (*byte as u64);
             hash = hash * 0x100000001b3;
         }
         *self = FnvHasher(hash);
     }
+    fn finish(&self) -> u64 { self.0 }
 }

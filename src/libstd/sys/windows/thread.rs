@@ -8,11 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::prelude::*;
+use prelude::v1::*;
 
-use boxed::Box;
+use boxed;
 use cmp;
-use mem;
+use io;
 use ptr;
 use libc;
 use libc::types::os::arch::extra::{LPSECURITY_ATTRIBUTES, SIZE_T, BOOL,
@@ -44,8 +44,9 @@ pub mod guard {
     }
 }
 
-pub unsafe fn create(stack: uint, p: Thunk) -> rust_thread {
-    let arg: *mut libc::c_void = mem::transmute(box p);
+pub unsafe fn create(stack: uint, p: Thunk) -> io::Result<rust_thread> {
+    let raw_p = boxed::into_raw(box p);
+    let arg = raw_p as *mut libc::c_void;
     // FIXME On UNIX, we guard against stack sizes that are too small but
     // that's because pthreads enforces that stacks are at least
     // PTHREAD_STACK_MIN bytes big.  Windows has no such lower limit, it's
@@ -61,10 +62,18 @@ pub unsafe fn create(stack: uint, p: Thunk) -> rust_thread {
 
     if ret as uint == 0 {
         // be sure to not leak the closure
-        let _p: Box<Thunk> = mem::transmute(arg);
-        panic!("failed to spawn native thread: {:?}", ret);
+        let _p: Box<Thunk> = Box::from_raw(raw_p);
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(ret)
     }
-    return ret;
+}
+
+pub unsafe fn set_name(_name: &str) {
+    // Windows threads are nameless
+    // The names in MSVC debugger are obtained using a "magic" exception,
+    // which requires a use of MS C++ extensions.
+    // See https://msdn.microsoft.com/en-us/library/xcb2z8hs.aspx
 }
 
 pub unsafe fn join(native: rust_thread) {

@@ -8,7 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-
 use lint;
 use metadata::cstore::CStore;
 use metadata::filesearch;
@@ -27,8 +26,8 @@ use syntax::{ast, codemap};
 
 use rustc_back::target::Target;
 
-use std::os;
 use std::cell::{Cell, RefCell};
+use std::os;
 
 pub mod config;
 pub mod search_paths;
@@ -74,18 +73,27 @@ impl Session {
         self.diagnostic().handler().fatal(msg)
     }
     pub fn span_err(&self, sp: Span, msg: &str) {
+        if self.opts.treat_err_as_bug {
+            self.span_bug(sp, msg);
+        }
         match split_msg_into_multilines(msg) {
-            Some(msg) => self.diagnostic().span_err(sp, &msg[]),
+            Some(msg) => self.diagnostic().span_err(sp, &msg[..]),
             None => self.diagnostic().span_err(sp, msg)
         }
     }
     pub fn span_err_with_code(&self, sp: Span, msg: &str, code: &str) {
+        if self.opts.treat_err_as_bug {
+            self.span_bug(sp, msg);
+        }
         match split_msg_into_multilines(msg) {
-            Some(msg) => self.diagnostic().span_err_with_code(sp, &msg[], code),
+            Some(msg) => self.diagnostic().span_err_with_code(sp, &msg[..], code),
             None => self.diagnostic().span_err_with_code(sp, msg, code)
         }
     }
     pub fn err(&self, msg: &str) {
+        if self.opts.treat_err_as_bug {
+            self.bug(msg);
+        }
         self.diagnostic().handler().err(msg)
     }
     pub fn err_count(&self) -> uint {
@@ -186,7 +194,7 @@ impl Session {
     // cases later on
     pub fn impossible_case(&self, sp: Span, msg: &str) -> ! {
         self.span_bug(sp,
-                      &format!("impossible case reached: {}", msg)[]);
+                      &format!("impossible case reached: {}", msg));
     }
     pub fn verbose(&self) -> bool { self.opts.debugging_opts.verbose }
     pub fn time_passes(&self) -> bool { self.opts.debugging_opts.time_passes }
@@ -228,7 +236,7 @@ impl Session {
     }
     pub fn target_filesearch(&self, kind: PathKind) -> filesearch::FileSearch {
         filesearch::FileSearch::new(self.sysroot(),
-                                    &self.opts.target_triple[],
+                                    &self.opts.target_triple,
                                     &self.opts.search_paths,
                                     kind)
     }
@@ -260,7 +268,7 @@ fn split_msg_into_multilines(msg: &str) -> Option<String> {
     }).map(|(a, b)| (a - 1, b));
 
     let mut new_msg = String::new();
-    let mut head = 0u;
+    let mut head = 0;
 
     // Insert `\n` before expected and found.
     for (pos1, pos2) in first.zip(second) {
@@ -280,9 +288,9 @@ fn split_msg_into_multilines(msg: &str) -> Option<String> {
     }
 
     let mut tail = &msg[head..];
-    let third = tail.find_str("(values differ")
-                   .or(tail.find_str("(lifetime"))
-                   .or(tail.find_str("(cyclic type of infinite size"));
+    let third = tail.find("(values differ")
+                   .or(tail.find("(lifetime"))
+                   .or(tail.find("(cyclic type of infinite size"));
     // Insert `\n` before any remaining messages which match.
     if let Some(pos) = third {
         // The end of the message may just be wrapped in `()` without
@@ -305,9 +313,19 @@ pub fn build_session(sopts: config::Options,
                      local_crate_source_file: Option<Path>,
                      registry: diagnostics::registry::Registry)
                      -> Session {
+    // FIXME: This is not general enough to make the warning lint completely override
+    // normal diagnostic warnings, since the warning lint can also be denied and changed
+    // later via the source code.
+    let can_print_warnings = sopts.lint_opts
+        .iter()
+        .filter(|&&(ref key, _)| *key == "warnings")
+        .map(|&(_, ref level)| *level != lint::Allow)
+        .last()
+        .unwrap_or(true);
+
     let codemap = codemap::CodeMap::new();
     let diagnostic_handler =
-        diagnostic::default_handler(sopts.color, Some(registry));
+        diagnostic::default_handler(sopts.color, Some(registry), can_print_warnings);
     let span_diagnostic_handler =
         diagnostic::mk_span_handler(diagnostic_handler, codemap);
 
@@ -322,7 +340,7 @@ pub fn build_session_(sopts: config::Options,
         Ok(t) => t,
         Err(e) => {
             span_diagnostic.handler()
-                .fatal((format!("Error loading host specification: {}", e)).as_slice());
+                .fatal(&format!("Error loading host specification: {}", e));
     }
     };
     let target_cfg = config::build_target_config(&sopts, &span_diagnostic);
@@ -370,7 +388,6 @@ pub fn build_session_(sopts: config::Options,
         can_print_warnings: can_print_warnings
     };
 
-    sess.lint_store.borrow_mut().register_builtin(Some(&sess));
     sess
 }
 

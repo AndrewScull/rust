@@ -10,14 +10,14 @@
 
 #![feature(unsafe_destructor)]
 
-use std::thread::Thread;
+use std::thread;
 use std::rc::Rc;
 
-#[derive(Show)]
+#[derive(Debug)]
 struct Port<T>(Rc<T>);
 
 fn main() {
-    #[derive(Show)]
+    #[derive(Debug)]
     struct foo {
       _x: Port<()>,
     }
@@ -35,7 +35,7 @@ fn main() {
 
     let x = foo(Port(Rc::new(())));
 
-    Thread::spawn(move|| {
+    thread::spawn(move|| {
         //~^ ERROR `core::marker::Send` is not implemented
         let y = x;
         println!("{:?}", y);

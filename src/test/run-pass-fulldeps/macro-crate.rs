@@ -12,12 +12,13 @@
 // ignore-stage1
 
 #![feature(plugin)]
+#![plugin(macro_crate_test)]
 
-#[macro_use] #[plugin] #[no_link]
+#[macro_use] #[no_link]
 extern crate macro_crate_test;
 
 #[into_foo]
-#[derive(PartialEq, Clone, Show)]
+#[derive(PartialEq, Clone, Debug)]
 fn foo() -> AFakeTypeThatHadBetterGoAway {}
 
 pub fn main() {

@@ -61,8 +61,8 @@ pub fn doc_comment_style(comment: &str) -> ast::AttrStyle {
 
 pub fn strip_doc_comment_decoration(comment: &str) -> String {
     /// remove whitespace-only lines from the start/end of lines
-    fn vertical_trim(lines: Vec<String> ) -> Vec<String> {
-        let mut i = 0us;
+    fn vertical_trim(lines: Vec<String>) -> Vec<String> {
+        let mut i = 0;
         let mut j = lines.len();
         // first line of all-stars should be omitted
         if lines.len() > 0 &&
@@ -82,7 +82,7 @@ pub fn strip_doc_comment_decoration(comment: &str) -> String {
         while j > i && lines[j - 1].trim().is_empty() {
             j -= 1;
         }
-        return lines[i..j].iter().map(|x| (*x).clone()).collect();
+        lines[i..j].iter().cloned().collect()
     }
 
     /// remove a "[ \t]*\*" block from each line, if possible
@@ -90,9 +90,9 @@ pub fn strip_doc_comment_decoration(comment: &str) -> String {
         let mut i = usize::MAX;
         let mut can_trim = true;
         let mut first = true;
-        for line in lines.iter() {
+        for line in &lines {
             for (j, c) in line.chars().enumerate() {
-                if j > i || !"* \t".contains_char(c) {
+                if j > i || !"* \t".contains(c) {
                     can_trim = false;
                     break;
                 }
@@ -125,7 +125,7 @@ pub fn strip_doc_comment_decoration(comment: &str) -> String {
 
     // one-line comments lose their prefix
     static ONLINERS: &'static [&'static str] = &["///!", "///", "//!", "//"];
-    for prefix in ONLINERS.iter() {
+    for prefix in ONLINERS {
         if comment.starts_with(*prefix) {
             return (&comment[prefix.len()..]).to_string();
         }
@@ -158,7 +158,7 @@ fn push_blank_line_comment(rdr: &StringReader, comments: &mut Vec<Comment>) {
 fn consume_whitespace_counting_blank_lines(rdr: &mut StringReader,
                                            comments: &mut Vec<Comment>) {
     while is_whitespace(rdr.curr) && !rdr.is_eof() {
-        if rdr.col == CharPos(0us) && rdr.curr_is('\n') {
+        if rdr.col == CharPos(0) && rdr.curr_is('\n') {
             push_blank_line_comment(rdr, &mut *comments);
         }
         rdr.bump();
@@ -187,7 +187,7 @@ fn read_line_comments(rdr: &mut StringReader, code_to_the_left: bool,
         let line = rdr.read_one_line_comment();
         debug!("{}", line);
         // Doc comments are not put in comments.
-        if is_doc_comment(&line[]) {
+        if is_doc_comment(&line[..]) {
             break;
         }
         lines.push(line);
@@ -224,7 +224,7 @@ fn all_whitespace(s: &str, col: CharPos) -> Option<usize> {
 fn trim_whitespace_prefix_and_push_line(lines: &mut Vec<String> ,
                                         s: String, col: CharPos) {
     let len = s.len();
-    let s1 = match all_whitespace(&s[], col) {
+    let s1 = match all_whitespace(&s[..], col) {
         Some(col) => {
             if col < len {
                 (&s[col..len]).to_string()
@@ -261,10 +261,10 @@ fn read_block_comment(rdr: &mut StringReader,
             rdr.bump();
             rdr.bump();
         }
-        if is_block_doc_comment(&curr_line[]) {
+        if is_block_doc_comment(&curr_line[..]) {
             return
         }
-        assert!(!curr_line.contains_char('\n'));
+        assert!(!curr_line.contains('\n'));
         lines.push(curr_line);
     } else {
         let mut level: isize = 1;
@@ -305,7 +305,7 @@ fn read_block_comment(rdr: &mut StringReader,
 
     let mut style = if code_to_the_left { Trailing } else { Isolated };
     rdr.consume_non_eol_whitespace();
-    if !rdr.is_eof() && !rdr.curr_is('\n') && lines.len() == 1us {
+    if !rdr.is_eof() && !rdr.curr_is('\n') && lines.len() == 1 {
         style = Mixed;
     }
     debug!("<<< block comment");

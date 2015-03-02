@@ -111,8 +111,8 @@ impl<T: Display> Display for P<T> {
     }
 }
 
-impl<S: Hasher, T: Hash<S>> Hash<S> for P<T> {
-    fn hash(&self, state: &mut S) {
+impl<T: Hash> Hash for P<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         (**self).hash(state);
     }
 }

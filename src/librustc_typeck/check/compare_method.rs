@@ -159,11 +159,11 @@ pub fn compare_impl_method<'tcx>(tcx: &ty::ctxt<'tcx>,
     // vs 'b).  However, the normal subtyping rules on fn types handle
     // this kind of equivalency just fine.
     //
-    // We now use these subsititions to ensure that all declared bounds are
+    // We now use these substitutions to ensure that all declared bounds are
     // satisfied by the implementation's method.
     //
     // We do this by creating a parameter environment which contains a
-    // substition corresponding to impl_to_skol_substs. We then build
+    // substitution corresponding to impl_to_skol_substs. We then build
     // trait_to_skol_substs and use it to convert the predicates contained
     // in the trait_m.generics to the skolemized form.
     //
@@ -205,7 +205,7 @@ pub fn compare_impl_method<'tcx>(tcx: &ty::ctxt<'tcx>,
     // however, because we want to replace all late-bound regions with
     // region variables.
     let impl_bounds =
-        impl_m.generics.to_bounds(tcx, impl_to_skol_substs);
+        impl_m.predicates.instantiate(tcx, impl_to_skol_substs);
 
     let (impl_bounds, _) =
         infcx.replace_late_bound_regions_with_fresh_var(
@@ -215,14 +215,8 @@ pub fn compare_impl_method<'tcx>(tcx: &ty::ctxt<'tcx>,
     debug!("compare_impl_method: impl_bounds={}",
            impl_bounds.repr(tcx));
 
-    // // Normalize the associated types in the impl_bounds.
-    // let traits::Normalized { value: impl_bounds, .. } =
-    //     traits::normalize(&mut selcx, normalize_cause.clone(), &impl_bounds);
-
     // Normalize the associated types in the trait_bounds.
-    let trait_bounds = trait_m.generics.to_bounds(tcx, &trait_to_skol_substs);
-    // let traits::Normalized { value: trait_bounds, .. } =
-    //     traits::normalize(&mut selcx, normalize_cause, &trait_bounds);
+    let trait_bounds = trait_m.predicates.instantiate(tcx, &trait_to_skol_substs);
 
     // Obtain the predicate split predicate sets for each.
     let trait_pred = trait_bounds.predicates.split();
@@ -242,20 +236,19 @@ pub fn compare_impl_method<'tcx>(tcx: &ty::ctxt<'tcx>,
     );
 
     // Construct trait parameter environment and then shift it into the skolemized viewpoint.
-    let mut trait_param_env = impl_param_env.clone();
     // The key step here is to update the caller_bounds's predicates to be
     // the new hybrid bounds we computed.
-    trait_param_env.caller_bounds.predicates = hybrid_preds;
+    let normalize_cause = traits::ObligationCause::misc(impl_m_span, impl_m_body_id);
+    let trait_param_env = impl_param_env.with_caller_bounds(hybrid_preds.into_vec());
+    let trait_param_env = traits::normalize_param_env_or_error(trait_param_env,
+                                                               normalize_cause.clone());
 
     debug!("compare_impl_method: trait_bounds={}",
         trait_param_env.caller_bounds.repr(tcx));
 
     let mut selcx = traits::SelectionContext::new(&infcx, &trait_param_env);
 
-    let normalize_cause =
-        traits::ObligationCause::misc(impl_m_span, impl_m_body_id);
-
-    for predicate in impl_pred.fns.into_iter() {
+    for predicate in impl_pred.fns {
         let traits::Normalized { value: predicate, .. } =
             traits::normalize(&mut selcx, normalize_cause.clone(), &predicate);
 

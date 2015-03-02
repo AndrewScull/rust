@@ -64,7 +64,7 @@ This API is completely unstable and subject to change.
 */
 
 #![crate_name = "rustc_typeck"]
-#![unstable]
+#![unstable(feature = "rustc_private")]
 #![staged_api]
 #![crate_type = "dylib"]
 #![crate_type = "rlib"]
@@ -72,14 +72,19 @@ This API is completely unstable and subject to change.
       html_favicon_url = "http://www.rust-lang.org/favicon.ico",
       html_root_url = "http://doc.rust-lang.org/nightly/")]
 
-#![allow(unknown_features)]
-#![feature(quote)]
-#![feature(slicing_syntax, unsafe_destructor)]
-#![feature(box_syntax)]
-#![feature(rustc_diagnostic_macros)]
-#![allow(unknown_features)] #![feature(int_uint)]
 #![allow(non_camel_case_types)]
-#![allow(unstable)]
+
+#![feature(box_patterns)]
+#![feature(box_syntax)]
+#![feature(collections)]
+#![feature(core)]
+#![feature(int_uint)]
+#![feature(std_misc)]
+#![feature(quote)]
+#![feature(rustc_diagnostic_macros)]
+#![feature(rustc_private)]
+#![feature(unsafe_destructor)]
+#![feature(staged_api)]
 
 #[macro_use] extern crate log;
 #[macro_use] extern crate syntax;
@@ -97,7 +102,6 @@ pub use rustc::util;
 use middle::def;
 use middle::infer;
 use middle::subst;
-use middle::subst::VecPerParamSpace;
 use middle::ty::{self, Ty};
 use session::config;
 use util::common::time;
@@ -119,6 +123,7 @@ mod check;
 mod rscope;
 mod astconv;
 mod collect;
+mod constrained_type_params;
 mod coherence;
 mod variance;
 
@@ -158,28 +163,13 @@ fn write_substs_to_tcx<'tcx>(tcx: &ty::ctxt<'tcx>,
         tcx.item_substs.borrow_mut().insert(node_id, item_substs);
     }
 }
-fn lookup_def_tcx(tcx:&ty::ctxt, sp: Span, id: ast::NodeId) -> def::Def {
+
+fn lookup_full_def(tcx: &ty::ctxt, sp: Span, id: ast::NodeId) -> def::Def {
     match tcx.def_map.borrow().get(&id) {
-        Some(x) => x.clone(),
-        _ => {
+        Some(x) => x.full_def(),
+        None => {
             span_fatal!(tcx.sess, sp, E0242, "internal error looking up a definition")
         }
-    }
-}
-
-fn lookup_def_ccx(ccx: &CrateCtxt, sp: Span, id: ast::NodeId)
-                   -> def::Def {
-    lookup_def_tcx(ccx.tcx, sp, id)
-}
-
-fn no_params<'tcx>(t: Ty<'tcx>) -> ty::TypeScheme<'tcx> {
-    ty::TypeScheme {
-        generics: ty::Generics {
-            types: VecPerParamSpace::empty(),
-            regions: VecPerParamSpace::empty(),
-            predicates: VecPerParamSpace::empty(),
-        },
-        ty: t
     }
 }
 
@@ -259,7 +249,7 @@ fn check_main_fn_ty(ccx: &CrateCtxt,
                               &format!("main has a non-function type: found \
                                        `{}`",
                                       ppaux::ty_to_string(tcx,
-                                                       main_t))[]);
+                                                       main_t)));
         }
     }
 }
@@ -310,7 +300,7 @@ fn check_start_fn_ty(ccx: &CrateCtxt,
             tcx.sess.span_bug(start_span,
                               &format!("start has a non-function type: found \
                                        `{}`",
-                                      ppaux::ty_to_string(tcx, start_t))[]);
+                                      ppaux::ty_to_string(tcx, start_t)));
         }
     }
 }

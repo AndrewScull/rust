@@ -8,7 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// ignore-android (FIXME #11419)
 // exec-env:RUST_LOG=info
 
 #![allow(unknown_features)]
@@ -41,6 +40,6 @@ fn main() {
         info!("info");
     });
     let s = r.read_to_string().unwrap();
-    assert!(s.as_slice().contains("info"));
-    assert!(!s.as_slice().contains("debug"));
+    assert!(s.contains("info"));
+    assert!(!s.contains("debug"));
 }

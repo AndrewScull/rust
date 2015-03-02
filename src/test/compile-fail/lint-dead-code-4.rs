@@ -10,8 +10,9 @@
 
 #![allow(unused_variables)]
 #![allow(non_camel_case_types)]
-#![allow(unstable)]
 #![deny(dead_code)]
+#![feature(libc)]
+#![feature(core)]
 
 extern crate libc;
 
@@ -62,6 +63,6 @@ fn field_match_in_let(f: Bar) -> bool {
 fn main() {
     field_read(Foo { x: 1, b: false, marker: std::marker::NoCopy });
     field_match_in_patterns(XYZ::Z);
-    field_match_in_let(Bar { x: 42us, b: true, _guard: () });
+    field_match_in_let(Bar { x: 42_usize, b: true, _guard: () });
     let _ = Baz { x: 0 };
 }

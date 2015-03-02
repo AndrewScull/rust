@@ -36,7 +36,7 @@ use std::hash::{Hasher, Hash, SipHasher};
 
 pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
                                 fn_id: ast::DefId,
-                                psubsts: &subst::Substs<'tcx>,
+                                psubsts: &'tcx subst::Substs<'tcx>,
                                 ref_id: Option<ast::NodeId>)
     -> (ValueRef, Ty<'tcx>, bool) {
     debug!("monomorphic_fn(\
@@ -55,7 +55,7 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
 
     let hash_id = MonoId {
         def: fn_id,
-        params: psubsts.types.clone()
+        params: &psubsts.types
     };
 
     let item_ty = ty::lookup_item_type(ccx.tcx(), fn_id).ty;
@@ -131,7 +131,7 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
 
         hash = format!("h{}", state.finish());
         ccx.tcx().map.with_path(fn_id.node, |path| {
-            exported_name(path, &hash[])
+            exported_name(path, &hash[..])
         })
     };
 
@@ -139,17 +139,17 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
 
     // This shouldn't need to option dance.
     let mut hash_id = Some(hash_id);
-    let mut mk_lldecl = |&mut : abi: abi::Abi| {
+    let mut mk_lldecl = |abi: abi::Abi| {
         let lldecl = if abi != abi::Rust {
-            foreign::decl_rust_fn_with_foreign_abi(ccx, mono_ty, &s[])
+            foreign::decl_rust_fn_with_foreign_abi(ccx, mono_ty, &s[..])
         } else {
-            decl_internal_rust_fn(ccx, mono_ty, &s[])
+            decl_internal_rust_fn(ccx, mono_ty, &s[..])
         };
 
         ccx.monomorphized().borrow_mut().insert(hash_id.take().unwrap(), lldecl);
         lldecl
     };
-    let setup_lldecl = |&: lldecl, attrs: &[ast::Attribute]| {
+    let setup_lldecl = |lldecl, attrs: &[ast::Attribute]| {
         base::update_linkage(ccx, lldecl, None, base::OriginalTranslation);
         set_llvm_fn_attrs(ccx, attrs, lldecl);
 
@@ -177,12 +177,12 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
                   ..
               } => {
                   let d = mk_lldecl(abi);
-                  let needs_body = setup_lldecl(d, &i.attrs[]);
+                  let needs_body = setup_lldecl(d, &i.attrs);
                   if needs_body {
                       if abi != abi::Rust {
                           foreign::trans_rust_fn_with_foreign_abi(
                               ccx, &**decl, &**body, &[], d, psubsts, fn_id.node,
-                              Some(&hash[]));
+                              Some(&hash[..]));
                       } else {
                           trans_fn(ccx, &**decl, &**body, d, psubsts, fn_id.node, &[]);
                       }
@@ -206,7 +206,7 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
                     trans_enum_variant(ccx,
                                        parent,
                                        &*v,
-                                       &args[],
+                                       &args[..],
                                        this_tv.disr_val,
                                        psubsts,
                                        d);
@@ -220,7 +220,7 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
             match *ii {
                 ast::MethodImplItem(ref mth) => {
                     let d = mk_lldecl(abi::Rust);
-                    let needs_body = setup_lldecl(d, &mth.attrs[]);
+                    let needs_body = setup_lldecl(d, &mth.attrs);
                     if needs_body {
                         trans_fn(ccx,
                                  mth.pe_fn_decl(),
@@ -241,7 +241,7 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
             match *method {
                 ast::ProvidedMethod(ref mth) => {
                     let d = mk_lldecl(abi::Rust);
-                    let needs_body = setup_lldecl(d, &mth.attrs[]);
+                    let needs_body = setup_lldecl(d, &mth.attrs);
                     if needs_body {
                         trans_fn(ccx, mth.pe_fn_decl(), mth.pe_body(), d,
                                  psubsts, mth.id, &[]);
@@ -250,7 +250,7 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
                 }
                 _ => {
                     ccx.sess().bug(&format!("can't monomorphize a {:?}",
-                                           map_node)[])
+                                           map_node))
                 }
             }
         }
@@ -258,7 +258,7 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
             let d = mk_lldecl(abi::Rust);
             set_inline_hint(d);
             base::trans_tuple_struct(ccx,
-                                     &struct_def.fields[],
+                                     &struct_def.fields,
                                      struct_def.ctor_id.expect("ast-mapped tuple struct \
                                                                 didn't have a ctor id"),
                                      psubsts,
@@ -276,7 +276,7 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
         ast_map::NodePat(..) |
         ast_map::NodeLocal(..) => {
             ccx.sess().bug(&format!("can't monomorphize a {:?}",
-                                   map_node)[])
+                                   map_node))
         }
     };
 
@@ -286,10 +286,10 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
     (lldecl, mono_ty, true)
 }
 
-#[derive(PartialEq, Eq, Hash, Show)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 pub struct MonoId<'tcx> {
     pub def: ast::DefId,
-    pub params: subst::VecPerParamSpace<Ty<'tcx>>
+    pub params: &'tcx subst::VecPerParamSpace<Ty<'tcx>>
 }
 
 /// Monomorphizes a type from the AST by first applying the in-scope
@@ -333,7 +333,7 @@ pub fn normalize_associated_type<'tcx,T>(tcx: &ty::ctxt<'tcx>, value: &T) -> T
            obligations.repr(tcx));
 
     let mut fulfill_cx = traits::FulfillmentContext::new();
-    for obligation in obligations.into_iter() {
+    for obligation in obligations {
         fulfill_cx.register_predicate_obligation(&infcx, obligation);
     }
     let result = drain_fulfillment_cx(DUMMY_SP, &infcx, &mut fulfill_cx, &result);

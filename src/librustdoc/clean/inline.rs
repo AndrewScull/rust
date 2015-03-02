@@ -46,7 +46,7 @@ pub fn try_inline(cx: &DocContext, id: ast::NodeId, into: Option<ast::Ident>)
         None => return None,
     };
     let def = match tcx.def_map.borrow().get(&id) {
-        Some(def) => *def,
+        Some(d) => d.full_def(),
         None => return None,
     };
     let did = def.def_id();
@@ -166,10 +166,11 @@ pub fn build_external_trait(cx: &DocContext, tcx: &ty::ctxt,
         }
     });
     let trait_def = ty::lookup_trait_def(tcx, did);
+    let predicates = ty::lookup_predicates(tcx, did);
     let bounds = trait_def.bounds.clean(cx);
     clean::Trait {
         unsafety: def.unsafety,
-        generics: (&def.generics, subst::TypeSpace).clean(cx),
+        generics: (&def.generics, &predicates, subst::TypeSpace).clean(cx),
         items: items.collect(),
         bounds: bounds,
     }
@@ -181,9 +182,10 @@ fn build_external_function(cx: &DocContext, tcx: &ty::ctxt, did: ast::DefId) -> 
         ty::ty_bare_fn(_, ref f) => ((did, &f.sig).clean(cx), f.unsafety),
         _ => panic!("bad function"),
     };
+    let predicates = ty::lookup_predicates(tcx, did);
     clean::Function {
         decl: decl,
-        generics: (&t.generics, subst::FnSpace).clean(cx),
+        generics: (&t.generics, &predicates, subst::FnSpace).clean(cx),
         unsafety: style,
     }
 }
@@ -192,16 +194,17 @@ fn build_struct(cx: &DocContext, tcx: &ty::ctxt, did: ast::DefId) -> clean::Stru
     use syntax::parse::token::special_idents::unnamed_field;
 
     let t = ty::lookup_item_type(tcx, did);
+    let predicates = ty::lookup_predicates(tcx, did);
     let fields = ty::lookup_struct_fields(tcx, did);
 
     clean::Struct {
-        struct_type: match fields.as_slice() {
+        struct_type: match &*fields {
             [] => doctree::Unit,
             [ref f] if f.name == unnamed_field.name => doctree::Newtype,
             [ref f, ..] if f.name == unnamed_field.name => doctree::Tuple,
             _ => doctree::Plain,
         },
-        generics: (&t.generics, subst::TypeSpace).clean(cx),
+        generics: (&t.generics, &predicates, subst::TypeSpace).clean(cx),
         fields: fields.clean(cx),
         fields_stripped: false,
     }
@@ -209,10 +212,11 @@ fn build_struct(cx: &DocContext, tcx: &ty::ctxt, did: ast::DefId) -> clean::Stru
 
 fn build_type(cx: &DocContext, tcx: &ty::ctxt, did: ast::DefId) -> clean::ItemEnum {
     let t = ty::lookup_item_type(tcx, did);
+    let predicates = ty::lookup_predicates(tcx, did);
     match t.ty.sty {
         ty::ty_enum(edid, _) if !csearch::is_typedef(&tcx.sess.cstore, did) => {
             return clean::EnumItem(clean::Enum {
-                generics: (&t.generics, subst::TypeSpace).clean(cx),
+                generics: (&t.generics, &predicates, subst::TypeSpace).clean(cx),
                 variants_stripped: false,
                 variants: ty::enum_variants(tcx, edid).clean(cx),
             })
@@ -222,7 +226,7 @@ fn build_type(cx: &DocContext, tcx: &ty::ctxt, did: ast::DefId) -> clean::ItemEn
 
     clean::TypedefItem(clean::Typedef {
         type_: t.ty.clean(cx),
-        generics: (&t.generics, subst::TypeSpace).clean(cx),
+        generics: (&t.generics, &predicates, subst::TypeSpace).clean(cx),
     })
 }
 
@@ -293,6 +297,7 @@ fn build_impl(cx: &DocContext, tcx: &ty::ctxt,
 
     let attrs = load_attrs(cx, tcx, did);
     let ty = ty::lookup_item_type(tcx, did);
+    let predicates = ty::lookup_predicates(tcx, did);
     let trait_items = csearch::get_impl_items(&tcx.sess.cstore, did)
             .iter()
             .filter_map(|did| {
@@ -303,16 +308,20 @@ fn build_impl(cx: &DocContext, tcx: &ty::ctxt,
                 if method.vis != ast::Public && associated_trait.is_none() {
                     return None
                 }
+                if method.provided_source.is_some() {
+                    return None
+                }
                 let mut item = method.clean(cx);
                 item.inner = match item.inner.clone() {
                     clean::TyMethodItem(clean::TyMethod {
-                        unsafety, decl, self_, generics
+                        unsafety, decl, self_, generics, abi
                     }) => {
                         clean::MethodItem(clean::Method {
                             unsafety: unsafety,
                             decl: decl,
                             self_: self_,
                             generics: generics,
+                            abi: abi
                         })
                     }
                     _ => panic!("not a tymethod"),
@@ -322,9 +331,10 @@ fn build_impl(cx: &DocContext, tcx: &ty::ctxt,
             ty::TypeTraitItem(ref assoc_ty) => {
                 let did = assoc_ty.def_id;
                 let type_scheme = ty::lookup_item_type(tcx, did);
+                let predicates = ty::lookup_predicates(tcx, did);
                 // Not sure the choice of ParamSpace actually matters here, because an
                 // associated type won't have generics on the LHS
-                let typedef = (type_scheme, subst::ParamSpace::TypeSpace).clean(cx);
+                let typedef = (type_scheme, predicates, subst::ParamSpace::TypeSpace).clean(cx);
                 Some(clean::Item {
                     name: Some(assoc_ty.name.clean(cx)),
                     inner: clean::TypedefItem(typedef),
@@ -340,7 +350,7 @@ fn build_impl(cx: &DocContext, tcx: &ty::ctxt,
     let polarity = csearch::get_impl_polarity(tcx, did);
     return Some(clean::Item {
         inner: clean::ImplItem(clean::Impl {
-            derived: clean::detect_derived(attrs.as_slice()),
+            derived: clean::detect_derived(&attrs),
             trait_: associated_trait.clean(cx).map(|bound| {
                 match bound {
                     clean::TraitBound(polyt, _) => polyt.trait_,
@@ -348,7 +358,7 @@ fn build_impl(cx: &DocContext, tcx: &ty::ctxt,
                 }
             }),
             for_: ty.ty.clean(cx),
-            generics: (&ty.generics, subst::TypeSpace).clean(cx),
+            generics: (&ty.generics, &predicates, subst::TypeSpace).clean(cx),
             items: trait_items,
             polarity: polarity.map(|p| { p.clean(cx) }),
         }),

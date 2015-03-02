@@ -1,4 +1,4 @@
-// Copyright 2012-2014 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2012-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -105,7 +105,7 @@ impl LintStore {
     }
 
     pub fn get_lints<'t>(&'t self) -> &'t [(&'static Lint, bool)] {
-        &self.lints[]
+        &self.lints
     }
 
     pub fn get_lint_groups<'t>(&'t self) -> Vec<(&'static str, Vec<LintId>, bool)> {
@@ -116,7 +116,7 @@ impl LintStore {
 
     pub fn register_pass(&mut self, sess: Option<&Session>,
                          from_plugin: bool, pass: LintPassObject) {
-        for &lint in pass.get_lints().iter() {
+        for &lint in pass.get_lints() {
             self.lints.push((*lint, from_plugin));
 
             let id = LintId::of(*lint);
@@ -125,11 +125,11 @@ impl LintStore {
                 match (sess, from_plugin) {
                     // We load builtin lints first, so a duplicate is a compiler bug.
                     // Use early_error when handling -W help with no crate.
-                    (None, _) => early_error(&msg[]),
-                    (Some(sess), false) => sess.bug(&msg[]),
+                    (None, _) => early_error(&msg[..]),
+                    (Some(sess), false) => sess.bug(&msg[..]),
 
                     // A duplicate name from a plugin is a user error.
-                    (Some(sess), true)  => sess.err(&msg[]),
+                    (Some(sess), true)  => sess.err(&msg[..]),
                 }
             }
 
@@ -150,92 +150,21 @@ impl LintStore {
             match (sess, from_plugin) {
                 // We load builtin lints first, so a duplicate is a compiler bug.
                 // Use early_error when handling -W help with no crate.
-                (None, _) => early_error(&msg[]),
-                (Some(sess), false) => sess.bug(&msg[]),
+                (None, _) => early_error(&msg[..]),
+                (Some(sess), false) => sess.bug(&msg[..]),
 
                 // A duplicate name from a plugin is a user error.
-                (Some(sess), true)  => sess.err(&msg[]),
+                (Some(sess), true)  => sess.err(&msg[..]),
             }
         }
     }
 
-    fn register_renamed(&mut self, old_name: &str, new_name: &str) {
+    pub fn register_renamed(&mut self, old_name: &str, new_name: &str) {
         let target = match self.by_name.get(new_name) {
             Some(&Id(lint_id)) => lint_id.clone(),
             _ => panic!("invalid lint renaming of {} to {}", old_name, new_name)
         };
         self.by_name.insert(old_name.to_string(), Renamed(new_name.to_string(), target));
-    }
-
-    pub fn register_builtin(&mut self, sess: Option<&Session>) {
-        macro_rules! add_builtin {
-            ($sess:ident, $($name:ident),*,) => (
-                {$(
-                    self.register_pass($sess, false, box builtin::$name as LintPassObject);
-                )*}
-            )
-        }
-
-        macro_rules! add_builtin_with_new {
-            ($sess:ident, $($name:ident),*,) => (
-                {$(
-                    self.register_pass($sess, false, box builtin::$name::new() as LintPassObject);
-                )*}
-            )
-        }
-
-        macro_rules! add_lint_group {
-            ($sess:ident, $name:expr, $($lint:ident),*) => (
-                self.register_group($sess, false, $name, vec![$(LintId::of(builtin::$lint)),*]);
-            )
-        }
-
-        add_builtin!(sess,
-                     HardwiredLints,
-                     WhileTrue,
-                     UnusedCasts,
-                     ImproperCTypes,
-                     BoxPointers,
-                     UnusedAttributes,
-                     PathStatements,
-                     UnusedResults,
-                     NonCamelCaseTypes,
-                     NonSnakeCase,
-                     NonUpperCaseGlobals,
-                     UnusedParens,
-                     UnusedImportBraces,
-                     NonShorthandFieldPatterns,
-                     UnusedUnsafe,
-                     UnsafeBlocks,
-                     UnusedMut,
-                     UnusedAllocation,
-                     MissingCopyImplementations,
-                     UnstableFeatures,
-                     UnconditionalRecursion,
-        );
-
-        add_builtin_with_new!(sess,
-                              TypeLimits,
-                              RawPointerDerive,
-                              MissingDoc,
-                              Stability,
-                              MissingDebugImplementations,
-        );
-
-        add_lint_group!(sess, "bad_style",
-                        NON_CAMEL_CASE_TYPES, NON_SNAKE_CASE, NON_UPPER_CASE_GLOBALS);
-
-        add_lint_group!(sess, "unused",
-                        UNUSED_IMPORTS, UNUSED_VARIABLES, UNUSED_ASSIGNMENTS, DEAD_CODE,
-                        UNUSED_MUT, UNREACHABLE_CODE, UNUSED_MUST_USE,
-                        UNUSED_UNSAFE, PATH_STATEMENTS);
-
-        // We have one lint pass defined in this module.
-        self.register_pass(sess, false, box GatherNodeLevels as LintPassObject);
-
-        // Insert temporary renamings for a one-time deprecation
-        self.register_renamed("raw_pointer_deriving", "raw_pointer_derive");
-
     }
 
     #[allow(unused_variables)]
@@ -248,8 +177,8 @@ impl LintStore {
                 let warning = format!("lint {} has been renamed to {}",
                                       lint_name, new_name);
                 match span {
-                    Some(span) => sess.span_warn(span, &warning[]),
-                    None => sess.warn(&warning[]),
+                    Some(span) => sess.span_warn(span, &warning[..]),
+                    None => sess.warn(&warning[..]),
                 };
                 Some(lint_id)
             }
@@ -258,14 +187,14 @@ impl LintStore {
     }
 
     pub fn process_command_line(&mut self, sess: &Session) {
-        for &(ref lint_name, level) in sess.opts.lint_opts.iter() {
-            match self.find_lint(&lint_name[], sess, None) {
+        for &(ref lint_name, level) in &sess.opts.lint_opts {
+            match self.find_lint(&lint_name[..], sess, None) {
                 Some(lint_id) => self.set_level(lint_id, (level, CommandLine)),
                 None => {
                     match self.lint_groups.iter().map(|(&x, pair)| (x, pair.0.clone()))
                                                  .collect::<FnvHashMap<&'static str,
                                                                        Vec<LintId>>>()
-                                                 .get(&lint_name[]) {
+                                                 .get(&lint_name[..]) {
                         Some(v) => {
                             v.iter()
                              .map(|lint_id: &LintId|
@@ -273,7 +202,7 @@ impl LintStore {
                              .collect::<Vec<()>>();
                         }
                         None => sess.err(&format!("unknown {} flag: {}",
-                                                 level.as_str(), lint_name)[]),
+                                                 level.as_str(), lint_name)),
                     }
                 }
             }
@@ -287,15 +216,6 @@ impl LintStore {
             UnstableFeatures::Cheat => Allow
         };
         match self.by_name.get("unstable_features") {
-            Some(&Id(lint_id)) => if self.get_level_source(lint_id).0 != Forbid {
-                self.set_level(lint_id, (lvl, ReleaseChannel))
-            },
-            Some(&Renamed(_, lint_id)) => if self.get_level_source(lint_id).0 != Forbid {
-                self.set_level(lint_id, (lvl, ReleaseChannel))
-            },
-            None => unreachable!()
-        }
-        match self.by_name.get("unstable") {
             Some(&Id(lint_id)) => if self.get_level_source(lint_id).0 != Forbid {
                 self.set_level(lint_id, (lvl, ReleaseChannel))
             },
@@ -336,7 +256,7 @@ macro_rules! run_lints { ($cx:expr, $f:ident, $($args:expr),*) => ({
     // Move the vector of passes out of `$cx` so that we can
     // iterate over it mutably while passing `$cx` to the methods.
     let mut passes = $cx.lints.passes.take().unwrap();
-    for obj in passes.iter_mut() {
+    for obj in &mut passes {
         obj.$f($cx, $($args),*);
     }
     $cx.lints.passes = Some(passes);
@@ -347,8 +267,8 @@ macro_rules! run_lints { ($cx:expr, $f:ident, $($args:expr),*) => ({
 pub fn gather_attrs(attrs: &[ast::Attribute])
                     -> Vec<Result<(InternedString, Level, Span), Span>> {
     let mut out = vec!();
-    for attr in attrs.iter() {
-        let level = match Level::from_str(attr.name().get()) {
+    for attr in attrs {
+        let level = match Level::from_str(&attr.name()) {
             None => continue,
             Some(lvl) => lvl,
         };
@@ -364,7 +284,7 @@ pub fn gather_attrs(attrs: &[ast::Attribute])
             }
         };
 
-        for meta in metas.iter() {
+        for meta in metas {
             out.push(match meta.node {
                 ast::MetaWord(ref lint_name) => Ok((lint_name.clone(), level, meta.span)),
                 _ => Err(meta.span),
@@ -417,18 +337,18 @@ pub fn raw_emit_lint(sess: &Session, lint: &'static Lint,
     if level == Forbid { level = Deny; }
 
     match (level, span) {
-        (Warn, Some(sp)) => sess.span_warn(sp, &msg[]),
-        (Warn, None)     => sess.warn(&msg[]),
-        (Deny, Some(sp)) => sess.span_err(sp, &msg[]),
-        (Deny, None)     => sess.err(&msg[]),
+        (Warn, Some(sp)) => sess.span_warn(sp, &msg[..]),
+        (Warn, None)     => sess.warn(&msg[..]),
+        (Deny, Some(sp)) => sess.span_err(sp, &msg[..]),
+        (Deny, None)     => sess.err(&msg[..]),
         _ => sess.bug("impossible level in raw_emit_lint"),
     }
 
-    for note in note.into_iter() {
-        sess.note(&note[]);
+    if let Some(note) = note {
+        sess.note(&note[..]);
     }
 
-    for span in def.into_iter() {
+    if let Some(span) = def {
         sess.span_note(span, "lint level defined here");
     }
 }
@@ -497,27 +417,27 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // current dictionary of lint information. Along the way, keep a history
         // of what we changed so we can roll everything back after invoking the
         // specified closure
-        let mut pushed = 0u;
+        let mut pushed = 0;
 
-        for result in gather_attrs(attrs).into_iter() {
+        for result in gather_attrs(attrs) {
             let v = match result {
                 Err(span) => {
                     self.tcx.sess.span_err(span, "malformed lint attribute");
                     continue;
                 }
                 Ok((lint_name, level, span)) => {
-                    match self.lints.find_lint(lint_name.get(), &self.tcx.sess, Some(span)) {
+                    match self.lints.find_lint(&lint_name, &self.tcx.sess, Some(span)) {
                         Some(lint_id) => vec![(lint_id, level, span)],
                         None => {
-                            match self.lints.lint_groups.get(lint_name.get()) {
+                            match self.lints.lint_groups.get(&lint_name[..]) {
                                 Some(&(ref v, _)) => v.iter()
                                                       .map(|lint_id: &LintId|
                                                            (*lint_id, level, span))
                                                       .collect(),
                                 None => {
                                     self.span_lint(builtin::UNKNOWN_LINTS, span,
-                                               format!("unknown `{}` attribute: `{}`",
-                                                       level.as_str(), lint_name).as_slice());
+                                                   &format!("unknown `{}` attribute: `{}`",
+                                                            level.as_str(), lint_name));
                                     continue;
                                 }
                             }
@@ -526,14 +446,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             };
 
-            for (lint_id, level, span) in v.into_iter() {
+            for (lint_id, level, span) in v {
                 let now = self.lints.get_level_source(lint_id).0;
                 if now == Forbid && level != Forbid {
                     let lint_name = lint_id.as_str();
                     self.tcx.sess.span_err(span,
                                            &format!("{}({}) overruled by outer forbid({})",
                                                    level.as_str(), lint_name,
-                                                   lint_name)[]);
+                                                   lint_name));
                 } else if now != level {
                     let src = self.lints.get_level_source(lint_id).1;
                     self.level_stack.push((lint_id, (now, src)));
@@ -548,7 +468,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         run_lints!(self, exit_lint_attrs, attrs);
 
         // rollback
-        for _ in range(0, pushed) {
+        for _ in 0..pushed {
             let (lint, lvlsrc) = self.level_stack.pop().unwrap();
             self.lints.set_level(lint, lvlsrc);
         }
@@ -568,7 +488,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
 
 impl<'a, 'tcx, 'v> Visitor<'v> for Context<'a, 'tcx> {
     fn visit_item(&mut self, it: &ast::Item) {
-        self.with_lint_attrs(&it.attrs[], |cx| {
+        self.with_lint_attrs(&it.attrs, |cx| {
             run_lints!(cx, check_item, it);
             cx.visit_ids(|v| v.visit_item(it));
             visit::walk_item(cx, it);
@@ -576,7 +496,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for Context<'a, 'tcx> {
     }
 
     fn visit_foreign_item(&mut self, it: &ast::ForeignItem) {
-        self.with_lint_attrs(&it.attrs[], |cx| {
+        self.with_lint_attrs(&it.attrs, |cx| {
             run_lints!(cx, check_foreign_item, it);
             visit::walk_foreign_item(cx, it);
         })
@@ -601,7 +521,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for Context<'a, 'tcx> {
                 body: &'v ast::Block, span: Span, id: ast::NodeId) {
         match fk {
             visit::FkMethod(_, _, m) => {
-                self.with_lint_attrs(&m.attrs[], |cx| {
+                self.with_lint_attrs(&m.attrs, |cx| {
                     run_lints!(cx, check_fn, fk, decl, body, span, id);
                     cx.visit_ids(|v| {
                         v.visit_fn(fk, decl, body, span, id);
@@ -617,7 +537,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for Context<'a, 'tcx> {
     }
 
     fn visit_ty_method(&mut self, t: &ast::TypeMethod) {
-        self.with_lint_attrs(&t.attrs[], |cx| {
+        self.with_lint_attrs(&t.attrs, |cx| {
             run_lints!(cx, check_ty_method, t);
             visit::walk_ty_method(cx, t);
         })
@@ -634,14 +554,14 @@ impl<'a, 'tcx, 'v> Visitor<'v> for Context<'a, 'tcx> {
     }
 
     fn visit_struct_field(&mut self, s: &ast::StructField) {
-        self.with_lint_attrs(&s.node.attrs[], |cx| {
+        self.with_lint_attrs(&s.node.attrs, |cx| {
             run_lints!(cx, check_struct_field, s);
             visit::walk_struct_field(cx, s);
         })
     }
 
     fn visit_variant(&mut self, v: &ast::Variant, g: &ast::Generics) {
-        self.with_lint_attrs(&v.node.attrs[], |cx| {
+        self.with_lint_attrs(&v.node.attrs, |cx| {
             run_lints!(cx, check_variant, v, g);
             visit::walk_variant(cx, v, g);
             run_lints!(cx, check_variant_post, v, g);
@@ -692,7 +612,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for Context<'a, 'tcx> {
     }
 
     fn visit_trait_item(&mut self, m: &ast::TraitItem) {
-        run_lints!(self, check_trait_method, m);
+        run_lints!(self, check_trait_item, m);
         visit::walk_trait_item(self, m);
     }
 
@@ -734,8 +654,8 @@ impl<'a, 'tcx> IdVisitingOperation for Context<'a, 'tcx> {
         match self.tcx.sess.lints.borrow_mut().remove(&id) {
             None => {}
             Some(lints) => {
-                for (lint_id, span, msg) in lints.into_iter() {
-                    self.span_lint(lint_id.lint, span, &msg[])
+                for (lint_id, span, msg) in lints {
+                    self.span_lint(lint_id.lint, span, &msg[..])
                 }
             }
         }
@@ -747,7 +667,7 @@ impl<'a, 'tcx> IdVisitingOperation for Context<'a, 'tcx> {
 // nodes, so that the variant size difference check in trans can call
 // `raw_emit_lint`.
 
-struct GatherNodeLevels;
+pub struct GatherNodeLevels;
 
 impl LintPass for GatherNodeLevels {
     fn get_lints(&self) -> LintArray {
@@ -785,7 +705,7 @@ pub fn check_crate(tcx: &ty::ctxt,
     let mut cx = Context::new(tcx, krate, exported_items);
 
     // Visit the whole crate.
-    cx.with_lint_attrs(&krate.attrs[], |cx| {
+    cx.with_lint_attrs(&krate.attrs, |cx| {
         cx.visit_id(ast::CRATE_NODE_ID);
         cx.visit_ids(|v| {
             v.visited_outermost = true;
@@ -801,14 +721,13 @@ pub fn check_crate(tcx: &ty::ctxt,
 
     // If we missed any lints added to the session, then there's a bug somewhere
     // in the iteration code.
-    for (id, v) in tcx.sess.lints.borrow().iter() {
-        for &(lint, span, ref msg) in v.iter() {
+    for (id, v) in &*tcx.sess.lints.borrow() {
+        for &(lint, span, ref msg) in v {
             tcx.sess.span_bug(span,
-                              format!("unprocessed lint {} at {}: {}",
-                                      lint.as_str(), tcx.map.node_to_string(*id), *msg).as_slice())
+                              &format!("unprocessed lint {} at {}: {}",
+                                       lint.as_str(), tcx.map.node_to_string(*id), *msg))
         }
     }
 
-    tcx.sess.abort_if_errors();
     *tcx.node_lint_levels.borrow_mut() = cx.node_levels.into_inner();
 }

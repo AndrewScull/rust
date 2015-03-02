@@ -10,7 +10,7 @@
 
 //! Generic support for building blocking abstractions.
 
-use thread::Thread;
+use thread::{self, Thread};
 use sync::atomic::{AtomicBool, ATOMIC_BOOL_INIT, Ordering};
 use sync::Arc;
 use marker::{Sync, Send};
@@ -40,7 +40,7 @@ impl !Sync for WaitToken {}
 
 pub fn tokens() -> (WaitToken, SignalToken) {
     let inner = Arc::new(Inner {
-        thread: Thread::current(),
+        thread: thread::current(),
         woken: ATOMIC_BOOL_INIT,
     });
     let wait_token = WaitToken {
@@ -61,17 +61,17 @@ impl SignalToken {
         wake
     }
 
-    /// Convert to an unsafe uint value. Useful for storing in a pipe's state
+    /// Convert to an unsafe usize value. Useful for storing in a pipe's state
     /// flag.
     #[inline]
-    pub unsafe fn cast_to_uint(self) -> uint {
+    pub unsafe fn cast_to_usize(self) -> usize {
         mem::transmute(self.inner)
     }
 
-    /// Convert from an unsafe uint value. Useful for retrieving a pipe's state
+    /// Convert from an unsafe usize value. Useful for retrieving a pipe's state
     /// flag.
     #[inline]
-    pub unsafe fn cast_from_uint(signal_ptr: uint) -> SignalToken {
+    pub unsafe fn cast_from_usize(signal_ptr: usize) -> SignalToken {
         SignalToken { inner: mem::transmute(signal_ptr) }
     }
 
@@ -80,7 +80,7 @@ impl SignalToken {
 impl WaitToken {
     pub fn wait(self) {
         while !self.inner.woken.load(Ordering::SeqCst) {
-            Thread::park()
+            thread::park()
         }
     }
 }

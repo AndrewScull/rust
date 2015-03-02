@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 use std::old_io::IoResult;
-use std::os;
+use std::env;
 
 use attr;
 use color;
@@ -24,7 +24,7 @@ use self::parm::{expand, Number, Variables};
 
 
 /// A parsed terminfo database entry.
-#[derive(Show)]
+#[derive(Debug)]
 pub struct TermInfo {
     /// Names for the terminal
     pub names: Vec<String> ,
@@ -72,7 +72,7 @@ pub struct TerminfoTerminal<T> {
     ti: Box<TermInfo>
 }
 
-impl<T: Writer+Send> Terminal<T> for TerminfoTerminal<T> {
+impl<T: Writer+Send+'static> Terminal<T> for TerminfoTerminal<T> {
     fn fg(&mut self, color: color::Color) -> IoResult<bool> {
         let color = self.dim_if_necessary(color);
         if self.num_colors > color {
@@ -80,10 +80,10 @@ impl<T: Writer+Send> Terminal<T> for TerminfoTerminal<T> {
                                .strings
                                .get("setaf")
                                .unwrap()
-                               .as_slice(),
+                               ,
                            &[Number(color as int)], &mut Variables::new());
             if s.is_ok() {
-                try!(self.out.write_all(s.unwrap().as_slice()));
+                try!(self.out.write_all(&s.unwrap()));
                 return Ok(true)
             }
         }
@@ -97,10 +97,10 @@ impl<T: Writer+Send> Terminal<T> for TerminfoTerminal<T> {
                                .strings
                                .get("setab")
                                .unwrap()
-                               .as_slice(),
+                               ,
                            &[Number(color as int)], &mut Variables::new());
             if s.is_ok() {
-                try!(self.out.write_all(s.unwrap().as_slice()));
+                try!(self.out.write_all(&s.unwrap()));
                 return Ok(true)
             }
         }
@@ -115,11 +115,11 @@ impl<T: Writer+Send> Terminal<T> for TerminfoTerminal<T> {
                 let cap = cap_for_attr(attr);
                 let parm = self.ti.strings.get(cap);
                 if parm.is_some() {
-                    let s = expand(parm.unwrap().as_slice(),
+                    let s = expand(parm.unwrap(),
                                    &[],
                                    &mut Variables::new());
                     if s.is_ok() {
-                        try!(self.out.write_all(s.unwrap().as_slice()));
+                        try!(self.out.write_all(&s.unwrap()));
                         return Ok(true)
                     }
                 }
@@ -151,10 +151,10 @@ impl<T: Writer+Send> Terminal<T> for TerminfoTerminal<T> {
             }
         }
         let s = cap.map_or(Err("can't find terminfo capability `sgr0`".to_string()), |op| {
-            expand(op.as_slice(), &[], &mut Variables::new())
+            expand(op, &[], &mut Variables::new())
         });
         if s.is_ok() {
-            return self.out.write_all(s.unwrap().as_slice())
+            return self.out.write_all(&s.unwrap())
         }
         Ok(())
     }
@@ -164,25 +164,25 @@ impl<T: Writer+Send> Terminal<T> for TerminfoTerminal<T> {
     fn get_mut<'a>(&'a mut self) -> &'a mut T { &mut self.out }
 }
 
-impl<T: Writer+Send> UnwrappableTerminal<T> for TerminfoTerminal<T> {
+impl<T: Writer+Send+'static> UnwrappableTerminal<T> for TerminfoTerminal<T> {
     fn unwrap(self) -> T { self.out }
 }
 
-impl<T: Writer+Send> TerminfoTerminal<T> {
+impl<T: Writer+Send+'static> TerminfoTerminal<T> {
     /// Returns `None` whenever the terminal cannot be created for some
     /// reason.
     pub fn new(out: T) -> Option<Box<Terminal<T>+Send+'static>> {
-        let term = match os::getenv("TERM") {
-            Some(t) => t,
-            None => {
+        let term = match env::var("TERM") {
+            Ok(t) => t,
+            Err(..) => {
                 debug!("TERM environment variable not defined");
                 return None;
             }
         };
 
-        let entry = open(&term[]);
+        let entry = open(&term[..]);
         if entry.is_err() {
-            if os::getenv("MSYSCON").map_or(false, |s| {
+            if env::var("MSYSCON").ok().map_or(false, |s| {
                     "mintty.exe" == s
                 }) {
                 // msys terminal
@@ -229,4 +229,3 @@ impl<T: Writer> Writer for TerminfoTerminal<T> {
         self.out.flush()
     }
 }
-

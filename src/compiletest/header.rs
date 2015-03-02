@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::env;
+
 use common::Config;
 use common;
 use util;
@@ -125,6 +127,16 @@ pub fn load_props(testfile: &Path) -> TestProps {
         true
     });
 
+    for key in vec!["RUST_TEST_NOCAPTURE", "RUST_TEST_TASKS"] {
+        match env::var(key) {
+            Ok(val) =>
+                if exec_env.iter().find(|&&(ref x, _)| *x == key.to_string()).is_none() {
+                    exec_env.push((key.to_string(), val))
+                },
+            Err(..) => {}
+        }
+    }
+
     TestProps {
         error_patterns: error_patterns,
         compile_flags: compile_flags,
@@ -145,11 +157,11 @@ pub fn load_props(testfile: &Path) -> TestProps {
 
 pub fn is_test_ignored(config: &Config, testfile: &Path) -> bool {
     fn ignore_target(config: &Config) -> String {
-        format!("ignore-{}", util::get_os(config.target.as_slice()))
+        format!("ignore-{}", util::get_os(&config.target))
     }
     fn ignore_stage(config: &Config) -> String {
         format!("ignore-{}",
-                config.stage_id.as_slice().split('-').next().unwrap())
+                config.stage_id.split('-').next().unwrap())
     }
     fn ignore_gdb(config: &Config, line: &str) -> bool {
         if config.mode != common::DebugInfoGdb {
@@ -169,8 +181,8 @@ pub fn is_test_ignored(config: &Config, testfile: &Path) -> bool {
                                           .expect("Malformed GDB version directive");
                     // Ignore if actual version is smaller the minimum required
                     // version
-                    gdb_version_to_int(actual_version.as_slice()) <
-                        gdb_version_to_int(min_version.as_slice())
+                    gdb_version_to_int(actual_version) <
+                        gdb_version_to_int(min_version)
                 } else {
                     false
                 }
@@ -197,8 +209,8 @@ pub fn is_test_ignored(config: &Config, testfile: &Path) -> bool {
                                           .expect("Malformed lldb version directive");
                     // Ignore if actual version is smaller the minimum required
                     // version
-                    lldb_version_to_int(actual_version.as_slice()) <
-                        lldb_version_to_int(min_version.as_slice())
+                    lldb_version_to_int(actual_version) <
+                        lldb_version_to_int(min_version)
                 } else {
                     false
                 }
@@ -209,8 +221,8 @@ pub fn is_test_ignored(config: &Config, testfile: &Path) -> bool {
 
     let val = iter_header(testfile, |ln| {
         !parse_name_directive(ln, "ignore-test") &&
-        !parse_name_directive(ln, ignore_target(config).as_slice()) &&
-        !parse_name_directive(ln, ignore_stage(config).as_slice()) &&
+        !parse_name_directive(ln, &ignore_target(config)) &&
+        !parse_name_directive(ln, &ignore_stage(config)) &&
         !(config.mode == common::Pretty && parse_name_directive(ln, "ignore-pretty")) &&
         !(config.target != config.host && parse_name_directive(ln, "ignore-cross-compile")) &&
         !ignore_gdb(config, ln) &&
@@ -231,11 +243,11 @@ fn iter_header<F>(testfile: &Path, mut it: F) -> bool where
         // module or function. This doesn't seem to be an optimization
         // with a warm page cache. Maybe with a cold one.
         let ln = ln.unwrap();
-        if ln.as_slice().starts_with("fn") ||
-                ln.as_slice().starts_with("mod") {
+        if ln.starts_with("fn") ||
+                ln.starts_with("mod") {
             return true;
         } else {
-            if !(it(ln.as_slice().trim())) {
+            if !(it(ln.trim())) {
                 return false;
             }
         }
@@ -294,14 +306,14 @@ fn parse_pretty_compare_only(line: &str) -> bool {
 fn parse_exec_env(line: &str) -> Option<(String, String)> {
     parse_name_value_directive(line, "exec-env").map(|nv| {
         // nv is either FOO or FOO=BAR
-        let mut strs: Vec<String> = nv.as_slice()
+        let mut strs: Vec<String> = nv
                                       .splitn(1, '=')
                                       .map(|s| s.to_string())
                                       .collect();
 
         match strs.len() {
-          1u => (strs.pop().unwrap(), "".to_string()),
-          2u => {
+          1 => (strs.pop().unwrap(), "".to_string()),
+          2 => {
               let end = strs.pop().unwrap();
               (strs.pop().unwrap(), end)
           }
@@ -330,7 +342,7 @@ fn parse_name_directive(line: &str, directive: &str) -> bool {
 pub fn parse_name_value_directive(line: &str, directive: &str)
                                   -> Option<String> {
     let keycolon = format!("{}:", directive);
-    match line.find_str(keycolon.as_slice()) {
+    match line.find(&keycolon) {
         Some(colon) => {
             let value = line[(colon + keycolon.len()) .. line.len()].to_string();
             debug!("{}: {}", directive, value);
@@ -344,7 +356,7 @@ pub fn gdb_version_to_int(version_string: &str) -> int {
     let error_string = format!(
         "Encountered GDB version string with unexpected format: {}",
         version_string);
-    let error_string = error_string.as_slice();
+    let error_string = error_string;
 
     let components: Vec<&str> = version_string.trim().split('.').collect();
 
@@ -352,8 +364,8 @@ pub fn gdb_version_to_int(version_string: &str) -> int {
         panic!("{}", error_string);
     }
 
-    let major: int = components[0].parse().expect(error_string);
-    let minor: int = components[1].parse().expect(error_string);
+    let major: int = components[0].parse().ok().expect(&error_string);
+    let minor: int = components[1].parse().ok().expect(&error_string);
 
     return major * 1000 + minor;
 }
@@ -362,7 +374,7 @@ pub fn lldb_version_to_int(version_string: &str) -> int {
     let error_string = format!(
         "Encountered LLDB version string with unexpected format: {}",
         version_string);
-    let error_string = error_string.as_slice();
-    let major: int = version_string.parse().expect(error_string);
+    let error_string = error_string;
+    let major: int = version_string.parse().ok().expect(&error_string);
     return major;
 }

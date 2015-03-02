@@ -23,11 +23,10 @@ impl<T> MyTrait<T> for T
     }
 }
 
+#[derive(Copy)]
 struct MyType {
     dummy: uint
 }
-
-impl Copy for MyType {}
 
 impl MyTrait<uint> for MyType {
     fn get(&self) -> uint { self.dummy }
@@ -41,7 +40,7 @@ where T : Eq + Debug,
 }
 
 pub fn main() {
-    test_eq(22u, 0u);
+    test_eq(22_usize, 0_usize);
 
     let value = MyType { dummy: 256 + 22 };
     test_eq(value, value.dummy);

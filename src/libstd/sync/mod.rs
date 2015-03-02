@@ -15,7 +15,7 @@
 //! and/or blocking at all, but rather provide the necessary tools to build
 //! other types of concurrent primitives.
 
-#![stable]
+#![stable(feature = "rust1", since = "1.0.0")]
 
 pub use alloc::arc::{Arc, Weak};
 pub use core::atomic;
@@ -31,6 +31,7 @@ pub use self::barrier::{Barrier, BarrierWaitResult};
 pub use self::poison::{PoisonError, TryLockError, TryLockResult, LockResult};
 
 pub use self::future::Future;
+#[allow(deprecated)]
 pub use self::task_pool::TaskPool;
 
 pub mod mpsc;

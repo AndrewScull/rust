@@ -38,8 +38,9 @@ string literal or a `String`.
 
 # String
 
-A `String` is a heap-allocated string. This string is growable, and is also
-guaranteed to be UTF-8.
+A `String` is a heap-allocated string. This string is growable, and is
+also guaranteed to be UTF-8. `String`s are commonly created by
+converting from a string slice using the `to_string` method.
 
 ```
 let mut s = "Hello".to_string();
@@ -49,7 +50,7 @@ s.push_str(", world.");
 println!("{}", s);
 ```
 
-You can coerce a `String` into a `&str` by dereferencing it:
+A reference to a `String` will automatically coerce to a string slice:
 
 ```
 fn takes_slice(slice: &str) {
@@ -58,7 +59,7 @@ fn takes_slice(slice: &str) {
 
 fn main() {
     let s = "Hello".to_string();
-    takes_slice(&*s);
+    takes_slice(&s);
 }
 ```
 
@@ -91,7 +92,7 @@ and only moving to this:
 fn foo(s: String) {
 ```
 
-If you have good reason. It's not polite to hold on to ownership you don't
+if you have good reason. It's not polite to hold on to ownership you don't
 need, and it can make your lifetimes more complex.
 
 ## Generic functions
@@ -100,7 +101,7 @@ To write a function that's generic over types of strings, use `&str`.
 
 ```
 fn some_string_length(x: &str) -> uint {
-        x.len()
+    x.len()
 }
 
 fn main() {
@@ -110,7 +111,7 @@ fn main() {
 
     let s = "Hello, world".to_string();
 
-    println!("{}", some_string_length(s.as_slice()));
+    println!("{}", some_string_length(&s));
 }
 ```
 
@@ -169,8 +170,8 @@ é
 Note that `l` has the type `&str` here, since a single grapheme can consist of
 multiple codepoints, so a `char` wouldn't be appropriate.
 
-This will print out each visible character in turn, as you'd expect: first "u͔", then
-"n͈̰̎", etc. If you wanted each individual codepoint of each grapheme, you can use `.chars()`:
+This will print out each visible character in turn, as you'd expect: first `u͔`, then
+`n͈̰̎`, etc. If you wanted each individual codepoint of each grapheme, you can use `.chars()`:
 
 ```
 let s = "u͔n͈̰̎i̙̮͚̦c͚̉o̼̩̰͗d͔̆̓ͥé";
@@ -279,5 +280,5 @@ Many more bytes than graphemes!
 
 # Other Documentation
 
-* [the `&str` API documentation](std/str/index.html)
-* [the `String` API documentation](std/string/index.html)
+* [the `&str` API documentation](../std/str/index.html)
+* [the `String` API documentation](../std/string/index.html)

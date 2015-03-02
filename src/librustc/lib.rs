@@ -15,7 +15,7 @@
 //! This API is completely unstable and subject to change.
 
 #![crate_name = "rustc"]
-#![unstable]
+#![unstable(feature = "rustc_private")]
 #![staged_api]
 #![crate_type = "dylib"]
 #![crate_type = "rlib"]
@@ -23,13 +23,23 @@
       html_favicon_url = "http://www.rust-lang.org/favicon.ico",
       html_root_url = "http://doc.rust-lang.org/nightly/")]
 
-#![allow(unknown_features)]
-#![feature(quote)]
-#![feature(slicing_syntax, unsafe_destructor)]
+#![feature(box_patterns)]
 #![feature(box_syntax)]
-#![allow(unknown_features)] #![feature(int_uint)]
+#![feature(collections)]
+#![feature(core)]
+#![feature(hash)]
+#![feature(int_uint)]
+#![feature(old_io)]
+#![feature(libc)]
+#![feature(old_path)]
+#![feature(quote)]
 #![feature(rustc_diagnostic_macros)]
-#![allow(unstable)]
+#![feature(rustc_private)]
+#![feature(unsafe_destructor)]
+#![feature(staged_api)]
+#![feature(std_misc)]
+#![feature(os)]
+#![cfg_attr(test, feature(test))]
 
 extern crate arena;
 extern crate flate;
@@ -79,7 +89,6 @@ pub mod middle {
     pub mod check_loop;
     pub mod check_match;
     pub mod check_rvalues;
-    pub mod check_static;
     pub mod const_eval;
     pub mod dataflow;
     pub mod dead;

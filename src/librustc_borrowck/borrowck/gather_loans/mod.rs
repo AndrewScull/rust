@@ -173,7 +173,7 @@ impl<'a, 'tcx> euv::Delegate<'tcx> for GatherLoanCtxt<'a, 'tcx> {
     }
 }
 
-/// Implements the A-* rules in doc.rs.
+/// Implements the A-* rules in README.md.
 fn check_aliasability<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>,
                                 borrow_span: Span,
                                 loan_cause: euv::LoanCause,
@@ -286,7 +286,7 @@ impl<'a, 'tcx> GatherLoanCtxt<'a, 'tcx> {
                 let loan_scope = match loan_region {
                     ty::ReScope(scope) => scope,
 
-                    ty::ReFree(ref fr) => fr.scope,
+                    ty::ReFree(ref fr) => fr.scope.to_code_extent(),
 
                     ty::ReStatic => {
                         // If we get here, an error must have been
@@ -307,7 +307,7 @@ impl<'a, 'tcx> GatherLoanCtxt<'a, 'tcx> {
                         self.tcx().sess.span_bug(
                             cmt.span,
                             &format!("invalid borrow lifetime: {:?}",
-                                    loan_region)[]);
+                                    loan_region));
                     }
                 };
                 debug!("loan_scope = {:?}", loan_scope);
@@ -375,7 +375,7 @@ impl<'a, 'tcx> GatherLoanCtxt<'a, 'tcx> {
                                       cmt: mc::cmt<'tcx>,
                                       req_kind: ty::BorrowKind)
                                       -> Result<(),()> {
-            //! Implements the M-* rules in doc.rs.
+            //! Implements the M-* rules in README.md.
 
             match req_kind {
                 ty::UniqueImmBorrow | ty::ImmBorrow => {

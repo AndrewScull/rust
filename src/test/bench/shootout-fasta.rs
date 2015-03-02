@@ -42,9 +42,9 @@ use std::cmp::min;
 use std::old_io::{BufferedWriter, File};
 use std::old_io;
 use std::num::Float;
-use std::os;
+use std::env;
 
-const LINE_LENGTH: uint = 60;
+const LINE_LENGTH: usize = 60;
 const IM: u32 = 139968;
 
 struct MyRandom {
@@ -85,14 +85,14 @@ impl<'a> Iterator for AAGen<'a> {
 }
 
 fn make_fasta<W: Writer, I: Iterator<Item=u8>>(
-    wr: &mut W, header: &str, mut it: I, mut n: uint)
+    wr: &mut W, header: &str, mut it: I, mut n: usize)
     -> std::old_io::IoResult<()>
 {
     try!(wr.write(header.as_bytes()));
     let mut line = [0u8; LINE_LENGTH + 1];
     while n > 0 {
         let nb = min(LINE_LENGTH, n);
-        for i in range(0, nb) {
+        for i in 0..nb {
             line[i] = it.next().unwrap();
         }
         n -= nb;
@@ -103,14 +103,13 @@ fn make_fasta<W: Writer, I: Iterator<Item=u8>>(
 }
 
 fn run<W: Writer>(writer: &mut W) -> std::old_io::IoResult<()> {
-    let args = os::args();
-    let args = args.as_slice();
-    let n = if os::getenv("RUST_BENCH").is_some() {
+    let mut args = env::args();
+    let n = if env::var_os("RUST_BENCH").is_some() {
         25000000
-    } else if args.len() <= 1u {
+    } else if args.len() <= 1 {
         1000
     } else {
-        args[1].parse().unwrap()
+        args.nth(1).unwrap().parse().unwrap()
     };
 
     let rng = &mut MyRandom::new();
@@ -133,7 +132,7 @@ fn run<W: Writer>(writer: &mut W) -> std::old_io::IoResult<()> {
                         ('t', 0.3015094502008)];
 
     try!(make_fasta(writer, ">ONE Homo sapiens alu\n",
-                    alu.as_bytes().iter().cycle().map(|c| *c), n * 2));
+                    alu.as_bytes().iter().cycle().cloned(), n * 2));
     try!(make_fasta(writer, ">TWO IUB ambiguity codes\n",
                     AAGen::new(rng, iub), n * 3));
     try!(make_fasta(writer, ">THREE Homo sapiens frequency\n",
@@ -143,7 +142,7 @@ fn run<W: Writer>(writer: &mut W) -> std::old_io::IoResult<()> {
 }
 
 fn main() {
-    let res = if os::getenv("RUST_BENCH").is_some() {
+    let res = if env::var_os("RUST_BENCH").is_some() {
         let mut file = BufferedWriter::new(File::create(&Path::new("./shootout-fasta.data")));
         run(&mut file)
     } else {

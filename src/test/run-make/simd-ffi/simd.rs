@@ -12,6 +12,7 @@
 #![crate_type = "lib"]
 // we can compile to a variety of platforms, because we don't need
 // cross-compiled standard libraries.
+#![feature(no_std)]
 #![no_std]
 
 #![feature(simd, simd_ffi, link_llvm_intrinsics, lang_items)]
@@ -69,12 +70,16 @@ pub fn bar(a: i32x4, b: i32x4) -> i32x4 {
 }
 
 #[lang = "sized"]
-trait Sized {}
+pub trait Sized : PhantomFn<Self> {}
 
 #[lang = "copy"]
-trait Copy {}
+pub trait Copy : PhantomFn<Self> {}
 
-mod std {
+#[lang="phantom_fn"]
+pub trait PhantomFn<A:?Sized,R:?Sized=()> { }
+impl<A:?Sized, R:?Sized, U:?Sized> PhantomFn<A,R> for U { }
+
+mod core {
     pub mod marker {
         pub use Copy;
     }

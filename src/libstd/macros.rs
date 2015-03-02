@@ -14,7 +14,7 @@
 //! library. Each macro is available for use when linking against the standard
 //! library.
 
-#![unstable]
+#![unstable(feature = "std_misc")]
 
 /// The entry point for panic of Rust tasks.
 ///
@@ -32,11 +32,11 @@
 /// # #![allow(unreachable_code)]
 /// panic!();
 /// panic!("this is a terrible mistake!");
-/// panic!(4i); // panic with the value of 4 to be collected elsewhere
+/// panic!(4); // panic with the value of 4 to be collected elsewhere
 /// panic!("this is a {} {message}", "fancy", message = "message");
 /// ```
 #[macro_export]
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 macro_rules! panic {
     () => ({
         panic!("explicit panic")
@@ -44,7 +44,7 @@ macro_rules! panic {
     ($msg:expr) => ({
         $crate::rt::begin_unwind($msg, {
             // static requires less code at runtime, more constant data
-            static _FILE_LINE: (&'static str, usize) = (file!(), line!());
+            static _FILE_LINE: (&'static str, usize) = (file!(), line!() as usize);
             &_FILE_LINE
         })
     });
@@ -54,32 +54,16 @@ macro_rules! panic {
             // used inside a dead function. Just `#[allow(dead_code)]` is
             // insufficient, since the user may have
             // `#[forbid(dead_code)]` and which cannot be overridden.
-            static _FILE_LINE: (&'static str, usize) = (file!(), line!());
+            static _FILE_LINE: (&'static str, usize) = (file!(), line!() as usize);
             &_FILE_LINE
         })
     });
 }
 
-/// Use the syntax described in `std::fmt` to create a value of type `String`.
-/// See `std::fmt` for more information.
-///
-/// # Example
-///
-/// ```
-/// format!("test");
-/// format!("hello {}", "world!");
-/// format!("x = {}, y = {y}", 10i, y = 30i);
-/// ```
-#[macro_export]
-#[stable]
-macro_rules! format {
-    ($($arg:tt)*) => ($crate::fmt::format(format_args!($($arg)*)))
-}
-
 /// Equivalent to the `println!` macro except that a newline is not printed at
 /// the end of the message.
 #[macro_export]
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::old_io::stdio::print_args(format_args!($($arg)*)))
 }
@@ -97,7 +81,7 @@ macro_rules! print {
 /// println!("format {} arguments", "some");
 /// ```
 #[macro_export]
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 macro_rules! println {
     ($($arg:tt)*) => ($crate::old_io::stdio::println_args(format_args!($($arg)*)))
 }
@@ -106,7 +90,7 @@ macro_rules! println {
 /// error if the value of the expression is `Err`. For more information, see
 /// `std::io`.
 #[macro_export]
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 macro_rules! try {
     ($expr:expr) => (match $expr {
         $crate::result::Result::Ok(val) => val,
@@ -125,7 +109,7 @@ macro_rules! try {
 /// # Examples
 ///
 /// ```
-/// use std::thread::Thread;
+/// use std::thread;
 /// use std::sync::mpsc;
 ///
 /// // two placeholder functions for now
@@ -135,8 +119,8 @@ macro_rules! try {
 /// let (tx1, rx1) = mpsc::channel();
 /// let (tx2, rx2) = mpsc::channel();
 ///
-/// Thread::spawn(move|| { long_running_task(); tx1.send(()).unwrap(); });
-/// Thread::spawn(move|| { tx2.send(calculate_the_answer()).unwrap(); });
+/// thread::spawn(move|| { long_running_task(); tx1.send(()).unwrap(); });
+/// thread::spawn(move|| { tx2.send(calculate_the_answer()).unwrap(); });
 ///
 /// select! (
 ///     _ = rx1.recv() => println!("the long running task finished first"),
@@ -148,7 +132,7 @@ macro_rules! try {
 ///
 /// For more information about select, see the `std::sync::mpsc::Select` structure.
 #[macro_export]
-#[unstable]
+#[unstable(feature = "std_misc")]
 macro_rules! select {
     (
         $($name:pat = $rx:ident.$meth:ident() => $code:expr),+
@@ -282,7 +266,7 @@ pub mod builtin {
     /// # Example
     ///
     /// ```
-    /// let s = concat!("test", 10i, 'b', true);
+    /// let s = concat!("test", 10, 'b', true);
     /// assert_eq!(s, "test10btrue");
     /// ```
     #[macro_export]

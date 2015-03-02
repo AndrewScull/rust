@@ -16,7 +16,7 @@ use old_io;
 use slice::bytes::MutableByteVector;
 
 /// Wraps a `Reader`, limiting the number of bytes that can be read from it.
-#[derive(Show)]
+#[derive(Debug)]
 pub struct LimitReader<R> {
     limit: uint,
     inner: R
@@ -78,7 +78,7 @@ impl<R: Buffer> Buffer for LimitReader<R> {
 }
 
 /// A `Writer` which ignores bytes written to it, like /dev/null.
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 pub struct NullWriter;
 
 impl Writer for NullWriter {
@@ -87,7 +87,7 @@ impl Writer for NullWriter {
 }
 
 /// A `Reader` which returns an infinite stream of 0 bytes, like /dev/zero.
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 pub struct ZeroReader;
 
 impl Reader for ZeroReader {
@@ -101,14 +101,14 @@ impl Reader for ZeroReader {
 impl Buffer for ZeroReader {
     fn fill_buf<'a>(&'a mut self) -> old_io::IoResult<&'a [u8]> {
         static DATA: [u8; 64] = [0; 64];
-        Ok(DATA.as_slice())
+        Ok(&DATA)
     }
 
     fn consume(&mut self, _amt: uint) {}
 }
 
 /// A `Reader` which is always at EOF, like /dev/null.
-#[derive(Copy, Show)]
+#[derive(Copy, Debug)]
 pub struct NullReader;
 
 impl Reader for NullReader {
@@ -129,7 +129,7 @@ impl Buffer for NullReader {
 ///
 /// The `Writer`s are delegated to in order. If any `Writer` returns an error,
 /// that error is returned immediately and remaining `Writer`s are not called.
-#[derive(Show)]
+#[derive(Debug)]
 pub struct MultiWriter<W> {
     writers: Vec<W>
 }
@@ -144,7 +144,7 @@ impl<W> MultiWriter<W> where W: Writer {
 impl<W> Writer for MultiWriter<W> where W: Writer {
     #[inline]
     fn write_all(&mut self, buf: &[u8]) -> old_io::IoResult<()> {
-        for writer in self.writers.iter_mut() {
+        for writer in &mut self.writers {
             try!(writer.write_all(buf));
         }
         Ok(())
@@ -152,7 +152,7 @@ impl<W> Writer for MultiWriter<W> where W: Writer {
 
     #[inline]
     fn flush(&mut self) -> old_io::IoResult<()> {
-        for writer in self.writers.iter_mut() {
+        for writer in &mut self.writers {
             try!(writer.flush());
         }
         Ok(())
@@ -161,7 +161,7 @@ impl<W> Writer for MultiWriter<W> where W: Writer {
 
 /// A `Reader` which chains input from multiple `Reader`s, reading each to
 /// completion before moving onto the next.
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct ChainedReader<I, R> {
     readers: I,
     cur_reader: Option<R>,
@@ -200,7 +200,7 @@ impl<R: Reader, I: Iterator<Item=R>> Reader for ChainedReader<I, R> {
 
 /// A `Reader` which forwards input from another `Reader`, passing it along to
 /// a `Writer` as well. Similar to the `tee(1)` command.
-#[derive(Show)]
+#[derive(Debug)]
 pub struct TeeReader<R, W> {
     reader: R,
     writer: W,
@@ -242,7 +242,7 @@ pub fn copy<R: Reader, W: Writer>(r: &mut R, w: &mut W) -> old_io::IoResult<()> 
 }
 
 /// An adaptor converting an `Iterator<u8>` to a `Reader`.
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct IterReader<T> {
     iter: T,
 }
@@ -284,7 +284,7 @@ mod test {
         let mut r = MemReader::new(vec!(0, 1, 2));
         {
             let mut r = LimitReader::new(r.by_ref(), 4);
-            assert_eq!(vec!(0, 1, 2), r.read_to_end().unwrap());
+            assert_eq!([0, 1, 2], r.read_to_end().unwrap());
         }
     }
 
@@ -293,9 +293,9 @@ mod test {
         let mut r = MemReader::new(vec!(0, 1, 2));
         {
             let mut r = LimitReader::new(r.by_ref(), 2);
-            assert_eq!(vec!(0, 1), r.read_to_end().unwrap());
+            assert_eq!([0, 1], r.read_to_end().unwrap());
         }
-        assert_eq!(vec!(2), r.read_to_end().unwrap());
+        assert_eq!([2], r.read_to_end().unwrap());
     }
 
     #[test]
@@ -305,7 +305,7 @@ mod test {
         assert_eq!(3, r.limit());
         assert_eq!(0, r.read_byte().unwrap());
         assert_eq!(2, r.limit());
-        assert_eq!(vec!(1, 2), r.read_to_end().unwrap());
+        assert_eq!([1, 2], r.read_to_end().unwrap());
         assert_eq!(0, r.limit());
     }
 
@@ -314,14 +314,14 @@ mod test {
         let mut r = MemReader::new(vec![0, 1, 2, 3, 4, 5]);
         let mut r = LimitReader::new(r.by_ref(), 1);
         r.consume(2);
-        assert_eq!(vec![], r.read_to_end().unwrap());
+        assert_eq!([], r.read_to_end().unwrap());
     }
 
     #[test]
     fn test_null_writer() {
         let mut s = NullWriter;
         let buf = vec![0, 0, 0];
-        s.write_all(buf.as_slice()).unwrap();
+        s.write_all(&buf).unwrap();
         s.flush().unwrap();
     }
 
@@ -329,15 +329,15 @@ mod test {
     fn test_zero_reader() {
         let mut s = ZeroReader;
         let mut buf = vec![1, 2, 3];
-        assert_eq!(s.read(buf.as_mut_slice()), Ok(3));
-        assert_eq!(vec![0, 0, 0], buf);
+        assert_eq!(s.read(&mut buf), Ok(3));
+        assert_eq!([0, 0, 0], buf);
     }
 
     #[test]
     fn test_null_reader() {
         let mut r = NullReader;
         let mut buf = vec![0];
-        assert!(r.read(buf.as_mut_slice()).is_err());
+        assert!(r.read(&mut buf).is_err());
     }
 
     #[test]
@@ -373,16 +373,16 @@ mod test {
         let rs = vec!(MemReader::new(vec!(0, 1)), MemReader::new(vec!()),
                       MemReader::new(vec!(2, 3)));
         let mut r = ChainedReader::new(rs.into_iter());
-        assert_eq!(vec!(0, 1, 2, 3), r.read_to_end().unwrap());
+        assert_eq!([0, 1, 2, 3], r.read_to_end().unwrap());
     }
 
     #[test]
     fn test_tee_reader() {
         let mut r = TeeReader::new(MemReader::new(vec!(0, 1, 2)),
                                    Vec::new());
-        assert_eq!(vec!(0, 1, 2), r.read_to_end().unwrap());
+        assert_eq!([0, 1, 2], r.read_to_end().unwrap());
         let (_, w) = r.into_inner();
-        assert_eq!(vec!(0, 1, 2), w);
+        assert_eq!([0, 1, 2], w);
     }
 
     #[test]
@@ -390,7 +390,7 @@ mod test {
         let mut r = MemReader::new(vec!(0, 1, 2, 3, 4));
         let mut w = Vec::new();
         copy(&mut r, &mut w).unwrap();
-        assert_eq!(vec!(0, 1, 2, 3, 4), w);
+        assert_eq!([0, 1, 2, 3, 4], w);
     }
 
     #[test]
@@ -418,7 +418,7 @@ mod test {
 
     #[test]
     fn test_iter_reader() {
-        let mut r = IterReader::new(range(0u8, 8));
+        let mut r = IterReader::new(0u8..8);
         let mut buf = [0, 0, 0];
         let len = r.read(&mut buf).unwrap();
         assert_eq!(len, 3);
@@ -437,7 +437,7 @@ mod test {
 
     #[test]
     fn iter_reader_zero_length() {
-        let mut r = IterReader::new(range(0u8, 8));
+        let mut r = IterReader::new(0u8..8);
         let mut buf = [];
         assert_eq!(Ok(0), r.read(&mut buf));
     }

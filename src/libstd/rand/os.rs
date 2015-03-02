@@ -20,7 +20,7 @@ mod imp {
     use self::OsRngInner::*;
 
     use old_io::{IoResult, File};
-    use path::Path;
+    use old_path::Path;
     use rand::Rng;
     use rand::reader::ReaderRng;
     use result::Result::Ok;
@@ -49,7 +49,7 @@ mod imp {
         const NR_GETRANDOM: libc::c_long = 384;
 
         unsafe {
-            syscall(NR_GETRANDOM, buf.as_mut_ptr(), buf.len(), 0u)
+            syscall(NR_GETRANDOM, buf.as_mut_ptr(), buf.len(), 0)
         }
     }
 
@@ -74,7 +74,7 @@ mod imp {
                     panic!("unexpected getrandom error: {}", err);
                 }
             } else {
-                read += result as uint;
+                read += result as usize;
             }
         }
     }
@@ -188,7 +188,6 @@ mod imp {
     extern crate libc;
 
     use old_io::{IoResult};
-    use marker::Sync;
     use mem;
     use os;
     use rand::Rng;
@@ -206,7 +205,6 @@ mod imp {
     /// - iOS: calls SecRandomCopyBytes as /dev/(u)random is sandboxed.
     ///
     /// This does not block.
-    #[allow(missing_copy_implementations)]
     pub struct OsRng {
         // dummy field to ensure that this struct cannot be constructed outside of this module
         _dummy: (),
@@ -215,10 +213,8 @@ mod imp {
     #[repr(C)]
     struct SecRandom;
 
-    unsafe impl Sync for *const SecRandom {}
-
     #[allow(non_upper_case_globals)]
-    static kSecRandomDefault: *const SecRandom = 0 as *const SecRandom;
+    const kSecRandomDefault: *const SecRandom = 0 as *const SecRandom;
 
     #[link(name = "Security", kind = "framework")]
     extern "C" {
@@ -396,7 +392,7 @@ mod test {
     use sync::mpsc::channel;
     use rand::Rng;
     use super::OsRng;
-    use thread::Thread;
+    use thread;
 
     #[test]
     fn test_os_rng() {
@@ -413,33 +409,33 @@ mod test {
     fn test_os_rng_tasks() {
 
         let mut txs = vec!();
-        for _ in range(0u, 20) {
+        for _ in 0..20 {
             let (tx, rx) = channel();
             txs.push(tx);
 
-            Thread::spawn(move|| {
+            thread::spawn(move|| {
                 // wait until all the tasks are ready to go.
                 rx.recv().unwrap();
 
                 // deschedule to attempt to interleave things as much
                 // as possible (XXX: is this a good test?)
                 let mut r = OsRng::new().unwrap();
-                Thread::yield_now();
+                thread::yield_now();
                 let mut v = [0u8; 1000];
 
-                for _ in range(0u, 100) {
+                for _ in 0..100 {
                     r.next_u32();
-                    Thread::yield_now();
+                    thread::yield_now();
                     r.next_u64();
-                    Thread::yield_now();
+                    thread::yield_now();
                     r.fill_bytes(&mut v);
-                    Thread::yield_now();
+                    thread::yield_now();
                 }
             });
         }
 
         // start all the tasks
-        for tx in txs.iter() {
+        for tx in &txs {
             tx.send(()).unwrap();
         }
     }

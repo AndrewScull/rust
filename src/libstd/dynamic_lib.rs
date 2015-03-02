@@ -1,4 +1,4 @@
-// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -12,19 +12,17 @@
 //!
 //! A simple wrapper over the platform's dynamic library facilities
 
-#![cfg(not(dios))]
-
-#![unstable]
+#![unstable(feature = "std_misc")]
 #![allow(missing_docs)]
 
 use prelude::v1::*;
 
 use ffi::CString;
 use mem;
-use os;
+use env;
 use str;
+use os;
 
-#[allow(missing_copy_implementations)]
 pub struct DynamicLibrary {
     handle: *mut u8
 }
@@ -69,9 +67,9 @@ impl DynamicLibrary {
     pub fn prepend_search_path(path: &Path) {
         let mut search_path = DynamicLibrary::search_path();
         search_path.insert(0, path.clone());
-        let newval = DynamicLibrary::create_path(search_path.as_slice());
-        os::setenv(DynamicLibrary::envvar(),
-                   str::from_utf8(newval.as_slice()).unwrap());
+        let newval = DynamicLibrary::create_path(&search_path);
+        env::set_var(DynamicLibrary::envvar(),
+                     str::from_utf8(&newval).unwrap());
     }
 
     /// From a slice of paths, create a new vector which is suitable to be an
@@ -104,18 +102,10 @@ impl DynamicLibrary {
     /// Returns the current search path for dynamic libraries being used by this
     /// process
     pub fn search_path() -> Vec<Path> {
-        let mut ret = Vec::new();
-        match os::getenv_as_bytes(DynamicLibrary::envvar()) {
-            Some(env) => {
-                for portion in
-                        env.as_slice()
-                           .split(|a| *a == DynamicLibrary::separator()) {
-                    ret.push(Path::new(portion));
-                }
-            }
-            None => {}
+        match env::var_os(DynamicLibrary::envvar()) {
+            Some(var) => os::split_paths(var.to_str().unwrap()),
+            None => Vec::new(),
         }
-        return ret;
     }
 
     /// Access the value at the symbol of the dynamic library
@@ -123,7 +113,7 @@ impl DynamicLibrary {
         // This function should have a lifetime constraint of 'a on
         // T but that feature is still unimplemented
 
-        let raw_string = CString::from_slice(symbol.as_bytes());
+        let raw_string = CString::new(symbol).unwrap();
         let maybe_symbol_value = dl::check_for_errors_in(|| {
             dl::symbol(self.handle, raw_string.as_ptr())
         });
@@ -175,7 +165,9 @@ mod test {
     #[cfg(any(target_os = "linux",
               target_os = "macos",
               target_os = "freebsd",
-              target_os = "dragonfly"))]
+              target_os = "dragonfly",
+              target_os = "bitrig",
+              target_os = "openbsd"))]
     fn test_errors_do_not_crash() {
         // Open /dev/null as a library to get an error, and make sure
         // that only causes an error, and not a crash.
@@ -192,11 +184,13 @@ mod test {
           target_os = "macos",
           target_os = "ios",
           target_os = "freebsd",
-          target_os = "dragonfly"))]
+          target_os = "dragonfly",
+          target_os = "bitrig",
+          target_os = "openbsd"))]
 mod dl {
     use prelude::v1::*;
 
-    use ffi::{self, CString};
+    use ffi::{CString, CStr};
     use str;
     use libc;
     use ptr;
@@ -215,7 +209,7 @@ mod dl {
     const LAZY: libc::c_int = 1;
 
     unsafe fn open_external(filename: &[u8]) -> *mut u8 {
-        let s = CString::from_slice(filename);
+        let s = CString::new(filename).unwrap();
         dlopen(s.as_ptr(), LAZY) as *mut u8
     }
 
@@ -240,7 +234,7 @@ mod dl {
             let ret = if ptr::null() == last_error {
                 Ok(result)
             } else {
-                let s = ffi::c_str_to_bytes(&last_error);
+                let s = CStr::from_ptr(last_error).to_bytes();
                 Err(str::from_utf8(s).unwrap().to_string())
             };
 
@@ -256,7 +250,6 @@ mod dl {
         dlclose(handle as *mut libc::c_void); ()
     }
 
-    #[link_name = "dl"]
     extern {
         fn dlopen(filename: *const libc::c_char,
                   flag: libc::c_int) -> *mut libc::c_void;

@@ -23,7 +23,9 @@ use metadata::tydecode;
 use metadata::tydecode::{DefIdSource, NominalType, TypeWithId, TypeParameter};
 use metadata::tydecode::{RegionParameter, ClosureSource};
 use metadata::tyencode;
+use middle::check_const::ConstQualif;
 use middle::mem_categorization::Typer;
+use middle::privacy::{AllPublic, LastMod};
 use middle::subst;
 use middle::subst::VecPerParamSpace;
 use middle::ty::{self, Ty, MethodCall, MethodCallee, MethodOrigin};
@@ -38,6 +40,7 @@ use syntax::ptr::P;
 use syntax;
 
 use std::old_io::Seek;
+use std::num::FromPrimitive;
 use std::rc::Rc;
 
 use rbml::io::SeekableMemWriter;
@@ -130,9 +133,9 @@ pub fn decode_inlined_item<'tcx>(cdata: &cstore::crate_metadata,
         debug!("> Decoding inlined fn: {:?}::?",
         {
             // Do an Option dance to use the path after it is moved below.
-            let s = ast_map::path_to_string(ast_map::Values(path.iter()));
+            let s = ast_map::path_to_string(path.iter().cloned());
             path_as_str = Some(s);
-            path_as_str.as_ref().map(|x| &x[])
+            path_as_str.as_ref().map(|x| &x[..])
         });
         let mut ast_dsr = reader::Decoder::new(ast_doc);
         let from_id_range = Decodable::decode(&mut ast_dsr).unwrap();
@@ -421,13 +424,8 @@ impl tr for def::Def {
     fn tr(&self, dcx: &DecodeContext) -> def::Def {
         match *self {
           def::DefFn(did, is_ctor) => def::DefFn(did.tr(dcx), is_ctor),
-          def::DefStaticMethod(did, p) => {
-            def::DefStaticMethod(did.tr(dcx), p.map(|did2| did2.tr(dcx)))
-          }
-          def::DefMethod(did0, did1, p) => {
-            def::DefMethod(did0.tr(dcx),
-                           did1.map(|did1| did1.tr(dcx)),
-                           p.map(|did2| did2.tr(dcx)))
+          def::DefMethod(did, p) => {
+            def::DefMethod(did.tr(dcx), p.map(|did2| did2.tr(dcx)))
           }
           def::DefSelfTy(nid) => { def::DefSelfTy(dcx.tr_id(nid)) }
           def::DefMod(did) => { def::DefMod(did.tr(dcx)) }
@@ -440,11 +438,8 @@ impl tr for def::Def {
           },
           def::DefTrait(did) => def::DefTrait(did.tr(dcx)),
           def::DefTy(did, is_enum) => def::DefTy(did.tr(dcx), is_enum),
-          def::DefAssociatedTy(did) => def::DefAssociatedTy(did.tr(dcx)),
-          def::DefAssociatedPath(def::TyParamProvenance::FromSelf(did), ident) =>
-              def::DefAssociatedPath(def::TyParamProvenance::FromSelf(did.tr(dcx)), ident),
-          def::DefAssociatedPath(def::TyParamProvenance::FromParam(did), ident) =>
-              def::DefAssociatedPath(def::TyParamProvenance::FromParam(did.tr(dcx)), ident),
+          def::DefAssociatedTy(trait_did, did) =>
+              def::DefAssociatedTy(trait_did.tr(dcx), did.tr(dcx)),
           def::DefPrimTy(p) => def::DefPrimTy(p),
           def::DefTyParam(s, index, def_id, n) => def::DefTyParam(s, index, def_id.tr(dcx), n),
           def::DefUse(did) => def::DefUse(did.tr(dcx)),
@@ -453,9 +448,6 @@ impl tr for def::Def {
           }
           def::DefStruct(did) => def::DefStruct(did.tr(dcx)),
           def::DefRegion(nid) => def::DefRegion(dcx.tr_id(nid)),
-          def::DefTyParamBinder(nid) => {
-            def::DefTyParamBinder(dcx.tr_id(nid))
-          }
           def::DefLabel(nid) => def::DefLabel(dcx.tr_id(nid))
         }
     }
@@ -499,6 +491,12 @@ impl tr for region::CodeExtent {
     }
 }
 
+impl tr for region::DestructionScopeData {
+    fn tr(&self, dcx: &DecodeContext) -> region::DestructionScopeData {
+        region::DestructionScopeData { node_id: dcx.tr_id(self.node_id) }
+    }
+}
+
 impl tr for ty::BoundRegion {
     fn tr(&self, dcx: &DecodeContext) -> ty::BoundRegion {
         match *self {
@@ -516,10 +514,6 @@ impl tr for ty::BoundRegion {
 
 fn encode_freevar_entry(rbml_w: &mut Encoder, fv: &ty::Freevar) {
     (*fv).encode(rbml_w).unwrap();
-}
-
-fn encode_capture_mode(rbml_w: &mut Encoder, cm: ast::CaptureClause) {
-    cm.encode(rbml_w).unwrap();
 }
 
 trait rbml_decoder_helper {
@@ -559,6 +553,15 @@ impl tr for ty::UpvarBorrow {
     }
 }
 
+impl tr for ty::UpvarCapture {
+    fn tr(&self, dcx: &DecodeContext) -> ty::UpvarCapture {
+        match *self {
+            ty::UpvarCapture::ByValue => ty::UpvarCapture::ByValue,
+            ty::UpvarCapture::ByRef(ref data) => ty::UpvarCapture::ByRef(data.tr(dcx)),
+        }
+    }
+}
+
 // ______________________________________________________________________
 // Encoding and decoding of MethodCallee
 
@@ -574,16 +577,16 @@ fn encode_method_callee<'a, 'tcx>(ecx: &e::EncodeContext<'a, 'tcx>,
     use serialize::Encoder;
 
     rbml_w.emit_struct("MethodCallee", 4, |rbml_w| {
-        rbml_w.emit_struct_field("adjustment", 0u, |rbml_w| {
+        rbml_w.emit_struct_field("adjustment", 0, |rbml_w| {
             adjustment.encode(rbml_w)
         });
-        rbml_w.emit_struct_field("origin", 1u, |rbml_w| {
+        rbml_w.emit_struct_field("origin", 1, |rbml_w| {
             Ok(rbml_w.emit_method_origin(ecx, &method.origin))
         });
-        rbml_w.emit_struct_field("ty", 2u, |rbml_w| {
+        rbml_w.emit_struct_field("ty", 2, |rbml_w| {
             Ok(rbml_w.emit_ty(ecx, method.ty))
         });
-        rbml_w.emit_struct_field("substs", 3u, |rbml_w| {
+        rbml_w.emit_struct_field("substs", 3, |rbml_w| {
             Ok(rbml_w.emit_substs(ecx, &method.substs))
         })
     }).unwrap();
@@ -642,30 +645,7 @@ impl<'tcx> tr for MethodOrigin<'tcx> {
 }
 
 pub fn encode_closure_kind(ebml_w: &mut Encoder, kind: ty::ClosureKind) {
-    use serialize::Encoder;
-
-    ebml_w.emit_enum("ClosureKind", |ebml_w| {
-        match kind {
-            ty::FnClosureKind => {
-                ebml_w.emit_enum_variant("FnClosureKind", 0, 3, |_| {
-                    Ok(())
-                })
-            }
-            ty::FnMutClosureKind => {
-                ebml_w.emit_enum_variant("FnMutClosureKind", 1, 3, |_| {
-                    Ok(())
-                })
-            }
-            ty::FnOnceClosureKind => {
-                ebml_w.emit_enum_variant("FnOnceClosureKind",
-                                         2,
-                                         3,
-                                         |_| {
-                    Ok(())
-                })
-            }
-        }
-    }).unwrap()
+    kind.encode(ebml_w).unwrap();
 }
 
 pub trait vtable_decoder_helpers<'tcx> {
@@ -738,30 +718,30 @@ impl<'tcx, 'a> vtable_decoder_helpers<'tcx> for reader::Decoder<'a> {
                 Ok(match i {
                   0 => {
                     ty::vtable_static(
-                        this.read_enum_variant_arg(0u, |this| {
+                        this.read_enum_variant_arg(0, |this| {
                             Ok(this.read_def_id_nodcx(cdata))
                         }).unwrap(),
-                        this.read_enum_variant_arg(1u, |this| {
+                        this.read_enum_variant_arg(1, |this| {
                             Ok(this.read_substs_nodcx(tcx, cdata))
                         }).unwrap(),
-                        this.read_enum_variant_arg(2u, |this| {
+                        this.read_enum_variant_arg(2, |this| {
                             Ok(this.read_vtable_res(tcx, cdata))
                         }).unwrap()
                     )
                   }
                   1 => {
                     ty::vtable_param(
-                        this.read_enum_variant_arg(0u, |this| {
+                        this.read_enum_variant_arg(0, |this| {
                             Decodable::decode(this)
                         }).unwrap(),
-                        this.read_enum_variant_arg(1u, |this| {
+                        this.read_enum_variant_arg(1, |this| {
                             this.read_uint()
                         }).unwrap()
                     )
                   }
                   2 => {
                     ty::vtable_closure(
-                        this.read_enum_variant_arg(0u, |this| {
+                        this.read_enum_variant_arg(0, |this| {
                             Ok(this.read_def_id_nodcx(cdata))
                         }).unwrap()
                     )
@@ -784,7 +764,7 @@ fn encode_vec_per_param_space<T, F>(rbml_w: &mut Encoder,
                                     mut f: F) where
     F: FnMut(&mut Encoder, &T),
 {
-    for &space in subst::ParamSpace::all().iter() {
+    for &space in &subst::ParamSpace::all() {
         rbml_w.emit_from_vec(v.get_slice(space),
                              |rbml_w, n| Ok(f(rbml_w, n))).unwrap();
     }
@@ -904,8 +884,8 @@ impl<'a, 'tcx> rbml_writer_helpers<'tcx> for Encoder<'a> {
                             try!(this.emit_struct_field("method_num", 0, |this| {
                                 this.emit_uint(o.method_num)
                             }));
-                            try!(this.emit_struct_field("real_index", 0, |this| {
-                                this.emit_uint(o.real_index)
+                            try!(this.emit_struct_field("vtable_index", 0, |this| {
+                                this.emit_uint(o.vtable_index)
                             }));
                             Ok(())
                         })
@@ -963,11 +943,6 @@ impl<'a, 'tcx> rbml_writer_helpers<'tcx> for Encoder<'a> {
                         Ok(encode_vec_per_param_space(
                             this, &type_scheme.generics.regions,
                             |this, def| def.encode(this).unwrap()))
-                    });
-                    this.emit_struct_field("predicates", 2, |this| {
-                        Ok(encode_vec_per_param_space(
-                            this, &type_scheme.generics.predicates,
-                            |this, def| this.emit_predicate(ecx, def)))
                     })
                 })
             });
@@ -1174,14 +1149,14 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
 
     debug!("Encoding side tables for id {}", id);
 
-    for def in tcx.def_map.borrow().get(&id).iter() {
+    if let Some(def) = tcx.def_map.borrow().get(&id).map(|d| d.full_def()) {
         rbml_w.tag(c::tag_table_def, |rbml_w| {
             rbml_w.id(id);
-            rbml_w.tag(c::tag_table_val, |rbml_w| (*def).encode(rbml_w).unwrap());
+            rbml_w.tag(c::tag_table_val, |rbml_w| def.encode(rbml_w).unwrap());
         })
     }
 
-    for &ty in tcx.node_types.borrow().get(&id).iter() {
+    if let Some(ty) = tcx.node_types.borrow().get(&id) {
         rbml_w.tag(c::tag_table_node_type, |rbml_w| {
             rbml_w.id(id);
             rbml_w.tag(c::tag_table_val, |rbml_w| {
@@ -1190,7 +1165,7 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
         })
     }
 
-    for &item_substs in tcx.item_substs.borrow().get(&id).iter() {
+    if let Some(item_substs) = tcx.item_substs.borrow().get(&id) {
         rbml_w.tag(c::tag_table_item_subst, |rbml_w| {
             rbml_w.id(id);
             rbml_w.tag(c::tag_table_val, |rbml_w| {
@@ -1199,49 +1174,35 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
         })
     }
 
-    for &fv in tcx.freevars.borrow().get(&id).iter() {
+    if let Some(fv) = tcx.freevars.borrow().get(&id) {
         rbml_w.tag(c::tag_table_freevars, |rbml_w| {
             rbml_w.id(id);
             rbml_w.tag(c::tag_table_val, |rbml_w| {
-                rbml_w.emit_from_vec(fv.as_slice(), |rbml_w, fv_entry| {
+                rbml_w.emit_from_vec(fv, |rbml_w, fv_entry| {
                     Ok(encode_freevar_entry(rbml_w, fv_entry))
                 });
             })
         });
 
-        for freevar in fv.iter() {
-            match tcx.capture_mode(id) {
-                ast::CaptureByRef => {
-                    rbml_w.tag(c::tag_table_upvar_borrow_map, |rbml_w| {
-                        rbml_w.id(id);
-                        rbml_w.tag(c::tag_table_val, |rbml_w| {
-                            let var_id = freevar.def.def_id().node;
-                            let upvar_id = ty::UpvarId {
-                                var_id: var_id,
-                                closure_expr_id: id
-                            };
-                            let upvar_borrow = tcx.upvar_borrow_map.borrow()[upvar_id].clone();
-                            var_id.encode(rbml_w);
-                            upvar_borrow.encode(rbml_w);
-                        })
-                    })
-                }
-                _ => {}
-            }
+        for freevar in fv {
+            rbml_w.tag(c::tag_table_upvar_capture_map, |rbml_w| {
+                rbml_w.id(id);
+                rbml_w.tag(c::tag_table_val, |rbml_w| {
+                    let var_id = freevar.def.def_id().node;
+                    let upvar_id = ty::UpvarId {
+                        var_id: var_id,
+                        closure_expr_id: id
+                    };
+                    let upvar_capture = tcx.upvar_capture_map.borrow()[upvar_id].clone();
+                    var_id.encode(rbml_w);
+                    upvar_capture.encode(rbml_w);
+                })
+            })
         }
     }
 
-    for &cm in tcx.capture_modes.borrow().get(&id).iter() {
-        rbml_w.tag(c::tag_table_capture_modes, |rbml_w| {
-            rbml_w.id(id);
-            rbml_w.tag(c::tag_table_val, |rbml_w| {
-                encode_capture_mode(rbml_w, *cm);
-            })
-        })
-    }
-
     let lid = ast::DefId { krate: ast::LOCAL_CRATE, node: id };
-    for &type_scheme in tcx.tcache.borrow().get(&lid).iter() {
+    if let Some(type_scheme) = tcx.tcache.borrow().get(&lid) {
         rbml_w.tag(c::tag_table_tcache, |rbml_w| {
             rbml_w.id(id);
             rbml_w.tag(c::tag_table_val, |rbml_w| {
@@ -1250,7 +1211,7 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
         })
     }
 
-    for &type_param_def in tcx.ty_param_defs.borrow().get(&id).iter() {
+    if let Some(type_param_def) = tcx.ty_param_defs.borrow().get(&id) {
         rbml_w.tag(c::tag_table_param_defs, |rbml_w| {
             rbml_w.id(id);
             rbml_w.tag(c::tag_table_val, |rbml_w| {
@@ -1260,7 +1221,7 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
     }
 
     let method_call = MethodCall::expr(id);
-    for &method in tcx.method_map.borrow().get(&method_call).iter() {
+    if let Some(method) = tcx.method_map.borrow().get(&method_call) {
         rbml_w.tag(c::tag_table_method_map, |rbml_w| {
             rbml_w.id(id);
             rbml_w.tag(c::tag_table_val, |rbml_w| {
@@ -1269,7 +1230,7 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
         })
     }
 
-    for &trait_ref in tcx.object_cast_map.borrow().get(&id).iter() {
+    if let Some(trait_ref) = tcx.object_cast_map.borrow().get(&id) {
         rbml_w.tag(c::tag_table_object_cast_map, |rbml_w| {
             rbml_w.id(id);
             rbml_w.tag(c::tag_table_val, |rbml_w| {
@@ -1278,11 +1239,11 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
         })
     }
 
-    for &adjustment in tcx.adjustments.borrow().get(&id).iter() {
+    if let Some(adjustment) = tcx.adjustments.borrow().get(&id) {
         match *adjustment {
             _ if ty::adjust_is_object(adjustment) => {
                 let method_call = MethodCall::autoobject(id);
-                for &method in tcx.method_map.borrow().get(&method_call).iter() {
+                if let Some(method) = tcx.method_map.borrow().get(&method_call) {
                     rbml_w.tag(c::tag_table_method_map, |rbml_w| {
                         rbml_w.id(id);
                         rbml_w.tag(c::tag_table_val, |rbml_w| {
@@ -1293,9 +1254,9 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
             }
             ty::AdjustDerefRef(ref adj) => {
                 assert!(!ty::adjust_is_object(adjustment));
-                for autoderef in range(0, adj.autoderefs) {
+                for autoderef in 0..adj.autoderefs {
                     let method_call = MethodCall::autoderef(id, autoderef);
-                    for &method in tcx.method_map.borrow().get(&method_call).iter() {
+                    if let Some(method) = tcx.method_map.borrow().get(&method_call) {
                         rbml_w.tag(c::tag_table_method_map, |rbml_w| {
                             rbml_w.id(id);
                             rbml_w.tag(c::tag_table_val, |rbml_w| {
@@ -1319,12 +1280,29 @@ fn encode_side_tables_for_id(ecx: &e::EncodeContext,
         })
     }
 
-    for closure in tcx.closures.borrow().get(&ast_util::local_def(id)).iter() {
-        rbml_w.tag(c::tag_table_closures, |rbml_w| {
+    if let Some(closure_type) = tcx.closure_tys.borrow().get(&ast_util::local_def(id)) {
+        rbml_w.tag(c::tag_table_closure_tys, |rbml_w| {
             rbml_w.id(id);
             rbml_w.tag(c::tag_table_val, |rbml_w| {
-                rbml_w.emit_closure_type(ecx, &closure.closure_type);
-                encode_closure_kind(rbml_w, closure.kind)
+                rbml_w.emit_closure_type(ecx, closure_type);
+            })
+        })
+    }
+
+    if let Some(closure_kind) = tcx.closure_kinds.borrow().get(&ast_util::local_def(id)) {
+        rbml_w.tag(c::tag_table_closure_kinds, |rbml_w| {
+            rbml_w.id(id);
+            rbml_w.tag(c::tag_table_val, |rbml_w| {
+                encode_closure_kind(rbml_w, *closure_kind)
+            })
+        })
+    }
+
+    for &qualif in tcx.const_qualif_map.borrow().get(&id).iter() {
+        rbml_w.tag(c::tag_table_const_qualif, |rbml_w| {
+            rbml_w.id(id);
+            rbml_w.tag(c::tag_table_val, |rbml_w| {
+                qualif.encode(rbml_w).unwrap()
             })
         })
     }
@@ -1363,8 +1341,10 @@ trait rbml_decoder_decoder_helpers<'tcx> {
                            -> subst::Substs<'tcx>;
     fn read_auto_adjustment<'a, 'b>(&mut self, dcx: &DecodeContext<'a, 'b, 'tcx>)
                                     -> ty::AutoAdjustment<'tcx>;
-    fn read_closure<'a, 'b>(&mut self, dcx: &DecodeContext<'a, 'b, 'tcx>)
-                            -> ty::Closure<'tcx>;
+    fn read_closure_kind<'a, 'b>(&mut self, dcx: &DecodeContext<'a, 'b, 'tcx>)
+                                 -> ty::ClosureKind;
+    fn read_closure_ty<'a, 'b>(&mut self, dcx: &DecodeContext<'a, 'b, 'tcx>)
+                               -> ty::ClosureTy<'tcx>;
     fn read_auto_deref_ref<'a, 'b>(&mut self, dcx: &DecodeContext<'a, 'b, 'tcx>)
                                    -> ty::AutoDerefRef<'tcx>;
     fn read_autoref<'a, 'b>(&mut self, dcx: &DecodeContext<'a, 'b, 'tcx>)
@@ -1492,8 +1472,8 @@ impl<'a, 'tcx> rbml_decoder_decoder_helpers<'tcx> for reader::Decoder<'a> {
                                             this.read_uint()
                                         }).unwrap()
                                     },
-                                    real_index: {
-                                        this.read_struct_field("real_index", 3, |this| {
+                                    vtable_index: {
+                                        this.read_struct_field("vtable_index", 3, |this| {
                                             this.read_uint()
                                         }).unwrap()
                                     },
@@ -1529,7 +1509,7 @@ impl<'a, 'tcx> rbml_decoder_decoder_helpers<'tcx> for reader::Decoder<'a> {
 
         fn type_string(doc: rbml::Doc) -> String {
             let mut str = String::new();
-            for i in range(doc.start, doc.end) {
+            for i in doc.start..doc.end {
                 str.push(doc.data[i] as char);
             }
             str
@@ -1590,7 +1570,7 @@ impl<'a, 'tcx> rbml_decoder_decoder_helpers<'tcx> for reader::Decoder<'a> {
 
     fn read_type_scheme<'b, 'c>(&mut self, dcx: &DecodeContext<'b, 'c, 'tcx>)
                                 -> ty::TypeScheme<'tcx> {
-        self.read_struct("TypeScheme", 2, |this| {
+        self.read_struct("TypeScheme", 3, |this| {
             Ok(ty::TypeScheme {
                 generics: this.read_struct_field("generics", 0, |this| {
                     this.read_struct("Generics", 2, |this| {
@@ -1605,12 +1585,6 @@ impl<'a, 'tcx> rbml_decoder_decoder_helpers<'tcx> for reader::Decoder<'a> {
                             this.read_struct_field("regions", 1, |this| {
                                 Ok(this.read_vec_per_param_space(
                                     |this| Decodable::decode(this).unwrap()))
-                            }).unwrap(),
-
-                            predicates:
-                            this.read_struct_field("predicates", 2, |this| {
-                                Ok(this.read_vec_per_param_space(
-                                    |this| this.read_predicate(dcx)))
                             }).unwrap(),
                         })
                     })
@@ -1791,35 +1765,23 @@ impl<'a, 'tcx> rbml_decoder_decoder_helpers<'tcx> for reader::Decoder<'a> {
         }).unwrap()
     }
 
-    fn read_closure<'b, 'c>(&mut self, dcx: &DecodeContext<'b, 'c, 'tcx>)
-                            -> ty::Closure<'tcx> {
-        let closure_type = self.read_opaque(|this, doc| {
+    fn read_closure_kind<'b, 'c>(&mut self, _dcx: &DecodeContext<'b, 'c, 'tcx>)
+                                 -> ty::ClosureKind
+    {
+        Decodable::decode(self).ok().unwrap()
+    }
+
+    fn read_closure_ty<'b, 'c>(&mut self, dcx: &DecodeContext<'b, 'c, 'tcx>)
+                               -> ty::ClosureTy<'tcx>
+    {
+        self.read_opaque(|this, doc| {
             Ok(tydecode::parse_ty_closure_data(
                 doc.data,
                 dcx.cdata.cnum,
                 doc.start,
                 dcx.tcx,
                 |s, a| this.convert_def_id(dcx, s, a)))
-        }).unwrap();
-        let variants = &[
-            "FnClosureKind",
-            "FnMutClosureKind",
-            "FnOnceClosureKind"
-        ];
-        let kind = self.read_enum("ClosureKind", |this| {
-            this.read_enum_variant(variants, |_, i| {
-                Ok(match i {
-                    0 => ty::FnClosureKind,
-                    1 => ty::FnMutClosureKind,
-                    2 => ty::FnOnceClosureKind,
-                    _ => panic!("bad enum variant for ty::ClosureKind"),
-                })
-            })
-        }).unwrap();
-        ty::Closure {
-            closure_type: closure_type,
-            kind: kind,
-        }
+        }).unwrap()
     }
 
     /// Converts a def-id that appears in a type.  The correct
@@ -1875,12 +1837,12 @@ fn decode_side_tables(dcx: &DecodeContext,
         debug!(">> Side table document with tag 0x{:x} \
                 found for id {} (orig {})",
                tag, id, id0);
-
-        match c::astencode_tag::from_uint(tag) {
+        let decoded_tag: Option<c::astencode_tag> = FromPrimitive::from_uint(tag);
+        match decoded_tag {
             None => {
                 dcx.tcx.sess.bug(
                     &format!("unknown tag found in side tables: {:x}",
-                            tag)[]);
+                            tag));
             }
             Some(value) => {
                 let val_doc = entry_doc.get(c::tag_table_val as uint);
@@ -1890,7 +1852,12 @@ fn decode_side_tables(dcx: &DecodeContext,
                 match value {
                     c::tag_table_def => {
                         let def = decode_def(dcx, val_doc);
-                        dcx.tcx.def_map.borrow_mut().insert(id, def);
+                        dcx.tcx.def_map.borrow_mut().insert(id, def::PathResolution {
+                            base_def: def,
+                            // This doesn't matter cross-crate.
+                            last_private: LastMod(AllPublic),
+                            depth: 0
+                        });
                     }
                     c::tag_table_node_type => {
                         let ty = val_dsr.read_ty(dcx);
@@ -1911,21 +1878,14 @@ fn decode_side_tables(dcx: &DecodeContext,
                         }).unwrap().into_iter().collect();
                         dcx.tcx.freevars.borrow_mut().insert(id, fv_info);
                     }
-                    c::tag_table_upvar_borrow_map => {
+                    c::tag_table_upvar_capture_map => {
                         let var_id: ast::NodeId = Decodable::decode(val_dsr).unwrap();
                         let upvar_id = ty::UpvarId {
                             var_id: dcx.tr_id(var_id),
                             closure_expr_id: id
                         };
-                        let ub: ty::UpvarBorrow = Decodable::decode(val_dsr).unwrap();
-                        dcx.tcx.upvar_borrow_map.borrow_mut().insert(upvar_id, ub.tr(dcx));
-                    }
-                    c::tag_table_capture_modes => {
-                        let capture_mode = val_dsr.read_capture_mode();
-                        dcx.tcx
-                           .capture_modes
-                           .borrow_mut()
-                           .insert(id, capture_mode);
+                        let ub: ty::UpvarCapture = Decodable::decode(val_dsr).unwrap();
+                        dcx.tcx.upvar_capture_map.borrow_mut().insert(upvar_id, ub.tr(dcx));
                     }
                     c::tag_table_tcache => {
                         let type_scheme = val_dsr.read_type_scheme(dcx);
@@ -1953,16 +1913,26 @@ fn decode_side_tables(dcx: &DecodeContext,
                         let adj: ty::AutoAdjustment = val_dsr.read_auto_adjustment(dcx);
                         dcx.tcx.adjustments.borrow_mut().insert(id, adj);
                     }
-                    c::tag_table_closures => {
-                        let closure =
-                            val_dsr.read_closure(dcx);
-                        dcx.tcx.closures.borrow_mut().insert(ast_util::local_def(id),
-                                                             closure);
+                    c::tag_table_closure_tys => {
+                        let closure_ty =
+                            val_dsr.read_closure_ty(dcx);
+                        dcx.tcx.closure_tys.borrow_mut().insert(ast_util::local_def(id),
+                                                                closure_ty);
+                    }
+                    c::tag_table_closure_kinds => {
+                        let closure_kind =
+                            val_dsr.read_closure_kind(dcx);
+                        dcx.tcx.closure_kinds.borrow_mut().insert(ast_util::local_def(id),
+                                                                  closure_kind);
+                    }
+                    c::tag_table_const_qualif => {
+                        let qualif: ConstQualif = Decodable::decode(val_dsr).unwrap();
+                        dcx.tcx.const_qualif_map.borrow_mut().insert(id, qualif);
                     }
                     _ => {
                         dcx.tcx.sess.bug(
                             &format!("unknown tag found in side tables: {:x}",
-                                    tag)[]);
+                                    tag));
                     }
                 }
             }

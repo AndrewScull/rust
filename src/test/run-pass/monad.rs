@@ -17,7 +17,7 @@ trait vec_monad<A> {
 impl<A> vec_monad<A> for Vec<A> {
     fn bind<B, F>(&self, mut f: F) -> Vec<B> where F: FnMut(&A) -> Vec<B> {
         let mut r = Vec::new();
-        for elt in self.iter() {
+        for elt in self {
             r.extend(f(elt).into_iter());
         }
         r
@@ -44,11 +44,11 @@ fn transform(x: Option<int>) -> Option<String> {
 pub fn main() {
     assert_eq!(transform(Some(10)), Some("11".to_string()));
     assert_eq!(transform(None), None);
-    assert!((vec!("hi".to_string()))
+    assert_eq!((vec!("hi".to_string()))
         .bind(|x| vec!(x.clone(), format!("{}!", x)) )
-        .bind(|x| vec!(x.clone(), format!("{}?", x)) ) ==
-        vec!("hi".to_string(),
-             "hi?".to_string(),
-             "hi!".to_string(),
-             "hi!?".to_string()));
+        .bind(|x| vec!(x.clone(), format!("{}?", x)) ),
+        ["hi".to_string(),
+         "hi?".to_string(),
+         "hi!".to_string(),
+         "hi!?".to_string()]);
 }

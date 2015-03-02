@@ -10,13 +10,14 @@
 
 //! A pointer type for heap allocation.
 //!
-//! `Box<T>`, casually referred to as a 'box', provides the simplest form of heap allocation in
-//! Rust. Boxes provide ownership for this allocation, and drop their contents when they go out of
-//! scope.
+//! `Box<T>`, casually referred to as a 'box', provides the simplest form of
+//! heap allocation in Rust. Boxes provide ownership for this allocation, and
+//! drop their contents when they go out of scope.
 //!
-//! Boxes are useful in two situations: recursive data structures, and occasionally when returning
-//! data. [The Pointer chapter of the Book](../../../book/pointers.html#best-practices-1) explains
-//! these cases in detail.
+//! Boxes are useful in two situations: recursive data structures, and
+//! occasionally when returning data. [The Pointer chapter of the
+//! Book](../../../book/pointers.html#best-practices-1) explains these cases in
+//! detail.
 //!
 //! # Examples
 //!
@@ -29,7 +30,7 @@
 //! Creating a recursive data structure:
 //!
 //! ```
-//! #[derive(Show)]
+//! #[derive(Debug)]
 //! enum List<T> {
 //!     Cons(T, Box<List<T>>),
 //!     Nil,
@@ -43,27 +44,23 @@
 //!
 //! This will print `Cons(1i32, Box(Cons(2i32, Box(Nil))))`.
 
-#![stable]
+#![stable(feature = "rust1", since = "1.0.0")]
+
+use core::prelude::*;
 
 use core::any::Any;
-use core::clone::Clone;
-use core::cmp::{PartialEq, PartialOrd, Eq, Ord, Ordering};
+use core::cmp::Ordering;
 use core::default::Default;
 use core::error::{Error, FromError};
 use core::fmt;
 use core::hash::{self, Hash};
-use core::iter::Iterator;
-use core::marker::Sized;
 use core::mem;
 use core::ops::{Deref, DerefMut};
-use core::option::Option;
 use core::ptr::Unique;
 use core::raw::TraitObject;
-use core::result::Result::{Ok, Err};
-use core::result::Result;
 
-/// A value that represents the heap. This is the default place that the `box` keyword allocates
-/// into when no place is supplied.
+/// A value that represents the heap. This is the default place that the `box`
+/// keyword allocates into when no place is supplied.
 ///
 /// The following two examples are equivalent:
 ///
@@ -77,14 +74,15 @@ use core::result::Result;
 /// }
 /// ```
 #[lang = "exchange_heap"]
-#[unstable = "may be renamed; uncertain about custom allocator design"]
+#[unstable(feature = "alloc",
+           reason = "may be renamed; uncertain about custom allocator design")]
 pub static HEAP: () = ();
 
 /// A pointer type for heap allocation.
 ///
 /// See the [module-level documentation](../../std/boxed/index.html) for more.
 #[lang = "owned_box"]
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 pub struct Box<T>(Unique<T>);
 
 impl<T> Box<T> {
@@ -95,25 +93,73 @@ impl<T> Box<T> {
     /// ```
     /// let x = Box::new(5);
     /// ```
-    #[stable]
+    #[stable(feature = "rust1", since = "1.0.0")]
     pub fn new(x: T) -> Box<T> {
         box x
     }
 }
 
-#[stable]
+impl<T : ?Sized> Box<T> {
+    /// Constructs a box from the raw pointer.
+    ///
+    /// After this function call, pointer is owned by resulting box.
+    /// In particular, it means that `Box` destructor calls destructor
+    /// of `T` and releases memory. Since the way `Box` allocates and
+    /// releases memory is unspecified, the only valid pointer to pass
+    /// to this function is the one taken from another `Box` with
+    /// `boxed::into_raw` function.
+    ///
+    /// Function is unsafe, because improper use of this function may
+    /// lead to memory problems like double-free, for example if the
+    /// function is called twice on the same raw pointer.
+    #[unstable(feature = "alloc",
+               reason = "may be renamed or moved out of Box scope")]
+    #[inline]
+    pub unsafe fn from_raw(raw: *mut T) -> Self {
+        mem::transmute(raw)
+    }
+}
+
+/// Consumes the `Box`, returning the wrapped raw pointer.
+///
+/// After call to this function, caller is responsible for the memory
+/// previously managed by `Box`, in particular caller should properly
+/// destroy `T` and release memory. The proper way to do it is to
+/// convert pointer back to `Box` with `Box::from_raw` function, because
+/// `Box` does not specify, how memory is allocated.
+///
+/// Function is unsafe, because result of this function is no longer
+/// automatically managed that may lead to memory or other resource
+/// leak.
+///
+/// # Example
+/// ```
+/// use std::boxed;
+///
+/// let seventeen = Box::new(17u32);
+/// let raw = unsafe { boxed::into_raw(seventeen) };
+/// let boxed_again = unsafe { Box::from_raw(raw) };
+/// ```
+#[unstable(feature = "alloc",
+           reason = "may be renamed")]
+#[inline]
+pub unsafe fn into_raw<T : ?Sized>(b: Box<T>) -> *mut T {
+    mem::transmute(b)
+}
+
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: Default> Default for Box<T> {
-    #[stable]
+    #[stable(feature = "rust1", since = "1.0.0")]
     fn default() -> Box<T> { box Default::default() }
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T> Default for Box<[T]> {
-    #[stable]
+    #[stable(feature = "rust1", since = "1.0.0")]
     fn default() -> Box<[T]> { box [] }
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: Clone> Clone for Box<T> {
     /// Returns a new box with a `clone()` of this box's contents.
     ///
@@ -144,14 +190,14 @@ impl<T: Clone> Clone for Box<T> {
     }
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: ?Sized + PartialEq> PartialEq for Box<T> {
     #[inline]
     fn eq(&self, other: &Box<T>) -> bool { PartialEq::eq(&**self, &**other) }
     #[inline]
     fn ne(&self, other: &Box<T>) -> bool { PartialEq::ne(&**self, &**other) }
 }
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: ?Sized + PartialOrd> PartialOrd for Box<T> {
     #[inline]
     fn partial_cmp(&self, other: &Box<T>) -> Option<Ordering> {
@@ -166,48 +212,50 @@ impl<T: ?Sized + PartialOrd> PartialOrd for Box<T> {
     #[inline]
     fn gt(&self, other: &Box<T>) -> bool { PartialOrd::gt(&**self, &**other) }
 }
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: ?Sized + Ord> Ord for Box<T> {
     #[inline]
     fn cmp(&self, other: &Box<T>) -> Ordering {
         Ord::cmp(&**self, &**other)
     }
 }
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: ?Sized + Eq> Eq for Box<T> {}
 
-impl<S: hash::Hasher, T: ?Sized + Hash<S>> Hash<S> for Box<T> {
-    #[inline]
-    fn hash(&self, state: &mut S) {
+#[stable(feature = "rust1", since = "1.0.0")]
+impl<T: ?Sized + Hash> Hash for Box<T> {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
         (**self).hash(state);
     }
 }
 
 /// Extension methods for an owning `Any` trait object.
-#[unstable = "this trait will likely disappear once compiler bugs blocking \
-              a direct impl on `Box<Any>` have been fixed "]
+#[unstable(feature = "alloc",
+           reason = "this trait will likely disappear once compiler bugs blocking \
+                     a direct impl on `Box<Any>` have been fixed ")]
 // FIXME(#18737): this should be a direct impl on `Box<Any>`. If you're
 //                removing this please make sure that you can downcase on
 //                `Box<Any + Send>` as well as `Box<Any>`
 pub trait BoxAny {
     /// Returns the boxed value if it is of type `T`, or
     /// `Err(Self)` if it isn't.
-    #[stable]
+    #[stable(feature = "rust1", since = "1.0.0")]
     fn downcast<T: 'static>(self) -> Result<Box<T>, Self>;
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl BoxAny for Box<Any> {
     #[inline]
     fn downcast<T: 'static>(self) -> Result<Box<T>, Box<Any>> {
         if self.is::<T>() {
             unsafe {
                 // Get the raw representation of the trait object
+                let raw = into_raw(self);
                 let to: TraitObject =
-                    mem::transmute::<Box<Any>, TraitObject>(self);
+                    mem::transmute::<*mut Any, TraitObject>(raw);
 
                 // Extract the data pointer
-                Ok(mem::transmute(to.data))
+                Ok(Box::from_raw(to.data as *mut T))
             }
         } else {
             Err(self)
@@ -215,53 +263,53 @@ impl BoxAny for Box<Any> {
     }
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: fmt::Display + ?Sized> fmt::Display for Box<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&**self, f)
     }
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: fmt::Debug + ?Sized> fmt::Debug for Box<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
     }
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl fmt::Debug for Box<Any> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.pad("Box<Any>")
     }
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: ?Sized> Deref for Box<T> {
     type Target = T;
 
     fn deref(&self) -> &T { &**self }
 }
 
-#[stable]
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<T: ?Sized> DerefMut for Box<T> {
     fn deref_mut(&mut self) -> &mut T { &mut **self }
 }
 
-// FIXME(#21363) remove `old_impl_check` when bug is fixed
-#[old_impl_check]
-impl<'a, T> Iterator for Box<Iterator<Item=T> + 'a> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<T> {
-        (**self).next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (**self).size_hint()
-    }
+#[stable(feature = "rust1", since = "1.0.0")]
+impl<I: Iterator + ?Sized> Iterator for Box<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<I::Item> { (**self).next() }
+    fn size_hint(&self) -> (usize, Option<usize>) { (**self).size_hint() }
 }
+#[stable(feature = "rust1", since = "1.0.0")]
+impl<I: DoubleEndedIterator + ?Sized> DoubleEndedIterator for Box<I> {
+    fn next_back(&mut self) -> Option<I::Item> { (**self).next_back() }
+}
+#[stable(feature = "rust1", since = "1.0.0")]
+impl<I: ExactSizeIterator + ?Sized> ExactSizeIterator for Box<I> {}
 
+#[stable(feature = "rust1", since = "1.0.0")]
 impl<'a, E: Error + 'a> FromError<E> for Box<Error + 'a> {
     fn from_error(err: E) -> Box<Error + 'a> {
         Box::new(err)

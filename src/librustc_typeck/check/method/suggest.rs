@@ -22,6 +22,7 @@ use util::ppaux::UserString;
 
 use syntax::{ast, ast_util};
 use syntax::codemap::Span;
+use syntax::print::pprust;
 
 use std::cell;
 use std::cmp::Ordering;
@@ -32,22 +33,18 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                               span: Span,
                               rcvr_ty: Ty<'tcx>,
                               method_name: ast::Name,
+                              rcvr_expr: Option<&ast::Expr>,
                               error: MethodError)
 {
+    // avoid suggestions when we don't know what's going on.
+    if ty::type_is_error(rcvr_ty) {
+        return
+    }
+
     match error {
         MethodError::NoMatch(static_sources, out_of_scope_traits) => {
             let cx = fcx.tcx();
             let method_ustring = method_name.user_string(cx);
-
-            // True if the type is a struct and contains a field with
-            // the same name as the not-found method
-            let is_field = match rcvr_ty.sty {
-                ty::ty_struct(did, _) =>
-                    ty::lookup_struct_fields(cx, did)
-                        .iter()
-                        .any(|f| f.name.user_string(cx) == method_ustring),
-                _ => false
-            };
 
             fcx.type_error_message(
                 span,
@@ -61,10 +58,13 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                 None);
 
             // If the method has the name of a field, give a help note
-            if is_field {
-                cx.sess.span_note(span,
-                    &format!("use `(s.{0})(...)` if you meant to call the \
-                            function stored in the `{0}` field", method_ustring)[]);
+            if let (&ty::ty_struct(did, _), Some(_)) = (&rcvr_ty.sty, rcvr_expr) {
+                let fields = ty::lookup_struct_fields(cx, did);
+                if fields.iter().any(|f| f.name == method_name) {
+                    cx.sess.span_note(span,
+                        &format!("use `(s.{0})(...)` if you meant to call the \
+                                 function stored in the `{0}` field", method_ustring));
+                }
             }
 
             if static_sources.len() > 0 {
@@ -75,7 +75,8 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                 report_candidates(fcx, span, method_name, static_sources);
             }
 
-            suggest_traits_to_import(fcx, span, rcvr_ty, method_name, out_of_scope_traits)
+            suggest_traits_to_import(fcx, span, rcvr_ty, method_name,
+                                     rcvr_expr, out_of_scope_traits)
         }
 
         MethodError::Ambiguity(sources) => {
@@ -83,6 +84,21 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                       "multiple applicable methods in scope");
 
             report_candidates(fcx, span, method_name, sources);
+        }
+
+        MethodError::ClosureAmbiguity(trait_def_id) => {
+            let msg = format!("the `{}` method from the `{}` trait cannot be explicitly \
+                               invoked on this closure as we have not yet inferred what \
+                               kind of closure it is",
+                               method_name.user_string(fcx.tcx()),
+                               ty::item_path_str(fcx.tcx(), trait_def_id));
+            let msg = if let Some(callee) = rcvr_expr {
+                format!("{}; use overloaded call notation instead (e.g., `{}()`)",
+                        msg, pprust::expr_to_string(callee))
+            } else {
+                msg
+            };
+            fcx.sess().span_err(span, &msg);
         }
     }
 
@@ -113,7 +129,7 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
 
                     span_note!(fcx.sess(), method_span,
                                "candidate #{} is defined in an impl{} for the type `{}`",
-                               idx + 1u,
+                               idx + 1,
                                insertion,
                                impl_ty.user_string(fcx.tcx()));
                 }
@@ -122,7 +138,7 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                     let method_span = fcx.tcx().map.def_id_span(method.def_id, span);
                     span_note!(fcx.sess(), method_span,
                                "candidate #{} is defined in the trait `{}`",
-                               idx + 1u,
+                               idx + 1,
                                ty::item_path_str(fcx.tcx(), trait_did));
                 }
             }
@@ -135,8 +151,9 @@ pub type AllTraitsVec = Vec<TraitInfo>;
 
 fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                                       span: Span,
-                                      _rcvr_ty: Ty<'tcx>,
+                                      rcvr_ty: Ty<'tcx>,
                                       method_name: ast::Name,
+                                      rcvr_expr: Option<&ast::Expr>,
                                       valid_out_of_scope_traits: Vec<ast::DefId>)
 {
     let tcx = fcx.tcx();
@@ -153,7 +170,7 @@ fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
             traits_are = if candidates.len() == 1 {"trait is"} else {"traits are"},
             one_of_them = if candidates.len() == 1 {"it"} else {"one of them"});
 
-        fcx.sess().fileline_help(span, &msg[]);
+        fcx.sess().fileline_help(span, &msg[..]);
 
         for (i, trait_did) in candidates.iter().enumerate() {
             fcx.sess().fileline_help(span,
@@ -165,9 +182,22 @@ fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
         return
     }
 
-    // there's no implemented traits, so lets suggest some traits to implement
+    let type_is_local = type_derefs_to_local(fcx, span, rcvr_ty, rcvr_expr);
+
+    // there's no implemented traits, so lets suggest some traits to
+    // implement, by finding ones that have the method name, and are
+    // legal to implement.
     let mut candidates = all_traits(fcx.ccx)
-        .filter(|info| trait_method(tcx, info.def_id, method_name).is_some())
+        .filter(|info| {
+            // we approximate the coherence rules to only suggest
+            // traits that are legal to implement by requiring that
+            // either the type or trait is local. Multidispatch means
+            // this isn't perfect (that is, there are cases when
+            // implementing a trait would be legal but is rejected
+            // here).
+            (type_is_local || ast_util::is_local(info.def_id))
+                && trait_method(tcx, info.def_id, method_name).is_some()
+        })
         .collect::<Vec<_>>();
 
     if candidates.len() > 0 {
@@ -175,6 +205,9 @@ fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
         candidates.sort_by(|a, b| a.cmp(b).reverse());
         candidates.dedup();
 
+        // FIXME #21673 this help message could be tuned to the case
+        // of a type parameter: suggest adding a trait bound rather
+        // than implementing.
         let msg = format!(
             "methods from traits can only be called if the trait is implemented and in scope; \
              the following {traits_define} a method `{name}`, \
@@ -183,7 +216,7 @@ fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
             one_of_them = if candidates.len() == 1 {"it"} else {"one of them"},
             name = method_ustring);
 
-        fcx.sess().fileline_help(span, &msg[]);
+        fcx.sess().fileline_help(span, &msg[..]);
 
         for (i, trait_info) in candidates.iter().enumerate() {
             fcx.sess().fileline_help(span,
@@ -192,6 +225,45 @@ fn suggest_traits_to_import<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
                                                ty::item_path_str(fcx.tcx(), trait_info.def_id)))
         }
     }
+}
+
+/// Checks whether there is a local type somewhere in the chain of
+/// autoderefs of `rcvr_ty`.
+fn type_derefs_to_local<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
+                                  span: Span,
+                                  rcvr_ty: Ty<'tcx>,
+                                  rcvr_expr: Option<&ast::Expr>) -> bool {
+    fn is_local(ty: Ty) -> bool {
+        match ty.sty {
+            ty::ty_enum(did, _) | ty::ty_struct(did, _) => ast_util::is_local(did),
+
+            ty::ty_trait(ref tr) => ast_util::is_local(tr.principal_def_id()),
+
+            ty::ty_param(_) => true,
+
+            // everything else (primitive types etc.) is effectively
+            // non-local (there are "edge" cases, e.g. (LocalType,), but
+            // the noise from these sort of types is usually just really
+            // annoying, rather than any sort of help).
+            _ => false
+        }
+    }
+
+    // This occurs for UFCS desugaring of `T::method`, where there is no
+    // receiver expression for the method call, and thus no autoderef.
+    if rcvr_expr.is_none() {
+        return is_local(fcx.resolve_type_vars_if_possible(rcvr_ty));
+    }
+
+    check::autoderef(fcx, span, rcvr_ty, None,
+                     check::UnresolvedTypeAction::Ignore, check::NoPreference,
+                     |ty, _| {
+        if is_local(ty) {
+            Some(())
+        } else {
+            None
+        }
+    }).2.is_some()
 }
 
 #[derive(Copy)]
@@ -238,10 +310,10 @@ pub fn all_traits<'a>(ccx: &'a CrateCtxt) -> AllTraits<'a> {
         // Crate-local:
         //
         // meh.
-        struct Visitor<'a, 'b: 'a, 'tcx: 'a + 'b> {
+        struct Visitor<'a> {
             traits: &'a mut AllTraitsVec,
         }
-        impl<'v,'a, 'b, 'tcx> visit::Visitor<'v> for Visitor<'a, 'b, 'tcx> {
+        impl<'v, 'a> visit::Visitor<'v> for Visitor<'a> {
             fn visit_item(&mut self, i: &'v ast::Item) {
                 match i.node {
                     ast::ItemTrait(..) => {
@@ -274,7 +346,7 @@ pub fn all_traits<'a>(ccx: &'a CrateCtxt) -> AllTraits<'a> {
             }
         }
         let cstore = &ccx.tcx.sess.cstore;
-        cstore.iter_crate_data(|&mut: cnum, _| {
+        cstore.iter_crate_data(|cnum, _| {
             csearch::each_top_level_item_of_crate(cstore, cnum, |dl, _, _| {
                 handle_external_def(&mut traits, ccx, cstore, dl)
             })

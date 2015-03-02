@@ -10,7 +10,6 @@
 
 // Test that the precedence of ranges is correct
 
-#![feature(slicing_syntax)]
 
 struct Foo {
     foo: uint,
@@ -55,5 +54,8 @@ fn main() {
 
     let x = [1]..[2];
     assert!(x == (([1])..([2])));
+
+    let y = ..;
+    assert!(y == (..));
 }
 
