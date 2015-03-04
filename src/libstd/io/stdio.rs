@@ -181,7 +181,7 @@ impl<'a> BufRead for StdinLock<'a> {
 // [2]: http://www.mail-archive.com/log4net-dev@logging.apache.org/msg00661.html
 #[cfg(windows)]
 const OUT_MAX: usize = 8192;
-#[cfg(unix)]
+#[cfg(any(unix, dios))]
 const OUT_MAX: usize = ::usize::MAX;
 
 /// A handle to the global standard output stream of the current process.

@@ -5,6 +5,7 @@
 use prelude::v1::*;
 
 use old_io::{IoResult, IoError};
+use io::{self, ErrorKind};
 use libc;
 use num::{Int, SignedInt};
 use sys_common;
@@ -13,14 +14,19 @@ pub mod backtrace;
 pub mod c;
 pub mod condvar;
 pub mod fs;
+pub mod fs2;
 pub mod helper_signal;
 pub mod mutex;
+//pub mod net;
 pub mod os;
 pub mod os_str;
 pub mod pipe;
+pub mod pipe2;
 pub mod process;
+pub mod process2;
 pub mod rwlock;
 pub mod stack_overflow;
+pub mod stdio;
 //pub mod tcp;
 pub mod thread;
 pub mod thread_local;
@@ -41,6 +47,14 @@ pub type msglen_t = libc::size_t;
 pub unsafe fn close_sock(sock: sock_t) {
     // STUB:
     let _ = sock;
+}
+
+pub fn unimpl() -> io::Error {
+    io::Error::new(
+        ErrorKind::ResourceUnavailable,
+        "operation not yet supported for DIOS",
+        None,
+    )
 }
 
 pub fn last_error() -> IoError {
@@ -69,6 +83,12 @@ pub fn decode_error_detailed(errno: i32) -> IoError {
     // STUB:
     let _ = errno;
     sys_common::unimpl()
+}
+
+pub fn decode_error_kind(errno: i32) -> ErrorKind {
+    // STUB
+    let _ = errno;
+    ErrorKind::Other
 }
 
 #[allow(unused_mut)]

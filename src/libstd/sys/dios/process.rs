@@ -2,12 +2,11 @@
 
 use prelude::v1::*;
 
-use collections::hash_map::Hasher;
 use hash::Hash;
 use old_io::process::ProcessExit;
 use old_io::IoResult;
 use libc;
-use path::BytesContainer;
+use old_path::BytesContainer;
 use sys::fs::FileDesc;
 use sys_common::AsInner;
 
@@ -43,7 +42,7 @@ impl Process {
                               out_fd: Option<P>, err_fd: Option<P>)
                               -> IoResult<Process>
         where C: ProcessConfig<K, V>, P: AsInner<FileDesc>,
-              K: BytesContainer + Eq + Hash<Hasher>, V: BytesContainer
+              K: BytesContainer + Eq + Hash, V: BytesContainer
     {
         // STUB:
         let _ = cfg;

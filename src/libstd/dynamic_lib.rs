@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg(not(dios))]
+
 //! Dynamic library facilities.
 //!
 //! A simple wrapper over the platform's dynamic library facilities

@@ -686,6 +686,17 @@ mod os {
     pub const EXE_EXTENSION: &'static str = "exe";
 }
 
+#[cfg(target_os = "dios")]
+mod os {
+    pub const FAMILY: &'static str = "dios";
+    pub const OS: &'static str = "dios";
+    pub const DLL_PREFIX: &'static str = "";
+    pub const DLL_SUFFIX: &'static str = "";
+    pub const DLL_EXTENSION: &'static str = "";
+    pub const EXE_SUFFIX: &'static str = "";
+    pub const EXE_EXTENSION: &'static str = "";
+}
+
 #[cfg(target_arch = "x86")]
 mod arch {
     pub const ARCH: &'static str = "x86";

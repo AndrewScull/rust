@@ -137,7 +137,7 @@ use self::platform::{is_sep_byte, is_verbatim_sep, MAIN_SEP_STR, parse_prefix};
 // The following modules give the most basic tools for parsing paths on various
 // platforms. The bulk of the code is devoted to parsing prefixes on Windows.
 
-#[cfg(unix)]
+#[cfg(any(unix, dios))]
 mod platform {
     use super::Prefix;
     use core::prelude::*;

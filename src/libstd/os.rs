@@ -76,7 +76,7 @@ fn err2old(new: ::io::Error) -> IoError {
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, dios))]
 fn path2new(path: &Path) -> PathBuf {
     PathBuf::new(path.as_str().unwrap())
 }
@@ -92,7 +92,7 @@ fn path2old(path: &path::Path) -> Path {
     use ffi::AsOsStr;
     Path::new(path.as_os_str().as_bytes())
 }
-#[cfg(windows)]
+#[cfg(any(windows, dios))]
 fn path2old(path: &path::Path) -> Path {
     Path::new(path.to_str().unwrap())
 }
@@ -211,7 +211,7 @@ fn byteify(s: OsString) -> Vec<u8> {
     use os::unix::*;
     s.into_vec()
 }
-#[cfg(windows)]
+#[cfg(any(windows, dios))]
 fn byteify(s: OsString) -> Vec<u8> {
     s.to_string_lossy().as_bytes().to_vec()
 }

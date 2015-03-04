@@ -19,17 +19,17 @@ unsafe impl Sync for TcpListener {}
 impl TcpListener {
     pub fn bind(addr: ip::SocketAddr) -> IoResult<TcpListener> {
         // STUB:
-        Err(sys_common::unimpl())
+        Err(unimpl())
     }
 
     pub fn listen(self, backlog: int) -> IoResult<TcpAcceptor> {
         // STUB:
-        Err(sys_common::unimpl())
+        Err(unimpl())
     }
 
     pub fn socket_name(&mut self) -> IoResult<ip::SocketAddr> {
         // STUB:
-        Err(sys_common::unimpl())
+        Err(unimpl())
     }
 }
 
@@ -38,12 +38,12 @@ pub struct TcpAcceptor;
 impl TcpAcceptor {
     pub fn accept(&mut self) -> IoResult<TcpStream> {
         // STUB:
-        Err(sys_common::unimpl())
+        Err(unimpl())
     }
 
     pub fn socket_name(&mut self) -> IoResult<ip::SocketAddr> {
         // STUB:
-        Err(sys_common::unimpl())
+        Err(unimpl())
     }
 
     pub fn set_timeout(&mut self, timeout: Option<u64>) {
@@ -52,6 +52,6 @@ impl TcpAcceptor {
 
     pub fn close_accept(&mut self) -> IoResult<()> {
         // STUB:
-        Err(sys_common::unimpl())
+        Err(unimpl())
     }
 }

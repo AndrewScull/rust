@@ -1,11 +1,15 @@
-#![allow(dead_code)]
+#![allow(unused_variables)] // TODO: STUB
+
+use core::prelude::*;
 
 use libc;
+use io;
 use thunk::Thunk;
+use sys::unimpl;
 use sys_common;
 
 pub type rust_thread = u32;
-pub type rust_thread_return = *mut u8;
+pub type rust_thread_return = u32;
 pub type StartFn = extern "C" fn(*mut libc::c_void) -> rust_thread_return;
 
 #[no_stack_check]
@@ -20,20 +24,24 @@ pub mod guard {
         0
     }
 
-    pub unsafe fn main() -> uint {
+    pub fn main() -> uint {
         // STUB:
         0
     }
 
-    pub unsafe fn init() {
+    pub fn init() {
         // STUB:
     }
 }
 
-pub unsafe fn create(stack: uint, p: Thunk) -> rust_thread {
+pub unsafe fn create(stack: uint, p: Thunk) -> io::Result<rust_thread> {
     let _ = stack;
     let _ = p;
-    panic!("STUB");
+    Err(unimpl())
+}
+
+pub unsafe fn set_name(name: &str) {
+    // STUB:
 }
 
 pub unsafe fn join(native: rust_thread) {

@@ -22,8 +22,8 @@ impl TTY {
             let mut ref_count: libc::uint64_t = 1;
 
             // Get the stdout reference
-            // TODO: 1 here is local lookup, put that in liblibc
-            if libc::dios_lookup(1,
+            // TODO: 0 here is local lookup, put that in liblibc
+            if libc::dios_lookup(0,
                                  &libc::STDOUT_NAME,
                                  &mut console_ref,
                                  &mut ref_count) == 0 && ref_count >= 1 {
@@ -57,7 +57,7 @@ impl TTY {
             }
 
             // Copy in data
-            ptr::copy_nonoverlapping_memory((*iov).buf, buf.as_ptr() as *const libc::c_void, buf.len());
+            ptr::copy_nonoverlapping((*iov).buf, buf.as_ptr() as *const libc::c_void, buf.len());
 
             // Commit the write
             // TODO: now I have a buffer which hasn't been returned?

@@ -122,7 +122,7 @@ impl Stdio {
             let mut ref_count: libc::uint64_t = 1;
 
             // Get the stdout reference
-            if libc::dios_lookup(1, &libc::STDOUT_NAME, &mut obj_ref, &mut ref_count) != 0
+            if libc::dios_lookup(0, &libc::STDOUT_NAME, &mut obj_ref, &mut ref_count) != 0
             || ref_count == 0 {
                 return;
             }
@@ -133,7 +133,7 @@ impl Stdio {
                 return;
             }
             // Copy in data
-            ptr::copy_nonoverlapping_memory((*iov).buf, data.as_ptr() as *const libc::c_void, data.len());
+            ptr::copy_nonoverlapping((*iov).buf, data.as_ptr() as *const libc::c_void, data.len());
             // Commit the write
             if libc::dios_end_write(0, obj_ref, data.len() as u64, iov) != 0 {
                 return;

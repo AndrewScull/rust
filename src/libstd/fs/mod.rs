@@ -598,7 +598,7 @@ pub fn remove_dir_all<P: AsPath + ?Sized>(path: &P) -> io::Result<()> {
     }
     return remove_dir(path);
 
-    #[cfg(unix)]
+    #[cfg(any(unix, dios))]
     fn lstat(path: &Path) -> io::Result<fs_imp::FileAttr> { fs_imp::lstat(path) }
     #[cfg(windows)]
     fn lstat(path: &Path) -> io::Result<fs_imp::FileAttr> { fs_imp::stat(path) }

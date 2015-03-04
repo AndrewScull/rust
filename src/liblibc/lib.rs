@@ -2295,6 +2295,7 @@ pub mod types {
                     pub tv_usec: suseconds_t,
                 }
 
+                pub type sa_family_t = u16;
                 pub type socklen_t = u32;
 
                 pub type ssize_t = i64;

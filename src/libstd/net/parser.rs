@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![cfg(not(dios))]
+
 //! A private parser implementation of IPv4, IPv6, and socket addresses.
 //!
 //! This module is "publicly exported" through the `FromStr` implementations

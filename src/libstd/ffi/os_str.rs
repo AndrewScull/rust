@@ -307,7 +307,7 @@ impl AsOsStr for String {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, dios))]
 impl AsOsStr for Path {
     fn as_os_str(&self) -> &OsStr {
         unsafe { mem::transmute(self.as_vec()) }
