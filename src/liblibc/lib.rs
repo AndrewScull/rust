@@ -2255,7 +2255,6 @@ pub mod types {
 
                 #[repr(C)]
                 #[derive(Copy)] pub struct dios_ref_t {
-                    pub id: uint64_t,
                     pub obj_type: dios_object_type_t,
                     pub proximity: dios_ref_proximity_t,
                     pub read_consistency: dios_ref_consistency_t,
