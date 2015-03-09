@@ -5960,6 +5960,9 @@ pub mod funcs {
                                selected: *mut *mut dios_ref_t)
                                -> c_long;
             pub fn dios_test() -> c_long;
+
+            pub fn dios_self_exe() -> *mut dios_name_t;
+            pub fn dios_pickref(name: *const dios_name_t) -> *mut dios_ref_t;
         }
     }
 }

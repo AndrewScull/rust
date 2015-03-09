@@ -67,6 +67,7 @@ use vec::Vec;
 
 #[cfg(unix)] pub use sys::ext as unix;
 #[cfg(windows)] pub use sys::ext as windows;
+#[cfg(dios)] pub use sys::ext as dios;
 
 fn err2old(new: ::io::Error) -> IoError {
     IoError {

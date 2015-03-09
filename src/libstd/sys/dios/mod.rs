@@ -13,6 +13,7 @@ use sys_common;
 pub mod backtrace;
 pub mod c;
 pub mod condvar;
+pub mod ext;
 pub mod fs;
 pub mod fs2;
 pub mod helper_signal;
