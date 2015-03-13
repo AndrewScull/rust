@@ -35,6 +35,9 @@ pub use self::unwind::{begin_unwind, begin_unwind_fmt};
 // Reexport some functionality from liballoc.
 pub use alloc::heap;
 
+#[cfg(dios)]
+use os::dios;
+
 // Simple backtrace functionality (to print on panic)
 pub mod backtrace;
 
@@ -122,22 +125,28 @@ fn lang_start(main: *const u8, argc: int, argv: *const *const u8) -> int {
         // And finally, let's run some code!
         let res = unwind::try(|| {
             // I take this to mean it is a thread. A bit dodgy...
-            let main: fn() = if argc == 2 {
+            if argc == 4 {
                 use ffi::CStr;
                 use libc;
                 use str::{self, FromStr};
                 let argv = argv as *const *const libc::c_char;
                 let arg1 = str::from_utf8(CStr::from_ptr(*argv.offset(1)).to_bytes()).unwrap();
                 let mut ptr: libc::intptr_t = FromStr::from_str(arg1).unwrap();
-                println!("The diff value thing is {}", ptr);
                 let offset: libc::intptr_t = mem::transmute(sys_common::thread::start_thread);
                 ptr += offset;
-                println!("Resolved entry to {:x}", ptr);
-                mem::transmute(ptr)
+                let main: fn(dios::Channel) = mem::transmute(ptr);
+                let mut sname: libc::dios_name_t = mem::uninitialized();
+                let mut rname: libc::dios_name_t = mem::uninitialized();
+                libc::dios_strtoname(*argv.offset(3), &mut sname);
+                libc::dios_strtoname(*argv.offset(2), &mut rname);
+                main(dios::Channel::new(
+                    libc::dios_pickref(&mut sname),
+                    libc::dios_pickref(&mut rname)
+                ));
             } else {
-                mem::transmute(main)
+                let main: fn() = mem::transmute(main);
+                main();
             };
-            main();
         });
         cleanup();
         res.is_err()

@@ -5902,7 +5902,7 @@ pub mod funcs {
     pub mod extra {
         use types::common::c95::{c_void};
         use types::common::c99::{uint64_t};
-        use types::os::arch::c95::{c_long};
+        use types::os::arch::c95::{c_char, c_long};
         use types::os::arch::extra::{dios_flags_t,
                                      dios_object_type_t,
                                      dios_ref_t,
@@ -5963,6 +5963,8 @@ pub mod funcs {
 
             pub fn dios_self_exe() -> *mut dios_name_t;
             pub fn dios_pickref(name: *const dios_name_t) -> *mut dios_ref_t;
+            pub fn dios_nametostr(name: *const dios_name_t, dst: *mut c_char) -> *mut c_char;
+            pub fn dios_strtoname(st: *const c_char, name: *mut dios_name_t) -> *mut dios_name_t;
         }
     }
 }
