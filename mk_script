@@ -1,0 +1,1 @@
+LD_LIBRARY_PATH=/home/andrew/dissertation/build/release/lib ../build/release/bin/rustc $1.rs --emit=obj --target=x86_64-linux-dios -g -O

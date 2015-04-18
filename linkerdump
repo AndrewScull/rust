@@ -1,0 +1,18 @@
+cc -Wl,--as-needed -m64 -static \
+-o main \
+-Wl,--gc-sections -nostdlib \
+\
+-L /home/andrew/Cambridge/CompSci/dissertation/build/release/lib/rustlib/x86_64-linux-dios/lib \
+\
+main.o \
+/home/andrew/Cambridge/CompSci/dissertation/build/release/lib/rustlib/x86_64-linux-dios/lib/libstd-4e7c5e5c.rlib \
+/home/andrew/Cambridge/CompSci/dissertation/build/release/lib/rustlib/x86_64-linux-dios/lib/libcollections-4e7c5e5c.rlib \
+/home/andrew/Cambridge/CompSci/dissertation/build/release/lib/rustlib/x86_64-linux-dios/lib/libunicode-4e7c5e5c.rlib \
+/home/andrew/Cambridge/CompSci/dissertation/build/release/lib/rustlib/x86_64-linux-dios/lib/librand-4e7c5e5c.rlib \
+/home/andrew/Cambridge/CompSci/dissertation/build/release/lib/rustlib/x86_64-linux-dios/lib/liballoc-4e7c5e5c.rlib \
+/home/andrew/Cambridge/CompSci/dissertation/build/release/lib/rustlib/x86_64-linux-dios/lib/liblibc-4e7c5e5c.rlib \
+/home/andrew/Cambridge/CompSci/dissertation/build/release/lib/rustlib/x86_64-linux-dios/lib/libcore-4e7c5e5c.rlib \
+-lcompiler-rt \
+\
+/usr/lib/gcc/x86_64-linux-gnu/4.8/libgcc_eh.a \
+/home/andrew/Cambridge/CompSci/dissertation/dios/build/linux/platform/dlibc/libc.a 
